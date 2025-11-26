@@ -1,0 +1,65 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Agenda.Microservice\**" />
+    <Compile Remove="AtencionMedica.Microservice\**" />
+    <Compile Remove="Business.Logic\**" />
+    <Compile Remove="Data.Access\**" />
+    <Compile Remove="Data.Model\**" />
+    <Compile Remove="Facturacion.Microservice\**" />
+    <Compile Remove="Reportes.Microservice\**" />
+    <Compile Remove="Repositories\**" />
+    <Compile Remove="UnitOfWork\**" />
+    <Content Remove="Agenda.Microservice\**" />
+    <Content Remove="AtencionMedica.Microservice\**" />
+    <Content Remove="Business.Logic\**" />
+    <Content Remove="Data.Access\**" />
+    <Content Remove="Data.Model\**" />
+    <Content Remove="Facturacion.Microservice\**" />
+    <Content Remove="Reportes.Microservice\**" />
+    <Content Remove="Repositories\**" />
+    <Content Remove="UnitOfWork\**" />
+    <EmbeddedResource Remove="Agenda.Microservice\**" />
+    <EmbeddedResource Remove="AtencionMedica.Microservice\**" />
+    <EmbeddedResource Remove="Business.Logic\**" />
+    <EmbeddedResource Remove="Data.Access\**" />
+    <EmbeddedResource Remove="Data.Model\**" />
+    <EmbeddedResource Remove="Facturacion.Microservice\**" />
+    <EmbeddedResource Remove="Reportes.Microservice\**" />
+    <EmbeddedResource Remove="Repositories\**" />
+    <EmbeddedResource Remove="UnitOfWork\**" />
+    <None Remove="Agenda.Microservice\**" />
+    <None Remove="AtencionMedica.Microservice\**" />
+    <None Remove="Business.Logic\**" />
+    <None Remove="Data.Access\**" />
+    <None Remove="Data.Model\**" />
+    <None Remove="Facturacion.Microservice\**" />
+    <None Remove="Reportes.Microservice\**" />
+    <None Remove="Repositories\**" />
+    <None Remove="UnitOfWork\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Ocelot" Version="16.0.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Business.Logic\Business.Logic.csproj" />
+    <ProjectReference Include="Data.Access\Data.Access.csproj" />
+    <ProjectReference Include="UnitOfWork\UnitOfWork.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Controllers\" />
+  </ItemGroup>
+
+</Project>

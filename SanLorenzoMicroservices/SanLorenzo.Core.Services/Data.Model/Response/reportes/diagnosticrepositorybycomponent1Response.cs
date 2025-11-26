@@ -1,0 +1,16 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Data.Model.Response.reportes
+{
+    public class diagnosticrepositorybycomponent1Response
+    {
+        public string v_DiagnosticRepositoryId { get; set; }
+        public string v_RecommendationName { get; set; }
+        public string v_ServiceId { get; set; }
+
+    }
+}
