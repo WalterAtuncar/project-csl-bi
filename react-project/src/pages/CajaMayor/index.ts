@@ -1,0 +1,1 @@
+export { default as CajaMayor } from './CajaMayor'; 

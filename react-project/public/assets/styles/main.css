@@ -1,0 +1,6 @@
+/* Estilos globales desde el directorio public */
+.public-asset {
+  display: block;
+  max-width: 100%;
+  height: auto;
+} 

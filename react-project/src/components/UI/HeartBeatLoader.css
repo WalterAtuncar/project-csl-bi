@@ -1,0 +1,243 @@
+/* Overlay principal del loader */
+.heartbeat-loader-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Container principal del loader - Sin card, fondo transparente */
+.heartbeat-loader-container {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 2rem;
+  min-width: 400px;
+  text-align: center;
+  position: relative;
+  overflow: visible;
+}
+
+/* Monitor del ECG */
+.heartbeat-monitor {
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid #3b82f6;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 
+    0 0 20px rgba(59, 130, 246, 0.3),
+    inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* SVG del electrocardiograma */
+.heartbeat-svg {
+  width: 100%;
+  height: 80px;
+  display: block;
+}
+
+/* Línea del ECG con efecto de brillo */
+.heartbeat-line {
+  filter: drop-shadow(0 0 3px #ef4444);
+  animation: pulse-line 2s ease-in-out infinite;
+}
+
+/* Punto que se mueve por la línea */
+.heartbeat-dot {
+  filter: drop-shadow(0 0 6px #ffffff);
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+/* Efecto de brillo del punto */
+.heartbeat-glow {
+  animation: glow-pulse 1s ease-in-out infinite;
+}
+
+/* Línea de barrido */
+.scan-line {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(59, 130, 246, 0.3) 50%,
+    transparent 100%
+  );
+  animation: scan 4s linear infinite;
+}
+
+/* Mensaje del loader */
+.heartbeat-message {
+  margin-bottom: 2rem;
+}
+
+.heartbeat-text {
+  color: #e2e8f0;
+  font-size: 1.1rem;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+/* Puntos animados */
+.heartbeat-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.heartbeat-dots span {
+  width: 6px;
+  height: 6px;
+  background: #3b82f6;
+  border-radius: 50%;
+  animation: dot-bounce 1.4s ease-in-out infinite both;
+}
+
+.heartbeat-dots span:nth-child(1) { animation-delay: -0.32s; }
+.heartbeat-dots span:nth-child(2) { animation-delay: -0.16s; }
+.heartbeat-dots span:nth-child(3) { animation-delay: 0s; }
+
+/* Nombre de la empresa con efecto neón */
+.clinic-name {
+  margin-top: 1rem;
+}
+
+.neon-text {
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-family: 'Arial', sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 
+    0 0 5px #ffffff,
+    0 0 10px #ffffff,
+    0 0 15px #ffffff,
+    0 0 20px #3b82f6,
+    0 0 35px #3b82f6,
+    0 0 40px #3b82f6;
+  animation: neon-flicker 2s ease-in-out infinite alternate;
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-line {
+  0%, 100% {
+    filter: drop-shadow(0 0 3px #ef4444);
+  }
+  50% {
+    filter: drop-shadow(0 0 8px #ef4444) drop-shadow(0 0 12px #ef4444);
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 6px #ffffff);
+  }
+  50% {
+    transform: scale(1.2);
+    filter: drop-shadow(0 0 12px #ffffff) drop-shadow(0 0 18px #3b82f6);
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes scan {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@keyframes dot-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+@keyframes neon-flicker {
+  0%, 100% {
+    text-shadow: 
+      0 0 5px #ffffff,
+      0 0 10px #ffffff,
+      0 0 15px #ffffff,
+      0 0 20px #3b82f6,
+      0 0 35px #3b82f6,
+      0 0 40px #3b82f6;
+  }
+  50% {
+    text-shadow: 
+      0 0 2px #ffffff,
+      0 0 5px #ffffff,
+      0 0 8px #ffffff,
+      0 0 12px #3b82f6,
+      0 0 25px #3b82f6,
+      0 0 30px #3b82f6;
+  }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .heartbeat-loader-container {
+    min-width: 320px;
+    margin: 1rem;
+    padding: 1.5rem;
+  }
+  
+  .heartbeat-svg {
+    height: 60px;
+  }
+  
+  .neon-text {
+    font-size: 1.2rem;
+  }
+}
+
+/* Tema oscuro */
+@media (prefers-color-scheme: dark) {
+  .heartbeat-monitor {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: #1e40af;
+  }
+} 
