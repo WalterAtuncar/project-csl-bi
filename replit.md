@@ -65,6 +65,11 @@ Implemented complete SUNAT-compliant purchase registration integrated with expen
 - `scriptCaja/sp_Proveedores_Insert.sql` - Insert provider SP
 - `scriptCaja/sp_RegistroCompras_Insert.sql` - Insert purchase record SP
 
+**Control Interno (Campos adicionales):**
+- `id_familia_egreso` - Clasificación principal del egreso (ej: Pagos Operativos, Gastos Administrativos)
+- `id_tipo_egreso` - Tipo específico jerárquico (ej: CTS, Planilla, Servicios Públicos)
+- Los selects son jerárquicos: Tipo de Egreso depende de la Familia seleccionada
+
 **Integration Pattern:**
 Sequential API calls - First insert expense movement, then insert purchase record with id_movimiento_egreso as FK
 
