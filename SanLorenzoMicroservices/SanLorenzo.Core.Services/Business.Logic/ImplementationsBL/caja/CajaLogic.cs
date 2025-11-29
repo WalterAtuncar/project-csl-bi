@@ -1,8 +1,8 @@
 using Business.Logic.IContractsBL.caja;
-using Data.Model.Request.caja;
-using Data.Model.Response.caja;
 using System.Collections.Generic;
 using UnitOfWork;
+using Data.Model.Request.caja;
+using Data.Model.Response.caja;
 
 namespace Business.Logic.ImplementationsBL.caja
 {
@@ -15,172 +15,63 @@ namespace Business.Logic.ImplementationsBL.caja
             _unitOfWork = unitOfWork;
         }
 
-        // ================================================
-        // CAJA MAYOR
-        // ================================================
+        public IEnumerable<CajaMayorCabeceraResponse> GetListCabecera(GetListCabeceraRequest request)
+            => _unitOfWork.ICaja.GetListCabecera(request);
 
-        public CreateCajaMayorResponse CreateCajaMayor(CreateCajaMayorRequest request)
-        {
-            return _unitOfWork.ICaja.CreateCajaMayor(request);
-        }
+        public IEnumerable<CajaMayorCabeceraResponse> GetCierresPorRango(GetCierresPorRangoRequest request)
+            => _unitOfWork.ICaja.GetCierresPorRango(request);
 
-        public CreateCajaMayorResponse UpdateCajaMayor(UpdateCajaMayorRequest request)
-        {
-            return _unitOfWork.ICaja.UpdateCajaMayor(request);
-        }
+        public CajaMayorCabeceraResponse GetCabecera(GetCabeceraRequest request)
+            => _unitOfWork.ICaja.GetCabecera(request);
 
-        public List<CajaMayorListResponse> GetCajaMayorList(GetCajaMayorListRequest request)
-        {
-            return _unitOfWork.ICaja.GetCajaMayorList(request);
-        }
+        public CajaMayorCabeceraResponse CierreCreateUpdate(CierreCreateUpdateRequest request)
+            => _unitOfWork.ICaja.CierreCreateUpdate(request);
 
-        public CajaMayorDetalleResponse GetCajaMayorDetalle(int idCajaMayor)
-        {
-            return _unitOfWork.ICaja.GetCajaMayorDetalle(idCajaMayor);
-        }
+        public IEnumerable<CajaMayorResumenTipoResponse> ResumenTipos(ResumenTiposRequest request)
+            => _unitOfWork.ICaja.ResumenTipos(request);
 
-        public CerrarCajaMayorResponse CerrarCajaMayor(CerrarCajaMayorRequest request)
-        {
-            return _unitOfWork.ICaja.CerrarCajaMayor(request);
-        }
+        public IEnumerable<CajaMayorResumenMensualTipoResponse> ResumenMensualPorTipo(ResumenMensualPorTipoRequest request)
+            => _unitOfWork.ICaja.ResumenMensualPorTipo(request);
 
-        public DeleteCajaMayorResponse DeleteCajaMayor(DeleteCajaMayorRequest request)
-        {
-            return _unitOfWork.ICaja.DeleteCajaMayor(request);
-        }
+        public CajaMayorTotalesResponse RecalcularTotales(RecalcularTotalesRequest request)
+            => _unitOfWork.ICaja.RecalcularTotales(request);
 
-        public CreateCajaMayorResponse InsertCajaMayorDetalle(InsertCajaMayorDetalleRequest request)
-        {
-            return _unitOfWork.ICaja.InsertCajaMayorDetalle(request);
-        }
+        public CajaMayorResumenTipoResponse UpdateSaldoInicialTipoCaja(UpdateSaldoInicialTipoCajaRequest request)
+            => _unitOfWork.ICaja.UpdateSaldoInicialTipoCaja(request);
 
-        // ================================================
-        // INGRESOS MENSUALES
-        // ================================================
+        public CajaMayorCabeceraResponse Cerrar(CerrarRequest request)
+            => _unitOfWork.ICaja.Cerrar(request);
 
-        public CreateIngresoMensualResponse CreateIngresoMensual(CreateIngresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.CreateIngresoMensual(request);
-        }
+        public CajaMayorCabeceraResponse Confirmar(ConfirmarRequest request)
+            => _unitOfWork.ICaja.Confirmar(request);
 
-        public List<IngresoMensualListResponse> GetIngresoMensualList(GetIngresoMensualListRequest request)
-        {
-            return _unitOfWork.ICaja.GetIngresoMensualList(request);
-        }
+        public IEnumerable<CajaMayorMovimientoDbResponse> GenerarEgresosDesdeVentas(GenerarEgresosDesdeVentasRequest request)
+            => _unitOfWork.ICaja.GenerarEgresosDesdeVentas(request);
 
-        public UpdateIngresoMensualResponse UpdateIngresoMensual(UpdateIngresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.UpdateIngresoMensual(request);
-        }
+        public IEnumerable<CajaMayorMovimientoDbResponse> GenerarIngresosDesdeCobranzas(GenerarIngresosDesdeCobranzasRequest request)
+            => _unitOfWork.ICaja.GenerarIngresosDesdeCobranzas(request);
 
-        public DeleteIngresoMensualResponse DeleteIngresoMensual(DeleteIngresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.DeleteIngresoMensual(request);
-        }
+        public IEnumerable<CajaMayorMovimientoResponse> GetMovimientos(GetMovimientosRequest request)
+            => _unitOfWork.ICaja.GetMovimientos(request);
 
-        // ================================================
-        // EGRESOS MENSUALES
-        // ================================================
+        public CajaMayorMovimientoDbResponse InsertMovimientoManual(InsertMovimientoManualRequest request)
+            => _unitOfWork.ICaja.InsertMovimientoManual(request);
 
-        public CreateEgresoMensualResponse CreateEgresoMensual(CreateEgresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.CreateEgresoMensual(request);
-        }
+        public IEnumerable<TipoCajaResponse> GetTiposCaja(bool includeInactive)
+            => _unitOfWork.ICaja.GetTiposCaja(includeInactive);
 
-        public List<EgresoMensualListResponse> GetEgresoMensualList(GetEgresoMensualListRequest request)
-        {
-            return _unitOfWork.ICaja.GetEgresoMensualList(request);
-        }
+        public IEnumerable<EstadoCierreResponse> GetEstadosCierre()
+            => new List<EstadoCierreResponse>
+            {
+                new EstadoCierreResponse { IdEstado = 1, Nombre = "Abierta" },
+                new EstadoCierreResponse { IdEstado = 2, Nombre = "Cerrada" },
+                new EstadoCierreResponse { IdEstado = 3, Nombre = "Confirmada" }
+            };
 
-        public UpdateEgresoMensualResponse UpdateEgresoMensual(UpdateEgresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.UpdateEgresoMensual(request);
-        }
+        public CajaMayorCierreExistsResponse CajaMayorCierreExists(CheckCierreExistsRequest request)
+            => _unitOfWork.ICaja.CajaMayorCierreExists(request);
 
-        public DeleteEgresoMensualResponse DeleteEgresoMensual(DeleteEgresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.DeleteEgresoMensual(request);
-        }
-
-        // ================================================
-        // TIPOS DE CAJA
-        // ================================================
-
-        public CreateTipoCajaResponse CreateTipoCaja(CreateTipoCajaRequest request)
-        {
-            return _unitOfWork.ICaja.CreateTipoCaja(request);
-        }
-
-        public List<TipoCajaResponse> GetTiposCaja(GetTiposCajaRequest request)
-        {
-            return _unitOfWork.ICaja.GetTiposCaja(request);
-        }
-
-        public UpdateTipoCajaResponse UpdateTipoCaja(UpdateTipoCajaRequest request)
-        {
-            return _unitOfWork.ICaja.UpdateTipoCaja(request);
-        }
-
-        public DeleteTipoCajaResponse DeleteTipoCaja(DeleteTipoCajaRequest request)
-        {
-            return _unitOfWork.ICaja.DeleteTipoCaja(request);
-        }
-
-        // ================================================
-        // TIPOS DE INGRESO MENSUAL
-        // ================================================
-
-        public CreateTipoIngresoMensualResponse CreateTipoIngresoMensual(CreateTipoIngresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.CreateTipoIngresoMensual(request);
-        }
-
-        public List<TipoIngresoMensualResponse> GetTiposIngresoMensual(GetTiposIngresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.GetTiposIngresoMensual(request);
-        }
-
-        public UpdateTipoIngresoMensualResponse UpdateTipoIngresoMensual(UpdateTipoIngresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.UpdateTipoIngresoMensual(request);
-        }
-
-        public DeleteTipoIngresoMensualResponse DeleteTipoIngresoMensual(DeleteTipoIngresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.DeleteTipoIngresoMensual(request);
-        }
-
-        // ================================================
-        // TIPOS DE EGRESO MENSUAL
-        // ================================================
-
-        public CreateTipoEgresoMensualResponse CreateTipoEgresoMensual(CreateTipoEgresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.CreateTipoEgresoMensual(request);
-        }
-
-        public List<TipoEgresoMensualResponse> GetTiposEgresoMensual(GetTiposEgresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.GetTiposEgresoMensual(request);
-        }
-
-        public UpdateTipoEgresoMensualResponse UpdateTipoEgresoMensual(UpdateTipoEgresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.UpdateTipoEgresoMensual(request);
-        }
-
-        public DeleteTipoEgresoMensualResponse DeleteTipoEgresoMensual(DeleteTipoEgresoMensualRequest request)
-        {
-            return _unitOfWork.ICaja.DeleteTipoEgresoMensual(request);
-        }
-
-        // ================================================
-        // SALDO CAJA
-        // ================================================
-
-        public List<SaldoCajaResponse> GetSaldoCaja(GetSaldoCajaRequest request)
-        {
-            return _unitOfWork.ICaja.GetSaldoCaja(request);
-        }
+        public DeleteCajaMayorCierreResponse DeleteCajaMayorCierrePhysical(DeleteCierreRequest request)
+            => _unitOfWork.ICaja.DeleteCajaMayorCierrePhysical(request);
     }
 }

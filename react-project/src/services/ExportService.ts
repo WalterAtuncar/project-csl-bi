@@ -791,6 +791,137 @@ export class ExportService {
     }
   }
 
+  /**
+   * Exporta los movimientos del modal a PDF con cabecera resumida y tabla completa
+   */
+  static async exportMovimientosModalToPDF(
+    header: { nombreTipo: string; ingresos: number; egresos: number; balance: number; periodo?: { inicio: string; fin: string }; idCajaMayorCierre?: number; idTipoCaja?: number },
+    movimientos: any[],
+    opciones?: { filename?: string }
+  ): Promise<void> {
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' }) as ExtendedJsPDF;
+      const margins = { top: 20, right: 20, bottom: 20, left: 20 };
+      let currentY = margins.top;
+
+      // Título centrado
+      doc.setFont('helvetica');
+      doc.setFontSize(18);
+      doc.setTextColor(30, 58, 138);
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const centerX = pageWidth / 2;
+      doc.text(`Movimientos – ${header.nombreTipo || ''}`.trim(), centerX, currentY, { align: 'center' });
+      currentY += 8;
+
+      // Subtítulo periodo e identificadores
+      doc.setFontSize(12);
+      doc.setTextColor(100, 100, 100);
+      const periodoLabel = header.periodo?.inicio && header.periodo?.fin
+        ? `Periodo: ${this.formatDate(header.periodo.inicio)} al ${this.formatDate(header.periodo.fin)}`
+        : '';
+      const idLabel = header.idCajaMayorCierre ? `Cierre #${header.idCajaMayorCierre}` : '';
+      const tipoLabel = header.idTipoCaja ? `TipoCaja #${header.idTipoCaja}` : '';
+      const subtitle = [periodoLabel, idLabel, tipoLabel].filter(Boolean).join(' • ');
+      if (subtitle) {
+        doc.text(subtitle, centerX, currentY, { align: 'center' });
+        currentY += 10;
+      } else {
+        currentY += 4;
+      }
+
+      // Resumen (cards simplificados)
+      doc.setFontSize(12);
+      doc.setTextColor(30, 58, 138);
+      doc.text('Resumen', centerX, currentY, { align: 'center' });
+      currentY += 6;
+
+      const resumenData = [
+        ['Métrica', 'Valor'],
+        ['Total registros', movimientos.length.toLocaleString()],
+        ['Ingresos', `S/ ${Number(header.ingresos || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`],
+        ['Egresos', `S/ ${Number(header.egresos || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`],
+        ['Balance', `S/ ${Number(header.balance || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`]
+      ];
+
+      autoTable(doc, {
+        head: [resumenData[0]],
+        body: resumenData.slice(1),
+        startY: currentY,
+        margin: { left: margins.left, right: margins.right },
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [30, 58, 138], fontSize: 9 },
+        columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 90 } },
+        tableWidth: 'full'
+      });
+
+      currentY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : currentY + 30;
+
+      // Tabla de movimientos
+      if (currentY > 220) {
+        doc.addPage();
+        currentY = margins.top;
+      }
+
+      doc.setFontSize(12);
+      doc.setTextColor(30, 58, 138);
+      doc.text(`Detalle de Movimientos - ${movimientos.length} registros`, centerX, currentY, { align: 'center' });
+      currentY += 8;
+
+      const head = ['Fecha', 'Tipo', 'Concepto', 'Documento', 'Origen', 'Total'];
+      const body: (string | number)[][] = movimientos.map((m: any) => {
+        const fechaIso = m.fechaRegistro ?? m.FechaRegistro ?? m.fechaMovimiento ?? m.t_FechaMovimiento;
+        const tipo = m.tipoMovimiento ?? m.TipoMovimiento;
+        const conceptoSrc = m.conceptoMovimiento ?? m.ConceptoMovimiento ?? m.v_ConceptoMovimiento ?? '';
+        const concepto = (conceptoSrc || '').toString().trim().substring(0, 150);
+        const docSerie = m.serieDocumento ?? m.SerieDocumento;
+        const docNumero = m.numeroDocumento ?? m.NumeroDocumento;
+        const docCodigo = m.codigoDocumento ?? m.CodigoDocumento;
+        const documento = (docSerie || docNumero) ? `${docSerie ?? ''}${docSerie && docNumero ? '-' : ''}${docNumero ?? ''}` : (docCodigo ?? '');
+        const origen = m.origen ?? m.Origen ?? '';
+        const total = Number(m.total ?? m.Total ?? m.d_Total ?? 0);
+        const fechaStr = fechaIso ? new Date(fechaIso).toLocaleDateString('es-PE') : '-';
+        return [
+          fechaStr,
+          tipo === 'I' ? 'Ingreso' : 'Egreso',
+          concepto,
+          documento || '-',
+          origen || '-',
+          `S/ ${total.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`
+        ];
+      });
+
+      autoTable(doc, {
+        head: [head],
+        body,
+        startY: currentY,
+        margin: { left: margins.left, right: margins.right },
+        styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: [30, 58, 138], fontSize: 7 },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        columnStyles: {
+          0: { cellWidth: 24 },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 60 },
+          3: { cellWidth: 28 },
+          4: { cellWidth: 18 },
+          5: { cellWidth: 20 }
+        },
+        rowPageBreak: 'avoid',
+        pageBreak: 'auto',
+        tableWidth: 'full'
+      });
+
+      // Pie de página
+      this.addFooter(doc);
+
+      const nameBase = opciones?.filename || `movimientos_${(header.nombreTipo || 'tipo').toLowerCase().replace(/\s+/g, '_')}`;
+      doc.save(`${nameBase}.pdf`);
+    } catch (error) {
+      console.error('Error al exportar PDF de movimientos:', error);
+      throw new Error('Error al generar el archivo PDF de movimientos');
+    }
+  }
+
   private static addCierreCajaCards(
     doc: ExtendedJsPDF,
     estadisticas: any,
@@ -1087,4 +1218,4 @@ export class ExportService {
 }
 
 // Instancia singleton del servicio
-export const exportService = new ExportService(); 
+export const exportService = new ExportService();

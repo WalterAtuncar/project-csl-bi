@@ -1,429 +1,13 @@
 // ========================================
-// TIPOS PARA CAJA MICROSERVICE
+// NUEVOS TIPOS - CAJA (alineados al nuevo backend)
 // ========================================
 
-// ========================================
-// REQUEST TYPES - CAJA MAYOR
-// ========================================
-
-export interface CreateCajaMayorRequest {
-  idTipoCaja: number;
-  periodo: string;
-  mes: string;
-  anio: string;
-  fechaInicio: string;
-  fechaFin: string;
-  saldoInicialMes: number;
-  totalIngresos: number;
-  totalEgresos: number;
-  observacionesCierre?: string;
-  insertaIdUsuario: number;
-  detalle?: CajaMayorDetalleRequest[];
-}
-
-export interface UpdateCajaMayorRequest {
-  idCajaMayor: number;
-  idTipoCaja: number;
-  periodo: string;
-  mes: string;
-  anio: string;
-  fechaInicio: string;
-  fechaFin: string;
-  saldoInicialMes: number;
-  totalIngresos: number;
-  totalEgresos: number;
-  observacionesCierre?: string;
-  actualizaIdUsuario: number;
-  detalle?: CajaMayorDetalleRequest[];
-}
-
-export interface CajaMayorDetalleRequest {
-  idVenta?: string;
-  codigoDocumento: string;
-  tipoMovimiento: string; // 'I' = Ingreso, 'E' = Egreso
-  conceptoMovimiento?: string;
-  fechaMovimiento: string;
-  subtotal: number;
-  igv: number;
-  total: number;
-  numeroDocumento?: string;
-  serieDocumento?: string;
-  observaciones?: string;
-}
-
-export interface InsertCajaMayorDetalleRequest {
-  idCajaMayor: number;
-  idVenta?: string;
-  codigoDocumento?: string;
-  tipoMovimiento: string; // 'I' = Ingreso, 'E' = Egreso
-  conceptoMovimiento: string;
-  fechaMovimiento: string;
-  subtotal: number;
-  igv: number;
-  total: number;
-  numeroDocumento?: string;
-  serieDocumento?: string;
-  observaciones?: string;
-  insertaIdUsuario: number;
-}
-
-export interface GetCajaMayorListRequest {
-  idTipoCaja?: number;
-  anio?: string;
-  mes?: string;
-  estadoCierre?: number;
-  pageNumber?: number;
-  pageSize?: number;
-}
-
-export interface CerrarCajaMayorRequest {
-  idCajaMayor: number;
-  observacionesCierre?: string;
-  usuarioIdCierre: number;
-}
-
-export interface DeleteCajaMayorRequest {
-  idCajaMayor: number;
-  usuarioIdEliminacion: number;
-}
-
-// ========================================
-// REQUEST TYPES - INGRESOS/EGRESOS MENSUALES
-// ========================================
-
-export interface CreateIngresoMensualRequest {
-  idCajaMayor: number;
-  idTipoIngresoMensual: number;
-  conceptoIngreso: string;
-  fechaIngreso: string;
-  montoIngreso: number;
-  numeroDocumento?: string;
-  origen?: string;
-  observaciones?: string;
-  insertaIdUsuario: number;
-}
-
-export interface UpdateIngresoMensualRequest {
-  idIngresoMensual: number;
-  conceptoIngreso: string;
-  fechaIngreso: string;
-  montoIngreso: number;
-  numeroDocumento?: string;
-  origen?: string;
-  observaciones?: string;
-  actualizaIdUsuario: number;
-}
-
-export interface DeleteIngresoMensualRequest {
-  idIngresoMensual: number;
-  actualizaIdUsuario: number;
-}
-
-export interface GetIngresoMensualListRequest {
-  idCajaMayor?: number;
-  idTipoIngresoMensual?: number;
-  fechaInicio?: string;
-  fechaFin?: string;
-  estado?: number;
-  pageNumber?: number;
-  pageSize?: number;
-}
-
-export interface CreateEgresoMensualRequest {
-  idCajaMayor: number;
-  idTipoEgresoMensual: number;
-  conceptoEgreso: string;
-  fechaEgreso: string;
-  montoEgreso: number;
-  numeroDocumento?: string;
-  beneficiario?: string;
-  observaciones?: string;
-  insertaIdUsuario: number;
-}
-
-export interface UpdateEgresoMensualRequest {
-  idEgresoMensual: number;
-  conceptoEgreso: string;
-  fechaEgreso: string;
-  montoEgreso: number;
-  numeroDocumento?: string;
-  beneficiario?: string;
-  observaciones?: string;
-  actualizaIdUsuario: number;
-}
-
-export interface DeleteEgresoMensualRequest {
-  idEgresoMensual: number;
-  actualizaIdUsuario: number;
-}
-
-export interface GetEgresoMensualListRequest {
-  idCajaMayor?: number;
-  idTipoEgresoMensual?: number;
-  fechaInicio?: string;
-  fechaFin?: string;
-  estado?: number;
-  pageNumber?: number;
-  pageSize?: number;
-}
-
-// ========================================
-// REQUEST TYPES - TIPOS DE CAJA/INGRESO/EGRESO
-// ========================================
-
-export interface CreateTipoCajaRequest {
-  nombreTipoCaja: string;
-  descripcion?: string;
-  insertaIdUsuario: number;
-}
-
-export interface UpdateTipoCajaRequest {
-  idTipoCaja: number;
-  nombreTipoCaja: string;
-  descripcion?: string;
-  actualizaIdUsuario: number;
-}
-
-export interface DeleteTipoCajaRequest {
-  idTipoCaja: number;
-  actualizaIdUsuario: number;
-}
-
+// Request para obtener tipos de caja
 export interface GetTiposCajaRequest {
   includeInactive?: boolean;
 }
 
-export interface CreateTipoIngresoMensualRequest {
-  nombreTipoIngreso: string;
-  descripcion?: string;
-  insertaIdUsuario: number;
-}
-
-export interface UpdateTipoIngresoMensualRequest {
-  idTipoIngresoMensual: number;
-  nombreTipoIngreso: string;
-  descripcion?: string;
-  actualizaIdUsuario: number;
-}
-
-export interface DeleteTipoIngresoMensualRequest {
-  idTipoIngresoMensual: number;
-  actualizaIdUsuario: number;
-}
-
-export interface GetTiposIngresoMensualRequest {
-  includeInactive?: boolean;
-}
-
-export interface CreateTipoEgresoMensualRequest {
-  nombreTipoEgreso: string;
-  descripcion?: string;
-  insertaIdUsuario: number;
-}
-
-export interface UpdateTipoEgresoMensualRequest {
-  idTipoEgresoMensual: number;
-  nombreTipoEgreso: string;
-  descripcion?: string;
-  actualizaIdUsuario: number;
-}
-
-export interface DeleteTipoEgresoMensualRequest {
-  idTipoEgresoMensual: number;
-  actualizaIdUsuario: number;
-}
-
-export interface GetTiposEgresoMensualRequest {
-  includeInactive?: boolean;
-}
-
-export interface GetSaldoCajaRequest {
-  idTipoCaja?: number;
-}
-
-// ========================================
-// RESPONSE TYPES - CAJA MAYOR
-// ========================================
-
-export interface CreateCajaMayorResponse {
-  idCajaMayor: number;
-  isUpdate: boolean;
-  mensaje: string;
-  saldoFinal: number;
-}
-
-export interface CajaMayorListResponse {
-  idCajaMayor: number;
-  periodo: string;
-  mes: string;
-  anio: string;
-  nombreTipoCaja: string;
-  fechaInicio: string;
-  fechaFin: string;
-  saldoInicialMes: number;
-  totalIngresos: number;
-  totalEgresos: number;
-  saldoFinalMes: number;
-  estadoCierre: number;
-  estadoCierreDescripcion: string;
-  fechaCierre?: string;
-  observacionesCierre?: string;
-  fechaCreacion: string;
-  totalRecords: number;
-}
-
-export interface CajaMayorHeaderResponse {
-  idCajaMayor: number;
-  idTipoCaja: number;
-  nombreTipoCaja: string;
-  periodo: string;
-  mes: string;
-  anio: string;
-  fechaInicio: string;
-  fechaFin: string;
-  saldoInicialMes: number;
-  totalIngresos: number;
-  totalEgresos: number;
-  saldoFinalMes: number;
-  estadoCierre: number;
-  fechaCierre?: string;
-  observacionesCierre?: string;
-  fechaCreacion: string;
-}
-
-export interface CajaMayorMovimientoResponse {
-  idCajaMayorDetalle: number;
-  idVenta?: string;
-  codigoDocumento?: string;
-  tipoMovimiento: string;
-  tipoMovimientoDescripcion: string;
-  conceptoMovimiento?: string;
-  fechaMovimiento: string;
-  subtotal: number;
-  igv: number;
-  total: number;
-  numeroDocumento?: string;
-  serieDocumento?: string;
-  observaciones?: string;
-  fechaRegistro: string;
-}
-
-export interface CajaMayorDetalleResponse {
-  header: CajaMayorHeaderResponse;
-  movimientos: CajaMayorMovimientoResponse[];
-}
-
-export interface CerrarCajaMayorResponse {
-  idCajaMayor: number;
-  mensaje: string;
-  fechaCierre: string;
-}
-
-export interface DeleteCajaMayorResponse {
-  idCajaMayor: number;
-  mensaje: string;
-}
-
-// ========================================
-// RESPONSE TYPES - INGRESOS/EGRESOS MENSUALES
-// ========================================
-
-export interface CreateIngresoMensualResponse {
-  idIngresoMensual: number;
-  mensaje: string;
-  montoIngreso: number;
-  nuevoSaldoCaja: number;
-}
-
-export interface UpdateIngresoMensualResponse {
-  idIngresoMensual: number;
-  mensaje: string;
-  montoIngreso: number;
-  nuevoSaldoCaja: number;
-}
-
-export interface DeleteIngresoMensualResponse {
-  idIngresoMensual: number;
-  mensaje: string;
-  nuevoSaldoCaja: number;
-}
-
-export interface IngresoMensualListResponse {
-  idIngresoMensual: number;
-  idCajaMayor: number;
-  periodoCajaMayor: string;
-  idTipoIngresoMensual: number;
-  nombreTipoIngreso: string;
-  conceptoIngreso: string;
-  fechaIngreso: string;
-  montoIngreso: number;
-  numeroDocumento?: string;
-  origen?: string;
-  observaciones?: string;
-  estado: number;
-  estadoDescripcion: string;
-  fechaCreacion: string;
-  totalRecords: number;
-}
-
-export interface CreateEgresoMensualResponse {
-  idEgresoMensual: number;
-  mensaje: string;
-  montoEgreso: number;
-  nuevoSaldoCaja: number;
-}
-
-export interface UpdateEgresoMensualResponse {
-  idEgresoMensual: number;
-  mensaje: string;
-  montoEgreso: number;
-  nuevoSaldoCaja: number;
-}
-
-export interface DeleteEgresoMensualResponse {
-  idEgresoMensual: number;
-  mensaje: string;
-  nuevoSaldoCaja: number;
-}
-
-export interface EgresoMensualListResponse {
-  idEgresoMensual: number;
-  idCajaMayor: number;
-  periodoCajaMayor: string;
-  idTipoEgresoMensual: number;
-  nombreTipoEgreso: string;
-  conceptoEgreso: string;
-  fechaEgreso: string;
-  montoEgreso: number;
-  numeroDocumento?: string;
-  beneficiario?: string;
-  observaciones?: string;
-  estado: number;
-  estadoDescripcion: string;
-  fechaCreacion: string;
-  totalRecords: number;
-}
-
-// ========================================
-// RESPONSE TYPES - TIPOS DE CAJA/INGRESO/EGRESO
-// ========================================
-
-export interface CreateTipoCajaResponse {
-  idTipoCaja: number;
-  nombreTipoCaja: string;
-  mensaje: string;
-}
-
-export interface UpdateTipoCajaResponse {
-  idTipoCaja: number;
-  mensaje: string;
-}
-
-export interface DeleteTipoCajaResponse {
-  idTipoCaja: number;
-  mensaje: string;
-}
-
+// Response de tipos de caja (DTO backend)
 export interface TipoCajaResponse {
   idTipoCaja: number;
   nombreTipoCaja: string;
@@ -431,151 +15,334 @@ export interface TipoCajaResponse {
   estado: number;
   estadoDescripcion: string;
   fechaCreacion: string;
+  // Compatibilidad con posibles propiedades en PascalCase
+  IdTipoCaja?: number;
+  NombreTipoCaja?: string;
+  Descripcion?: string;
+  Estado?: number;
+  EstadoDescripcion?: string;
+  FechaCreacion?: string;
 }
 
-export interface CreateTipoIngresoMensualResponse {
-  idTipoIngresoMensual: number;
-  nombreTipoIngreso: string;
-  mensaje: string;
+// Response de estados de cierre (DTO backend)
+export interface EstadoCierreResponse {
+  idEstado: number;
+  nombre: string;
+  // Compatibilidad PascalCase
+  IdEstado?: number;
+  Nombre?: string;
 }
 
-export interface UpdateTipoIngresoMensualResponse {
-  idTipoIngresoMensual: number;
-  mensaje: string;
-}
-
-export interface DeleteTipoIngresoMensualResponse {
-  idTipoIngresoMensual: number;
-  mensaje: string;
-}
-
-export interface TipoIngresoMensualResponse {
-  idTipoIngresoMensual: number;
-  nombreTipoIngreso: string;
-  descripcion?: string;
-  estado: number;
-  estadoDescripcion: string;
-  fechaCreacion: string;
-}
-
-export interface CreateTipoEgresoMensualResponse {
-  idTipoEgresoMensual: number;
-  nombreTipoEgreso: string;
-  mensaje: string;
-}
-
-export interface UpdateTipoEgresoMensualResponse {
-  idTipoEgresoMensual: number;
-  mensaje: string;
-}
-
-export interface DeleteTipoEgresoMensualResponse {
-  idTipoEgresoMensual: number;
-  mensaje: string;
-}
-
-export interface TipoEgresoMensualResponse {
-  idTipoEgresoMensual: number;
-  nombreTipoEgreso: string;
-  descripcion?: string;
-  estado: number;
-  estadoDescripcion: string;
-  fechaCreacion: string;
-}
-
-export interface SaldoCajaResponse {
-  idSaldoCaja: number;
-  idTipoCaja: number;
-  nombreTipoCaja: string;
-  saldoActual: number;
-  ultimaActualizacion: string;
-}
-
-// ========================================
-// UTILITY TYPES
-// ========================================
-
-export interface CajaEstadisticas {
-  totalCajas: number;
-  totalIngresos: number;
-  totalEgresos: number;
-  saldoTotal: number;
-  promedioMensual: number;
-  cajasPorEstado: Record<string, number>;
-}
-
-export interface CajaFilters {
-  fechaInicio?: string;
-  fechaFin?: string;
-  idTipoCaja?: number;
-  estadoCierre?: number;
-  busqueda?: string;
-}
-
-export interface CajaPaginatedResponse<T> {
-  data: T[];
-  totalRecords: number;
-  totalPages: number;
-  currentPage: number;
-  pageSize: number;
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
-}
-
-// ========================================
-// API RESPONSE WRAPPER (Para mantener consistencia con facturacion.ts)
-// ========================================
-
+// Wrapper de respuesta (ResponseDTO)
 export interface CajaApiResponse<T> {
   status: number;
   description: string;
   objModel: T;
   token?: string;
-  objPaginated?: {
-    totalRecords?: number;
-    totalPages?: number;
-    currentPage?: number;
-    pageSize?: number;
-    hasNextPage?: boolean;
-    hasPreviousPage?: boolean;
-  };
 }
 
-// ========================================
-// TIPOS PARA CIERRE DE CAJA
-// ========================================
+// =============================
+// Verificación y Borrado de Cierre
+// =============================
+export interface CheckCierreExistsRequest {
+  anio: string;
+  mes: string; // 'MM'
+}
 
-export interface CierreCajaRequest {
-  idTipoCaja: number;
+export interface CajaMayorCierreExistsResponse {
+  // Estilo camelCase preferido en frontend
+  exists: boolean;
+  idCajaMayorCierre?: number;
+  anio: number;
+  mes: number;
+  // Compatibilidad PascalCase (backend/C#)
+  Exists?: boolean;
+  IdCajaMayorCierre?: number;
+  Anio?: number;
+  Mes?: number;
+}
+
+export interface DeleteCierreRequest {
+  eliminaIdUsuario: number;
+}
+
+export interface DeleteCajaMayorCierreResponse {
+  // camelCase para frontend
+  idCajaMayorCierre: number;
+  rowsAffected: number;
+  mensaje: string;
+  // Compatibilidad PascalCase (backend/C#)
+  IdCajaMayorCierre?: number;
+  RowsAffected?: number;
+  Mensaje?: string;
+}
+
+// =============================
+// Cabecera de Cierre Mensual
+// =============================
+export interface CajaMayorCabeceraResponse {
+  idCajaMayorCierre: number;
   anio: string;
   mes: string;
+  fechaInicio: string; // ISO
+  fechaFin: string;    // ISO
+  estadoCierre: number; // byte
+  saldoInicialTotal: number;
+  totalIngresosTotal: number;
+  totalEgresosTotal: number;
+  saldoFinalTotal: number;
+  observaciones?: string;
+  insertaIdUsuario?: number;
+  insertaFecha?: string;   // ISO
+  actualizaIdUsuario?: number;
+  actualizaFecha?: string; // ISO
+  // Compatibilidad PascalCase
+  IdCajaMayorCierre?: number;
+  Anio?: string;
+  Mes?: string;
+  FechaInicio?: string;
+  FechaFin?: string;
+  EstadoCierre?: number;
+  SaldoInicialTotal?: number;
+  TotalIngresosTotal?: number;
+  TotalEgresosTotal?: number;
+  SaldoFinalTotal?: number;
+  Observaciones?: string;
+  InsertaIdUsuario?: number;
+  InsertaFecha?: string;
+  ActualizaIdUsuario?: number;
+  ActualizaFecha?: string;
 }
 
-export interface DatosCierreCajaResponse {
-  fechaInicio: string;
-  fechaFin: string;
-  datos: import('./facturacion').GerenciaVentasDetalleResponse[];
-  resumen: {
-    totalRegistros: number;
-    montoTotal: number;
-    fechaGeneracion: string;
-  };
+export interface GetListCabeceraRequest {
+  anio: string;
+  mes: string;
+  estadoCierre?: number; // byte
+  page?: number;
+  pageSize?: number;
 }
 
-export interface ResumenCierreCaja {
-  totalRegistros: number;
-  montoTotal: number;
-  fechaGeneracion: string;
-  periodo: string;
+// Nuevo request: listar cabeceras por rango de período (YYYYMM)
+export interface GetListCabeceraPorRangoRequest {
+  periodoDesde: number; // e.g., 202401
+  periodoHasta: number; // e.g., 202412
+  estadoCierre?: number; // byte
+  page?: number;
+  pageSize?: number;
+}
+
+export interface GetCabeceraRequest {
+  idCajaMayorCierre: number;
+}
+
+export interface CierreCreateUpdateRequest {
+  anio: string;
+  mes: string;
+  fechaInicio: string; // ISO
+  fechaFin: string;    // ISO
+  observaciones?: string;
+  insertaIdUsuario: number;
+}
+
+export interface CerrarRequest {
+  idCajaMayorCierre: number;
+  actualizaIdUsuario: number;
+}
+
+export interface ConfirmarRequest {
+  idCajaMayorCierre: number;
+  actualizaIdUsuario: number;
+}
+
+export interface ResumenTiposRequest {
+  idCajaMayorCierre: number;
+  actualizaIdUsuario: number;
+}
+
+export interface RecalcularTotalesRequest {
+  idCajaMayorCierre: number;
+  actualizaIdUsuario: number;
+}
+
+export interface UpdateSaldoInicialTipoCajaRequest {
+  idCajaMayorCierre: number;
+  idTipoCaja: number;
+  saldoInicial: number;
+  actualizaIdUsuario: number;
+}
+
+export interface GenerarEgresosDesdeVentasRequest {
+  idCajaMayorCierre: number;
+  insertaIdUsuario: number;
+  defaultIdTipoCaja?: number;
+}
+
+export interface GenerarIngresosDesdeCobranzasRequest {
+  idCajaMayorCierre: number;
+  insertaIdUsuario: number;
+  defaultIdTipoCaja?: number;
+}
+
+// =============================
+// Resumen por Tipo de Caja
+// =============================
+export interface CajaMayorResumenTipoResponse {
+  idCajaMayorCierre: number;
+  idTipoCaja: number;
+  saldoInicial: number;
+  totalIngresos: number;
+  totalEgresos: number;
+  saldoFinal: number;
+  // Compatibilidad PascalCase
+  IdCajaMayorCierre?: number;
+  IdTipoCaja?: number;
+  SaldoInicial?: number;
+  TotalIngresos?: number;
+  TotalEgresos?: number;
+  SaldoFinal?: number;
+}
+
+export interface CajaMayorTotalesResponse {
+  idCajaMayorCierre: number;
+  saldoInicialTotal: number;
+  totalIngresosTotal: number;
+  totalEgresosTotal: number;
+  saldoFinalTotal: number;
+  // Compatibilidad PascalCase
+  IdCajaMayorCierre?: number;
+  SaldoInicialTotal?: number;
+  TotalIngresosTotal?: number;
+  TotalEgresosTotal?: number;
+  SaldoFinalTotal?: number;
+}
+
+// =============================
+// Resumen Mensual por Tipo de Caja (rango de períodos)
+// =============================
+export interface CajaMayorResumenMensualTipoResponse {
+  periodo: number;       // YYYYMM
+  anio: number;          // YYYY
+  mes: number;           // MM
+  idTipoCaja: number;
+  nombreTipoCaja?: string;
+  saldoInicial: number;
+  totalIngresos: number;
+  totalEgresos: number;
+  saldoFinal: number;
+  // Compatibilidad PascalCase
+  Periodo?: number;
+  Anio?: number;
+  Mes?: number;
+  IdTipoCaja?: number;
+  NombreTipoCaja?: string;
+  SaldoInicial?: number;
+  TotalIngresos?: number;
+  TotalEgresos?: number;
+  SaldoFinal?: number;
+}
+
+// =============================
+// Movimientos
+// =============================
+export interface GetMovimientosRequest {
+  idCajaMayorCierre: number;
+  idTipoCaja?: number;
+  tipoMovimiento?: string; // 'I' | 'E'
+  origen?: string;         // Detalle | IngresoMensual | EgresoMensual
+  fechaDesde?: string;     // ISO
+  fechaHasta?: string;     // ISO
+  page?: number;
+  pageSize?: number;
+  sinPaginacion?: boolean;
+}
+
+export interface InsertMovimientoManualRequest {
+  idCajaMayorCierre: number;
+  idTipoCaja: number;
+  tipoMovimiento: string; // 'I' | 'E'
+  total: number;
+  fechaRegistro: string; // ISO
+  observaciones?: string;
+  // Campos nuevos para caja mayor movimiento manual
+  conceptoMovimiento?: string;
+  subtotal?: number | null;
+  igv?: number | null;
+  origen?: string; // e.g., 'manual'
+  // Campos de documento/venta quedan opcionales y no usados en modal
+  codigoDocumento?: string;
+  serieDocumento?: string;
+  numeroDocumento?: string;
+  idVenta?: string;
+  insertaIdUsuario: number;
+}
+
+export interface CajaMayorMovimientoResponse {
+  idCajaMayorMovimiento: number;
+  idCajaMayorCierre: number;
+  idTipoCaja: number;
   nombreTipoCaja: string;
+  tipoMovimiento: string; // 'I' | 'E'
+  total: number;
+  fechaRegistro: string; // ISO
+  conceptoMovimiento?: string;
+  observaciones?: string;
+  origen?: string;
+  codigoDocumento?: string;
+  serieDocumento?: string;
+  numeroDocumento?: string;
+  idReferencia?: string;
+  referencia?: string;
+  // Compatibilidad PascalCase
+  IdCajaMayorMovimiento?: number;
+  IdCajaMayorCierre?: number;
+  IdTipoCaja?: number;
+  NombreTipoCaja?: string;
+  TipoMovimiento?: string;
+  Total?: number;
+  FechaRegistro?: string;
+  ConceptoMovimiento?: string;
+  Observaciones?: string;
+  Origen?: string;
+  CodigoDocumento?: string;
+  SerieDocumento?: string;
+  NumeroDocumento?: string;
+  IdReferencia?: string;
+  Referencia?: string;
 }
 
-// ========================================
-// TIPOS PARA FILTROS DE GERENCIA VENTAS
-// ========================================
-
-export interface FiltroBusquedaMSRequest {
-  fechaInicio: string;
-  fechaFin: string;
-  fechaInicioRet2Meses: string;
+export interface CajaMayorMovimientoDbResponse {
+  // Estilo camelCase para consumir en frontend
+  idMovimiento?: number;
+  idCajaMayorCierre?: number;
+  idTipoCaja?: number;
+  tipoMovimiento?: string;
+  total?: number;
+  fechaMovimiento?: string; // ISO
+  observaciones?: string;
+  origen?: string;
+  codigoDocumento?: string;
+  serieDocumento?: string;
+  numeroDocumento?: string;
+  idVenta?: string;
+  insertaIdUsuario?: number;
+  insertaFecha?: string; // ISO
+  actualizaIdUsuario?: number;
+  actualizaFecha?: string; // ISO
+  // Compatibilidad exacta con nombres devueltos por SP (.NET/PascalCase y prefijos i_/v_/t_/d_)
+  i_IdMovimiento?: number;
+  i_IdCajaMayorCierre?: number;
+  i_IdTipoCaja?: number;
+  v_TipoMovimiento?: string;
+  d_Total?: number;
+  t_FechaMovimiento?: string;
+  v_Observaciones?: string;
+  v_Origen?: string;
+  v_CodigoDocumento?: string;
+  v_SerieDocumento?: string;
+  v_NumeroDocumento?: string;
+  v_IdVenta?: string;
+  i_InsertaIdUsuario?: number;
+  t_InsertaFecha?: string;
+  i_ActualizaIdUsuario?: number;
+  t_ActualizaFecha?: string;
 }

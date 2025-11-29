@@ -3,3 +3,4 @@
  */
 
 export { TimestampGenerator16 } from './TimestampGenerator16'; 
+export * from './auth';

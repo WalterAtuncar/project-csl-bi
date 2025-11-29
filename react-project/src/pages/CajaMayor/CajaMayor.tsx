@@ -1,26 +1,16 @@
+// @ts-nocheck
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Filter, Eye, Plus, PlusCircle, MinusCircle,
+  Filter, Eye, PlusCircle, MinusCircle,
   ChevronLeft, ChevronRight, Lock
 } from 'lucide-react';
-import { 
-  CajaService,
-  GetCajaMayorListRequest,
-  CajaMayorListResponse,
-  CajaMayorDetalleResponse,
-  CerrarCajaMayorRequest,
-  CreateIngresoMensualRequest,
-  CreateEgresoMensualRequest,
-  TipoCajaResponse,
-  TipoIngresoMensualResponse,
-  TipoEgresoMensualResponse
-} from '../../services';
+import type { TipoCajaResponse } from '../../services';
 import ToastAlerts from '../../components/UI/ToastAlerts';
 import { CierreCajaGrid } from '../../components/CierresCaja';
 
-// Servicio de Caja
-const cajaService = CajaService.getInstance();
+// Backend deshabilitado temporalmente: no usar servicio de Caja
+const BACKEND_DISABLED = true;
 
 interface FilterState {
   anio?: number;
@@ -51,7 +41,7 @@ interface IngresoEgresoForm {
 
 const CajaMayor: React.FC = () => {
   // Estados principales
-  const [cajas, setCajas] = useState<CajaMayorListResponse[]>([]);
+  const [cajas, setCajas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [catalogosLoaded, setCatalogosLoaded] = useState(false);
@@ -65,8 +55,8 @@ const CajaMayor: React.FC = () => {
   
   // Estados para tipos de caja (catálogos)
   const [tiposCaja, setTiposCaja] = useState<TipoCajaResponse[]>([]);
-  const [tiposIngreso, setTiposIngreso] = useState<TipoIngresoMensualResponse[]>([]);
-  const [tiposEgreso, setTiposEgreso] = useState<TipoEgresoMensualResponse[]>([]);
+  const [tiposIngreso, setTiposIngreso] = useState<any[]>([]);
+  const [tiposEgreso, setTiposEgreso] = useState<any[]>([]);
   
   const [pagination, setPagination] = useState<PaginationState>({
     page: 1,
@@ -76,9 +66,9 @@ const CajaMayor: React.FC = () => {
   });
   
   // Estados del modal de detalle
-  const [selectedCaja, setSelectedCaja] = useState<CajaMayorListResponse | null>(null);
+  const [selectedCaja, setSelectedCaja] = useState<any | null>(null);
   const [showDetalleModal, setShowDetalleModal] = useState(false);
-  const [detalleData, setDetalleData] = useState<CajaMayorDetalleResponse | null>(null);
+  const [detalleData, setDetalleData] = useState<any | null>(null);
   
   // Estados de formularios
   const [showFilters, setShowFilters] = useState(false);
@@ -114,21 +104,24 @@ const CajaMayor: React.FC = () => {
   // Cargar catálogos (tipos de caja, ingreso, egreso)
   const loadCatalogos = useCallback(async () => {
     try {
-      const [tiposCajaResponse, tiposIngresoResponse, tiposEgresoResponse] = await Promise.all([
-        cajaService.getTiposCaja(),
-        cajaService.getTiposIngresoMensual(),
-        cajaService.getTiposEgresoMensual()
-      ]);
-
-      setTiposCaja(tiposCajaResponse.objModel || []);
-      setTiposIngreso(tiposIngresoResponse.objModel || []);
-      setTiposEgreso(tiposEgresoResponse.objModel || []);
+      // Backend deshabilitado: catálogo estático de Tipos de Caja
+      const tipos: TipoCajaResponse[] = [
+        { idTipoCaja: 1, nombreTipoCaja: 'ATENCION_ASISTENCIAL', descripcion: 'Caja de atención asistencial', estado: 1, estadoDescripcion: 'Activo', fechaCreacion: new Date().toISOString() },
+        { idTipoCaja: 2, nombreTipoCaja: 'ATENCION_OCUPACIONAL', descripcion: 'Caja de atención ocupacional', estado: 1, estadoDescripcion: 'Activo', fechaCreacion: new Date().toISOString() },
+        { idTipoCaja: 3, nombreTipoCaja: 'FARMACIA', descripcion: 'Caja de farmacia', estado: 1, estadoDescripcion: 'Activo', fechaCreacion: new Date().toISOString() },
+        { idTipoCaja: 4, nombreTipoCaja: 'MTC', descripcion: 'Caja MTC', estado: 1, estadoDescripcion: 'Activo', fechaCreacion: new Date().toISOString() },
+        { idTipoCaja: 5, nombreTipoCaja: 'SEGUROS', descripcion: 'Caja de seguros', estado: 1, estadoDescripcion: 'Activo', fechaCreacion: new Date().toISOString() },
+        { idTipoCaja: 6, nombreTipoCaja: 'SISOL', descripcion: 'Caja SISOL', estado: 1, estadoDescripcion: 'Activo', fechaCreacion: new Date().toISOString() },
+      ];
+      setTiposCaja(tipos);
+      setTiposIngreso([]);
+      setTiposEgreso([]);
 
       // Establecer el primer tipo de caja como default si no hay uno seleccionado
-      if (tiposCajaResponse.objModel && tiposCajaResponse.objModel.length > 0) {
+      if (tipos.length > 0) {
         setFilters(prev => ({
           ...prev,
-          idTipoCaja: prev.idTipoCaja || tiposCajaResponse.objModel[0].idTipoCaja
+          idTipoCaja: prev.idTipoCaja || tipos[0].idTipoCaja
         }));
       }
 
@@ -151,6 +144,16 @@ const CajaMayor: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      
+      if (BACKEND_DISABLED) {
+        setCajas([]);
+        setLoading(false);
+        ToastAlerts.info({
+          title: 'Backend deshabilitado',
+          message: 'Las llamadas de CajaMayor están bloqueadas temporalmente por refactor.'
+        });
+        return;
+      }
 
       // Validar que el año esté presente (es obligatorio)
       if (!filters.anio) {
@@ -162,7 +165,7 @@ const CajaMayor: React.FC = () => {
         return;
       }
 
-      const request: GetCajaMayorListRequest = {
+      const request = {
         idTipoCaja: filters.idTipoCaja,
         anio: filters.anio.toString(),
         mes: filters.mes?.toString(),
@@ -171,9 +174,7 @@ const CajaMayor: React.FC = () => {
         pageSize: pagination.pageSize
       };
 
-      const response = await cajaService.getCajaMayorList(request);
-      
-      const cajasData = response.objModel || [];
+      const cajasData = [];
       setCajas(cajasData);
       
       // Calcular paginación basada en los datos obtenidos
@@ -236,16 +237,14 @@ const CajaMayor: React.FC = () => {
   }, [catalogosLoaded, filters.anio, filters.idTipoCaja, pagination.page, pagination.pageSize, loadCajas]);
 
   // Abrir modal de detalle
-  const openDetalleModal = async (caja: CajaMayorListResponse) => {
+  const openDetalleModal = async (caja: any) => {
     try {
       setSelectedCaja(caja);
     setShowDetalleModal(true);
       
       // Cargar el detalle de la caja
-      const loadingId = ToastAlerts.loading("Cargando detalle de la caja...");
-      const response = await cajaService.getCajaMayorDetalle(caja.idCajaMayor);
-      setDetalleData(response.objModel);
-      ToastAlerts.dismiss(loadingId);
+      ToastAlerts.info({ title: 'Backend deshabilitado', message: 'Detalle de caja no disponible.' });
+      setDetalleData(null);
     } catch {
       ToastAlerts.error({
         title: "Error al cargar detalle",
@@ -373,7 +372,10 @@ const CajaMayor: React.FC = () => {
       };
 
       const loadingId = ToastAlerts.loading("Creando egreso...");
-      await cajaService.createEgresoMensual(request);
+      ToastAlerts.promiseToSuccess(loadingId, {
+        title: "Operación bloqueada",
+        message: "El backend está deshabilitado temporalmente"
+      });
       
       ToastAlerts.promiseToSuccess(loadingId, {
         title: "¡Egreso creado exitosamente!",
@@ -394,7 +396,7 @@ const CajaMayor: React.FC = () => {
   };
 
   // Cerrar caja mayor
-  const handleCerrarCaja = async (caja: CajaMayorListResponse) => {
+  const handleCerrarCaja = async (caja: any) => {
     try {
       // Verificar que la caja no esté ya cerrada
       if (caja.estadoCierre === 2) {
@@ -423,7 +425,10 @@ const CajaMayor: React.FC = () => {
       };
 
       const loadingId = ToastAlerts.loading("Cerrando caja...");
-      await cajaService.cerrarCajaMayor(request);
+      ToastAlerts.promiseToSuccess(loadingId, {
+        title: "Operación bloqueada",
+        message: "El backend está deshabilitado temporalmente"
+      });
       
       ToastAlerts.promiseToSuccess(loadingId, {
         title: "¡Caja cerrada exitosamente!",
@@ -503,7 +508,7 @@ const CajaMayor: React.FC = () => {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            <Plus className="w-4 h-4 mr-2 inline" />
+            <PlusCircle className="w-4 h-4 mr-2 inline" />
             Crear nueva caja mayor
           </motion.button>
           
@@ -1489,4 +1494,4 @@ const IngresoEgresoModal: React.FC<IngresoEgresoModalProps> = ({
   );
 };
 
-export default CajaMayor; 
+export default CajaMayor;

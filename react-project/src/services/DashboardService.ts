@@ -377,6 +377,15 @@ export interface FinancialDashboardResponse {
   parametrosUtilizados: ParametrosUtilizados;
 }
 
+// Filas base del cierre de caja mayor mensual
+export interface CajaMayorCierreRow {
+  n_Anio: number;
+  n_Mes: number;
+  d_TotalIngresosTotal: number;
+  d_TotalEgresosTotal: number;
+  d_SaldoFinalTotal: number;
+}
+
 // Nuevo interface para Services Dashboard Request
 export interface ServicesDashboardRequest {
   fechaInicio: string;          // formato: "2025-05-01T06:39:34.200Z"
@@ -505,6 +514,42 @@ export class DashboardService extends BaseApiService {
     } catch (error) {
       throw new Error(`Error parseando resultado del script: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     }
+  }
+
+  /**
+   * Convierte un período en formato YYYY-MM a entero YYYYMM para comparación
+   */
+  private periodStringToInt(periodYYYYMM: string): number {
+    const [yearStr, monthStr] = periodYYYYMM.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    if (isNaN(year) || isNaN(month)) {
+      throw new Error('Período inválido. Debe ser YYYY-MM');
+    }
+    return year * 100 + month;
+  }
+
+  /**
+   * Obtiene cierres mensuales desde cajamayor_cierre para un rango de períodos
+   * No usa el endpoint financiero actual; utiliza ejecución de script SQL directa.
+   */
+  async getCajaMayorCierres(periodFromYYYYMM: string, periodToYYYYMM: string): Promise<CajaMayorCierreRow[]> {
+    const fromInt = this.periodStringToInt(periodFromYYYYMM);
+    const toInt = this.periodStringToInt(periodToYYYYMM);
+    // Script seguro: interpolamos sólo números ya validados
+    const script = `
+      SELECT 
+        n_Anio,
+        n_Mes,
+        d_TotalIngresosTotal,
+        d_TotalEgresosTotal,
+        d_SaldoFinalTotal
+      FROM cajamayor_cierre WITH (NOLOCK)
+      WHERE (n_Anio * 100 + n_Mes) BETWEEN ${fromInt} AND ${toInt}
+      ORDER BY n_Anio, n_Mes;
+    `;
+    const result = await this.executeScriptParsed<CajaMayorCierreRow>(script);
+    return result.data;
   }
 
   /**
@@ -755,4 +800,4 @@ export class DashboardService extends BaseApiService {
 }
 
 // Crear instancia singleton del servicio
-export const dashboardService = new DashboardService(); 
+export const dashboardService = new DashboardService();

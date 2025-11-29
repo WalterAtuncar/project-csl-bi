@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Users, Calendar, BarChart3, 
@@ -11,29 +11,31 @@ import {
   FinancialDashboardResponse,
   StatItem
 } from '../../services/DashboardService';
+import CajaService from '../../services/CajaService';
+import type { CajaMayorCabeceraResponse } from '../../@types/caja';
 import FloatingDashboardChat from '../../components/UI/FloatingDashboardChat';
 
 
-// Componente para filtros avanzados de fecha - Optimizado con React.memo
-const DateRangeFilter: React.FC<{onApplyFilter: (range: {startDate: string, endDate: string}) => void}> = React.memo(({ onApplyFilter }) => {
-  // Usar fechas dinámicas por defecto
-  const getDefaultDates = () => {
-    const now = new Date();
-    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-    return {
-      startDate: threeMonthsAgo.toISOString().split('T')[0],
-      endDate: now.toISOString().split('T')[0]
-    };
-  };
-
-  const [startDate, setStartDate] = useState(getDefaultDates().startDate);
-  const [endDate, setEndDate] = useState(getDefaultDates().endDate);
+// Componente para filtro de período (año-mes) desde/hasta
+const PeriodFilter: React.FC<{ onApplyFilter: (range: { from: string, to: string }) => void }> = React.memo(({ onApplyFilter }) => {
+  const now = new Date();
+  const defaultFrom = new Date(now.getFullYear(), now.getMonth() - 3, 1);
   const [isOpen, setIsOpen] = useState(false);
 
+  const [fromYear, setFromYear] = useState<number>(defaultFrom.getFullYear());
+  const [fromMonth, setFromMonth] = useState<number>(defaultFrom.getMonth() + 1);
+  const [toYear, setToYear] = useState<number>(now.getFullYear());
+  const [toMonth, setToMonth] = useState<number>(now.getMonth() + 1);
+
+  const years = Array.from({ length: 11 }, (_, i) => now.getFullYear() - i); // últimos 11 años
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+
+  const formatPeriod = (y: number, m: number) => `${y}-${String(m).padStart(2, '0')}`;
+
   const handleApply = useCallback(() => {
-    onApplyFilter({ startDate, endDate });
+    onApplyFilter({ from: formatPeriod(fromYear, fromMonth), to: formatPeriod(toYear, toMonth) });
     setIsOpen(false);
-  }, [onApplyFilter, startDate, endDate]);
+  }, [fromYear, fromMonth, toYear, toMonth, onApplyFilter]);
 
   return (
     <div className="relative">
@@ -42,48 +44,42 @@ const DateRangeFilter: React.FC<{onApplyFilter: (range: {startDate: string, endD
         className="flex items-center px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-md text-gray-700 dark:text-gray-300 text-sm focus:outline-none"
       >
         <Calendar className="w-4 h-4 mr-2" />
-        <span>Rango de fechas</span>
+        <span>Período (año-mes)</span>
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 p-4 border border-gray-200 dark:border-gray-700">
-          <div className="space-y-3">
+        <div className="absolute right-0 mt-2 w-[420px] bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 p-4 border border-gray-200 dark:border-gray-700">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Desde
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 text-sm"
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Desde</label>
+              <div className="flex gap-2">
+                <select value={fromYear} onChange={(e) => setFromYear(parseInt(e.target.value, 10))}
+                        className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 text-sm w-28">
+                  {years.map(y => <option key={`fy-${y}`} value={y}>{y}</option>)}
+                </select>
+                <select value={fromMonth} onChange={(e) => setFromMonth(parseInt(e.target.value, 10))}
+                        className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 text-sm w-28">
+                  {months.map(m => <option key={`fm-${m}`} value={m}>{String(m).padStart(2, '0')}</option>)}
+                </select>
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Hasta
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 text-sm"
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hasta</label>
+              <div className="flex gap-2">
+                <select value={toYear} onChange={(e) => setToYear(parseInt(e.target.value, 10))}
+                        className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 text-sm w-28">
+                  {years.map(y => <option key={`ty-${y}`} value={y}>{y}</option>)}
+                </select>
+                <select value={toMonth} onChange={(e) => setToMonth(parseInt(e.target.value, 10))}
+                        className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 text-sm w-28">
+                  {months.map(m => <option key={`tm-${m}`} value={m}>{String(m).padStart(2, '0')}</option>)}
+                </select>
+              </div>
             </div>
-            <div className="flex justify-end mt-2">
-              <button
-                onClick={() => setIsOpen(false)}
-                className="px-3 py-1 mr-2 bg-gray-200 dark:bg-gray-700 rounded-md text-gray-700 dark:text-gray-300 text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleApply}
-                className="px-3 py-1 bg-primary text-white rounded-md text-sm"
-              >
-                Aplicar
-              </button>
-            </div>
+          </div>
+          <div className="flex justify-end mt-4">
+            <button onClick={() => setIsOpen(false)} className="px-3 py-1 mr-2 bg-gray-200 dark:bg-gray-700 rounded-md text-gray-700 dark:text-gray-300 text-sm">Cancelar</button>
+            <button onClick={handleApply} className="px-3 py-1 bg-primary text-white rounded-md text-sm">Aplicar</button>
           </div>
         </div>
       )}
@@ -93,6 +89,8 @@ const DateRangeFilter: React.FC<{onApplyFilter: (range: {startDate: string, endD
 
 // Configuración de tipos de caja
 const CASH_TYPES = [
+  // Opción agregada: Todos (usa endpoints generales)
+  { id: 'todos', label: 'Todos', clienteEsAgente: '1,2,3,4,5,6,7,8,9,10', documentoEgreso: -1 },
   { id: 'empresarial', label: 'Empresarial', clienteEsAgente: '1', documentoEgreso: 500 },
   { id: 'asistencial', label: 'Asistencial', clienteEsAgente: '2,8,9', documentoEgreso: 502 },
   { id: 'farmacia', label: 'Farmacia', clienteEsAgente: '3,4', documentoEgreso: 504 },
@@ -169,6 +167,7 @@ const GeneralDashboard: React.FC = () => {
   const [financialData, setFinancialData] = useState<FinancialDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const cajaService = CajaService.getInstance();
   
   // Referencias para control de requests
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -186,8 +185,30 @@ const GeneralDashboard: React.FC = () => {
   };
 
   const [dateRange, setDateRange] = useState(getDefaultDateRange());
+  // Nuevo estado para período (año-mes) desde/hasta
+  const now = new Date();
+  const defaultFrom = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+  const [periodRange, setPeriodRange] = useState<{ from: string; to: string }>({
+    from: `${defaultFrom.getFullYear()}-${String(defaultFrom.getMonth() + 1).padStart(2, '0')}`,
+    to: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+  });
   const [periodType, setPeriodType] = useState<'semanal' | 'mensual'>('mensual');
   const [selectedCashType, setSelectedCashType] = useState<string>('asistencial'); // Por defecto Asistencial
+
+  // Catálogo de tipos de caja para mapear idTipoCaja
+  const [tiposCajaCatalog, setTiposCajaCatalog] = useState<Array<{ idTipoCaja: number; nombreTipoCaja: string }>>([]);
+
+  // Estado para datos del gráfico provenientes de cajamayor_cierre
+  const [closureChartData, setClosureChartData] = useState<Array<{
+    nombre: string;
+    ingresos: number;
+    egresos: number;
+    balance: number;
+    esMensual: boolean;
+    esSemanal: boolean;
+  }>>([]);
+  // Totales del rango para cabecera del gráfico
+  const [closureTotals, setClosureTotals] = useState<{ ingresos: number; egresos: number; balance: number }>({ ingresos: 0, egresos: 0, balance: 0 });
 
   // Función optimizada para cargar datos del dashboard financiero
   const loadDashboardData = useCallback(async () => {
@@ -266,6 +287,130 @@ const GeneralDashboard: React.FC = () => {
     }
   }, [dateRange, periodType, selectedCashType]);
 
+  // Cargar cierres mensuales desde cajamayor_cierre y mapear al gráfico
+  const getMonthNameEs = (m: number) => ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][m-1] || `Mes ${m}`;
+  const loadClosureChartData = useCallback(async () => {
+    try {
+      const [fy, fm] = periodRange.from.split('-').map(Number);
+      const [ty, tm] = periodRange.to.split('-').map(Number);
+      const periodoDesde = (fy * 100) + (isNaN(fm) ? 1 : fm);
+      const periodoHasta = (ty * 100) + (isNaN(tm) ? 12 : tm);
+      // Selección: si es 'todos' usar endpoint original; caso contrario usar resumen mensual por tipo
+      let mapped: Array<{ nombre: string; ingresos: number; egresos: number; balance: number; esMensual: boolean; esSemanal: boolean }> = [];
+      if (selectedCashType === 'todos') {
+        const resp = await cajaService.getListCabeceraPorRango({
+          periodoDesde,
+          periodoHasta,
+          page: 1,
+          pageSize: 100
+        });
+        const rows: CajaMayorCabeceraResponse[] = Array.isArray(resp?.objModel) ? resp.objModel : [];
+        // Normalizador robusto a número: acepta number o string, quitando caracteres no numéricos
+        const toNum = (v: any): number => {
+          if (v === null || v === undefined) return 0;
+          if (typeof v === 'number') return isNaN(v) ? 0 : v;
+          if (typeof v === 'string') {
+            const cleaned = v.replace(/[^0-9,.-]/g, '').replace(',', '.');
+            const n = Number(cleaned);
+            return isNaN(n) ? 0 : n;
+          }
+          const n = Number(v);
+          return isNaN(n) ? 0 : n;
+        };
+
+        mapped = rows.map(row => {
+          const anio = row.anio ?? row.Anio ?? '';
+          const mesStr = row.mes ?? row.Mes ?? '';
+          const mesNum = parseInt(String(mesStr), 10);
+          // Fallbacks más amplios para evitar 0 en egresos si cambia el contrato
+          const ingresos = toNum(
+            (row as any).totalIngresosTotal ?? (row as any).TotalIngresosTotal ??
+            (row as any).totalIngresos ?? (row as any).TotalIngresos ?? 0
+          );
+          const egresos = toNum(
+            (row as any).totalEgresosTotal ?? (row as any).TotalEgresosTotal ??
+            (row as any).totalEgresos ?? (row as any).TotalEgresos ?? 0
+          );
+          const saldoFinal = toNum(
+            (row as any).saldoFinalTotal ?? (row as any).SaldoFinalTotal ?? (ingresos - egresos)
+          );
+          return {
+            nombre: `${getMonthNameEs(mesNum)} ${anio}`,
+            ingresos,
+            egresos,
+            balance: saldoFinal,
+            esMensual: true,
+            esSemanal: false,
+          };
+        });
+      } else {
+        // Filtro en frontend cuando el backend devuelve todos los tipos juntos
+        // 1) Resolver nombre(s) canónicos del tipo seleccionado para mapear a catálogo
+        const TYPE_NAME_MAP: Record<string, string[]> = {
+          asistencial: ['ATENCION_ASISTENCIAL', 'ASISTENCIAL'],
+          empresarial: ['ATENCION_OCUPACIONAL', 'EMPRESARIAL', 'OCUPACIONAL'],
+          farmacia: ['FARMACIA'],
+          seguros: ['SEGUROS'],
+          mtc: ['MTC'],
+          hospital_solidaridad: ['SISOL', 'HOSPITAL DE LA SOLIDARIDAD']
+        };
+        const candidateNames = TYPE_NAME_MAP[selectedCashType] || [];
+
+        // 2) Intentar encontrar idTipoCaja desde el catálogo cargado
+        const tipoCatalog = tiposCajaCatalog.find(tc => candidateNames.some(n => (tc.nombreTipoCaja || '').toUpperCase() === n.toUpperCase()));
+        const idTipoCajaSeleccionado = tipoCatalog?.idTipoCaja;
+
+        // 3) Llamar al endpoint y luego filtrar por idTipoCaja (o por nombre en fallback)
+        const resp = await cajaService.getResumenMensualPorTipoRango({
+          periodoDesde,
+          periodoHasta,
+          idTipoCaja: idTipoCajaSeleccionado, // si el backend no filtra, filtramos igual abajo
+          page: 1,
+          pageSize: 100
+        });
+
+        const allRows = Array.isArray(resp?.objModel) ? resp.objModel : [];
+        const filteredRows = (typeof idTipoCajaSeleccionado === 'number' && idTipoCajaSeleccionado > 0)
+          ? allRows.filter((row: any) => {
+              const id = row.idTipoCaja ?? row.IdTipoCaja;
+              return id === idTipoCajaSeleccionado;
+            })
+          : allRows.filter((row: any) => {
+              const nombre = String(row.nombreTipoCaja ?? row.NombreTipoCaja ?? '').toUpperCase();
+              return candidateNames.some(n => nombre === n.toUpperCase());
+            });
+
+        // 4) Mapear por período (anio/mes) para el gráfico
+        mapped = filteredRows.map((row: any) => {
+          const anio = row.anio ?? row.Anio ?? '';
+          const mesNum = parseInt(String(row.mes ?? row.Mes ?? ''), 10);
+          const ingresos = row.totalIngresos ?? row.TotalIngresos ?? 0;
+          const egresos = row.totalEgresos ?? row.TotalEgresos ?? 0;
+          const balance = row.saldoFinal ?? row.SaldoFinal ?? 0;
+          return {
+            nombre: `${getMonthNameEs(mesNum)} ${anio}`,
+            ingresos,
+            egresos,
+            balance,
+            esMensual: true,
+            esSemanal: false,
+          };
+        });
+      }
+      setClosureChartData(mapped);
+      // Calcular sumatorias para cabecera del gráfico
+      const totals = mapped.reduce((acc, cur) => {
+        acc.ingresos += (typeof cur.ingresos === 'number' ? cur.ingresos : Number(cur.ingresos)) || 0;
+        acc.egresos += (typeof cur.egresos === 'number' ? cur.egresos : Number(cur.egresos)) || 0;
+        acc.balance += (typeof cur.balance === 'number' ? cur.balance : Number(cur.balance)) || 0;
+        return acc;
+      }, { ingresos: 0, egresos: 0, balance: 0 });
+      setClosureTotals(totals);
+    } catch (e) {
+      console.error('Error cargando cierres de cajamayor_cierre:', e);
+    }
+  }, [periodRange, cajaService, selectedCashType, tiposCajaCatalog]);
+
   // Función con debouncing para cargar datos
   const debouncedLoadData = useCallback(() => {
     // Limpiar timer anterior
@@ -282,6 +427,7 @@ const GeneralDashboard: React.FC = () => {
   // Cargar datos al montar el componente
   useEffect(() => {
     loadDashboardData(); // Carga inicial inmediata
+    loadClosureChartData(); // Cargar gráfico de cierres
   }, []); // Solo al montar
 
   // Cargar datos cuando cambien los filtros (con debouncing)
@@ -296,6 +442,30 @@ const GeneralDashboard: React.FC = () => {
     };
   }, [debouncedLoadData]);
 
+  // Cargar gráfico cuando cambie el período
+  useEffect(() => {
+    loadClosureChartData();
+  }, [loadClosureChartData]);
+
+  // Cargar catálogo de tipos de caja una vez
+  useEffect(() => {
+    const fetchTipos = async () => {
+      try {
+        const resp = await cajaService.getTiposCaja({ includeInactive: false });
+        const list = Array.isArray(resp?.objModel) ? resp.objModel : [];
+        // Estructura mínima: idTipoCaja y nombreTipoCaja
+        const mapped = list.map((t: any) => ({
+          idTipoCaja: t.idTipoCaja ?? t.IdTipoCaja ?? 0,
+          nombreTipoCaja: t.nombreTipoCaja ?? t.NombreTipoCaja ?? ''
+        }));
+        setTiposCajaCatalog(mapped);
+      } catch (err) {
+        console.warn('No se pudo cargar catálogo de tipos de caja:', err);
+      }
+    };
+    fetchTipos();
+  }, [cajaService]);
+
   // Cleanup al desmontar el componente
   useEffect(() => {
     return () => {
@@ -309,9 +479,17 @@ const GeneralDashboard: React.FC = () => {
   }, []);
 
   // Handlers optimizados con useCallback
-  const handleDateRangeFilter = useCallback((range: {startDate: string, endDate: string}) => {
-    console.log('📅 Nuevo rango de fechas seleccionado:', range);
-    setDateRange(range);
+  const handlePeriodFilter = useCallback((range: { from: string; to: string }) => {
+    console.log('🗓️ Nuevo período seleccionado:', range);
+    setPeriodRange(range);
+    // Sincronizar dateRange para mantener otras secciones compatibles
+    const [fy, fm] = range.from.split('-').map(Number);
+    const [ty, tm] = range.to.split('-').map(Number);
+    const start = new Date(fy, (fm || 1) - 1, 1);
+    const end = new Date(ty, (tm || 1), 0); // último día del mes
+    const startStr = `${start.getFullYear()}-${String(start.getMonth()+1).padStart(2,'0')}-${String(1).padStart(2,'0')}`;
+    const endStr = `${end.getFullYear()}-${String(end.getMonth()+1).padStart(2,'0')}-${String(end.getDate()).padStart(2,'0')}`;
+    setDateRange({ startDate: startStr, endDate: endStr });
   }, []);
 
   const handlePeriodChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -323,7 +501,13 @@ const GeneralDashboard: React.FC = () => {
   const handleCashTypeChange = useCallback((type: string) => {
     console.log('💰 Nuevo tipo de caja seleccionado:', type);
     setSelectedCashType(type);
-  }, []);
+    // Forzar actualización inmediata del gráfico y su cabecera al cambiar el tipo
+    // Evita esperar únicamente al efecto dependiente
+    try {
+      // Ejecutar en microtask para asegurar que el estado se aplique primero
+      Promise.resolve().then(() => loadClosureChartData());
+    } catch {}
+  }, [loadClosureChartData]);
 
   // Función helper para crear StatItems desde datos financieros
   const createFinancialStatItems = (resumenComparativo: FinancialDashboardResponse['resumenComparativo']) => {
@@ -341,63 +525,47 @@ const GeneralDashboard: React.FC = () => {
       return num.toLocaleString('es-PE');
     };
 
-    const formatPercentage = (percentage: number | null | undefined) => {
-      if (percentage === null || percentage === undefined || isNaN(percentage)) {
-        return '0.00%';
-      }
-      return `${percentage >= 0 ? '+' : ''}${percentage.toFixed(2)}%`;
-    };
-
-    const getTrendDirection = (percentage: number | null | undefined): 'up' | 'down' | 'neutral' => {
-      if (percentage === null || percentage === undefined || isNaN(percentage)) {
-        return 'neutral';
-      }
-      if (percentage > 0) return 'up';
-      if (percentage < 0) return 'down';
-      return 'neutral';
-    };
-
-    // Calcular porcentaje de variación para balance con validaciones
-    const balanceVariationPercentage = (resumenComparativo.balanceActual && resumenComparativo.balanceActual !== 0) 
-      ? (resumenComparativo.diferenciaBalance || 0) / resumenComparativo.balanceActual * 100 
-      : 0;
+    // Se descartan cálculos de comparación con el período anterior
+    const emptyTrend = '' as const;
+    const neutralDirection = 'neutral' as const;
+    const zeroTrendValue = 0;
 
     return {
       patientsAttended: {
         title: 'Pacientes Atendidos',
         value: formatNumber(resumenComparativo.pacientesActual),
         numericValue: resumenComparativo.pacientesActual || 0,
-        trend: formatPercentage(resumenComparativo.porcentajeCrecimientoPacientes),
-        trendDirection: getTrendDirection(resumenComparativo.porcentajeCrecimientoPacientes),
-        trendValue: resumenComparativo.porcentajeCrecimientoPacientes || 0,
-        trendDescription: 'vs período anterior'
+        trend: emptyTrend,
+        trendDirection: neutralDirection,
+        trendValue: zeroTrendValue,
+        trendDescription: ''
       },
       income: {
         title: 'Ingresos',
         value: formatCurrency(resumenComparativo.ingresosActual),
         numericValue: resumenComparativo.ingresosActual || 0,
-        trend: formatPercentage(resumenComparativo.porcentajeCrecimientoIngresos),
-        trendDirection: getTrendDirection(resumenComparativo.porcentajeCrecimientoIngresos),
-        trendValue: resumenComparativo.porcentajeCrecimientoIngresos || 0,
-        trendDescription: 'vs período anterior'
+        trend: emptyTrend,
+        trendDirection: neutralDirection,
+        trendValue: zeroTrendValue,
+        trendDescription: ''
       },
       expenses: {
         title: 'Egresos',
         value: formatCurrency(resumenComparativo.egresosActual),
         numericValue: resumenComparativo.egresosActual || 0,
-        trend: formatPercentage(resumenComparativo.porcentajeCrecimientoEgresos),
-        trendDirection: getTrendDirection(resumenComparativo.porcentajeCrecimientoEgresos),
-        trendValue: resumenComparativo.porcentajeCrecimientoEgresos || 0,
-        trendDescription: 'vs período anterior'
+        trend: emptyTrend,
+        trendDirection: neutralDirection,
+        trendValue: zeroTrendValue,
+        trendDescription: ''
       },
       balance: {
         title: 'Balance',
         value: formatCurrency(resumenComparativo.balanceActual),
         numericValue: resumenComparativo.balanceActual || 0,
-        trend: formatPercentage(balanceVariationPercentage),
-        trendDirection: getTrendDirection(balanceVariationPercentage),
-        trendValue: balanceVariationPercentage || 0,
-        trendDescription: 'vs período anterior'
+        trend: emptyTrend,
+        trendDirection: neutralDirection,
+        trendValue: zeroTrendValue,
+        trendDescription: ''
       }
     };
   };
@@ -415,6 +583,14 @@ const GeneralDashboard: React.FC = () => {
     const [year, month, day] = dateString.split('-').map(Number);
     const date = new Date(year, month - 1, day);
     return date.toLocaleDateString();
+  };
+
+  // Formatear período para mostrar (YYYY-MM -> Mes Año)
+  const formatPeriodForDisplay = (period: string): string => {
+    const [yStr, mStr] = period.split('-');
+    const y = parseInt(yStr, 10);
+    const m = parseInt(mStr, 10);
+    return `${getMonthNameEs(m)} ${y}`;
   };
 
   // Función helper para calcular días entre fechas
@@ -440,23 +616,22 @@ const GeneralDashboard: React.FC = () => {
             Dashboard General
           </motion.h1>
           <div className="flex space-x-3">
-            <DateRangeFilter onApplyFilter={handleDateRangeFilter} />
-          <CashTypeFilter 
-            selectedType={selectedCashType} 
-            onTypeChange={handleCashTypeChange} 
-          />
+            <PeriodFilter onApplyFilter={handlePeriodFilter} />
+            <CashTypeFilter 
+              selectedType={selectedCashType} 
+              onTypeChange={handleCashTypeChange} 
+            />
           </div>
         </div>
 
-        {/* Rango de fechas seleccionado */}
+        {/* Período seleccionado */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2 text-sm text-blue-800 dark:text-blue-200 flex items-center">
           <Calendar className="w-4 h-4 mr-2" />
           <span>
-            Mostrando datos desde {formatDateForDisplay(dateRange.startDate)} hasta {formatDateForDisplay(dateRange.endDate)} 
-            ({calculateDaysBetween(dateRange.startDate, dateRange.endDate)} días)
-          <span className="ml-2 font-medium">
-            - Tipo de Caja: {CASH_TYPES.find(type => type.id === selectedCashType)?.label || 'No especificado'}
-          </span>
+            Mostrando datos desde {formatPeriodForDisplay(periodRange.from)} hasta {formatPeriodForDisplay(periodRange.to)}
+            <span className="ml-2 font-medium">
+              - Tipo de Caja: {CASH_TYPES.find(type => type.id === selectedCashType)?.label || 'No especificado'}
+            </span>
             <span className="ml-2 text-xs">(Cargando...)</span>
           </span>
         </div>
@@ -485,7 +660,7 @@ const GeneralDashboard: React.FC = () => {
             Dashboard General
           </motion.h1>
           <div className="flex space-x-3">
-            <DateRangeFilter onApplyFilter={handleDateRangeFilter} />
+            <PeriodFilter onApplyFilter={handlePeriodFilter} />
             <CashTypeFilter 
               selectedType={selectedCashType} 
               onTypeChange={handleCashTypeChange} 
@@ -493,12 +668,11 @@ const GeneralDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Rango de fechas seleccionado */}
+        {/* Período seleccionado */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2 text-sm text-blue-800 dark:text-blue-200 flex items-center">
           <Calendar className="w-4 h-4 mr-2" />
           <span>
-            Mostrando datos desde {formatDateForDisplay(dateRange.startDate)} hasta {formatDateForDisplay(dateRange.endDate)} 
-            ({calculateDaysBetween(dateRange.startDate, dateRange.endDate)} días)
+            Mostrando datos desde {formatPeriodForDisplay(periodRange.from)} hasta {formatPeriodForDisplay(periodRange.to)}
             <span className="ml-2 font-medium">
               - Tipo de Caja: {CASH_TYPES.find(type => type.id === selectedCashType)?.label || 'No especificado'}
             </span>
@@ -535,7 +709,7 @@ const GeneralDashboard: React.FC = () => {
             Dashboard General
           </motion.h1>
           <div className="flex space-x-3">
-            <DateRangeFilter onApplyFilter={handleDateRangeFilter} />
+            <PeriodFilter onApplyFilter={handlePeriodFilter} />
             <CashTypeFilter 
               selectedType={selectedCashType} 
               onTypeChange={handleCashTypeChange} 
@@ -543,12 +717,11 @@ const GeneralDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Rango de fechas seleccionado */}
+        {/* Período seleccionado */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2 text-sm text-blue-800 dark:text-blue-200 flex items-center">
           <Calendar className="w-4 h-4 mr-2" />
           <span>
-            Mostrando datos desde {formatDateForDisplay(dateRange.startDate)} hasta {formatDateForDisplay(dateRange.endDate)} 
-            ({calculateDaysBetween(dateRange.startDate, dateRange.endDate)} días)
+            Mostrando datos desde {formatPeriodForDisplay(periodRange.from)} hasta {formatPeriodForDisplay(periodRange.to)}
             <span className="ml-2 font-medium">
               - Tipo de Caja: {CASH_TYPES.find(type => type.id === selectedCashType)?.label || 'No especificado'}
             </span>
@@ -574,7 +747,7 @@ const GeneralDashboard: React.FC = () => {
           Dashboard General
         </motion.h1>
         <div className="flex space-x-3">
-          <DateRangeFilter onApplyFilter={handleDateRangeFilter} />
+          <PeriodFilter onApplyFilter={handlePeriodFilter} />
           <CashTypeFilter 
             selectedType={selectedCashType} 
             onTypeChange={handleCashTypeChange} 
@@ -582,12 +755,11 @@ const GeneralDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Rango de fechas seleccionado */}
+      {/* Período seleccionado */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2 text-sm text-blue-800 dark:text-blue-200 flex items-center">
         <Calendar className="w-4 h-4 mr-2" />
         <span>
-          Mostrando datos desde {formatDateForDisplay(dateRange.startDate)} hasta {formatDateForDisplay(dateRange.endDate)} 
-          ({calculateDaysBetween(dateRange.startDate, dateRange.endDate)} días)
+          Mostrando datos desde {formatPeriodForDisplay(periodRange.from)} hasta {formatPeriodForDisplay(periodRange.to)}
           <span className="ml-2 font-medium">
             - Tipo de Caja: {CASH_TYPES.find(type => type.id === selectedCashType)?.label || 'No especificado'}
           </span>
@@ -597,7 +769,7 @@ const GeneralDashboard: React.FC = () => {
 
       {/* Estadísticas principales */}
       <motion.div 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
         variants={{
           hidden: { opacity: 0 },
           show: {
@@ -615,11 +787,6 @@ const GeneralDashboard: React.FC = () => {
             const financialStats = createFinancialStatItems(financialData.resumenComparativo);
             return (
               <>
-        <StatCard 
-                  stat={financialStats.patientsAttended}
-          icon={<Users className="w-6 h-6" />} 
-          color="bg-blue-500" 
-        />
         
         <StatCard 
                   stat={financialStats.income}
@@ -655,23 +822,30 @@ const GeneralDashboard: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.5 }}
         >
+          {(() => {
+            // Totales siempre recalculados a partir de los datos del gráfico
+            const computedTotals = closureChartData.reduce((acc, cur) => {
+              acc.ingresos += cur.ingresos || 0;
+              acc.egresos += cur.egresos || 0;
+              acc.balance += cur.balance || 0;
+              return acc;
+            }, { ingresos: 0, egresos: 0, balance: 0 });
+
+            const formatCurrency = (amount: number) => `S/. ${amount.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
           <div className="mb-4 flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center">
               <BarChart3 className="w-5 h-5 mr-2 text-primary" />
-            Tendencia de Ingresos - {CASH_TYPES.find(type => type.id === selectedCashType)?.label || 'Sin especificar'}
+              {`Tendencia de Ingresos - ${selectedCashType === 'todos' ? 'Totales' : (CASH_TYPES.find(type => type.id === selectedCashType)?.label || 'Totales')}`}
             </h2>
-            <select 
-              className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md px-2 py-1 text-sm"
-              value={periodType}
-              onChange={handlePeriodChange}
-            >
-            <option value="semanal">Semanal</option>
-            <option value="mensual">Mensual</option>
-            </select>
+            <span className="text-sm text-gray-600 dark:text-gray-300">
+              {`Ingresos: ${formatCurrency(computedTotals.ingresos)} | Egresos: ${formatCurrency(computedTotals.egresos)} | Balance: ${formatCurrency(computedTotals.balance)}`}
+            </span>
           </div>
-          
-        {financialData?.datosPorPeriodo ? (
-          <GroupedBarChart data={financialData.datosPorPeriodo} />
+          })()}
+
+        {closureChartData && closureChartData.length > 0 ? (
+          <GroupedBarChart data={closureChartData} />
         ) : (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -758,16 +932,20 @@ const StatCard: React.FC<StatCardProps> = ({ stat, icon, color }) => {
           {icon}
         </div>
       </div>
-      <div className="mt-3">
-        <span className={`text-sm font-medium ${
-          stat.trendDirection === 'up' ? 'text-green-600 dark:text-green-400' : 
-          stat.trendDirection === 'down' ? 'text-red-600 dark:text-red-400' : 
-          'text-gray-600 dark:text-gray-400'
-        }`}>
-          {stat.trend}
-        </span>
-        <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">{stat.trendDescription}</span>
-      </div>
+      {(stat.trend || stat.trendDescription) && (
+        <div className="mt-3">
+          <span className={`text-sm font-medium ${
+            stat.trendDirection === 'up' ? 'text-green-600 dark:text-green-400' : 
+            stat.trendDirection === 'down' ? 'text-red-600 dark:text-red-400' : 
+            'text-gray-600 dark:text-gray-400'
+          }`}>
+            {stat.trend}
+          </span>
+          {stat.trendDescription && (
+            <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">{stat.trendDescription}</span>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 };

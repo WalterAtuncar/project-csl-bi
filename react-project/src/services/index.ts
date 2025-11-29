@@ -68,87 +68,19 @@ export type {
 // Exportar servicio de Caja
 export { default as CajaService } from './CajaService';
 export type {
-  // Request types - Caja Mayor
-  CreateCajaMayorRequest,
-  UpdateCajaMayorRequest,
-  InsertCajaMayorDetalleRequest,
-  GetCajaMayorListRequest,
-  CerrarCajaMayorRequest,
-  DeleteCajaMayorRequest,
-  
-  // Request types - Ingresos/Egresos
-  CreateIngresoMensualRequest,
-  UpdateIngresoMensualRequest,
-  DeleteIngresoMensualRequest,
-  GetIngresoMensualListRequest,
-  CreateEgresoMensualRequest,
-  UpdateEgresoMensualRequest,
-  DeleteEgresoMensualRequest,
-  GetEgresoMensualListRequest,
-  
-  // Request types - Tipos
-  CreateTipoCajaRequest,
-  UpdateTipoCajaRequest,
-  DeleteTipoCajaRequest,
   GetTiposCajaRequest,
-  CreateTipoIngresoMensualRequest,
-  UpdateTipoIngresoMensualRequest,
-  DeleteTipoIngresoMensualRequest,
-  GetTiposIngresoMensualRequest,
-  CreateTipoEgresoMensualRequest,
-  UpdateTipoEgresoMensualRequest,
-  DeleteTipoEgresoMensualRequest,
-  GetTiposEgresoMensualRequest,
-  GetSaldoCajaRequest,
-  
-  // Response types - Caja Mayor
-  CreateCajaMayorResponse,
-  CajaMayorListResponse,
-  CajaMayorDetalleResponse,
-  CajaMayorHeaderResponse,
-  CajaMayorMovimientoResponse,
-  CerrarCajaMayorResponse,
-  DeleteCajaMayorResponse,
-  
-  // Response types - Ingresos/Egresos
-  CreateIngresoMensualResponse,
-  UpdateIngresoMensualResponse,
-  DeleteIngresoMensualResponse,
-  IngresoMensualListResponse,
-  CreateEgresoMensualResponse,
-  UpdateEgresoMensualResponse,
-  DeleteEgresoMensualResponse,
-  EgresoMensualListResponse,
-  
-  // Response types - Tipos
-  CreateTipoCajaResponse,
-  UpdateTipoCajaResponse,
-  DeleteTipoCajaResponse,
   TipoCajaResponse,
-  CreateTipoIngresoMensualResponse,
-  UpdateTipoIngresoMensualResponse,
-  DeleteTipoIngresoMensualResponse,
-  TipoIngresoMensualResponse,
-  CreateTipoEgresoMensualResponse,
-  UpdateTipoEgresoMensualResponse,
-  DeleteTipoEgresoMensualResponse,
-  TipoEgresoMensualResponse,
-  SaldoCajaResponse,
-  
-  // Utility types
-  CajaEstadisticas,
-  CajaFilters,
   CajaApiResponse,
-  
-  // Tipos para cierre de caja
-  CierreCajaRequest,
-  DatosCierreCajaResponse,
-  ResumenCierreCaja,
-  FiltroBusquedaMSRequest
+  EstadoCierreResponse,
+  // Nuevos tipos para verificación y borrado de cierre
+  CheckCierreExistsRequest,
+  CajaMayorCierreExistsResponse,
+  DeleteCierreRequest,
+  DeleteCajaMayorCierreResponse
 } from '../@types/caja';
 
 // Aquí se exportarán otros servicios cuando se creen
 // export { PatientService } from './PatientService';
 // export { AppointmentService } from './AppointmentService';
 // export { UserService } from './UserService';
-// etc... 
+// etc...

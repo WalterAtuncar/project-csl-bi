@@ -23,26 +23,15 @@ namespace Agenda.Microservice.Controllers.caja
             _cajaLogic = cajaLogic;
         }
 
-        // ================================================
-        // ENDPOINTS PARA CAJA MAYOR
-        // ================================================
-
-        /// <summary>
-        /// Crear una nueva caja mayor con su detalle
-        /// </summary>
-        /// <param name="request">Datos para crear la caja mayor</param>
-        /// <returns>Respuesta con la caja mayor creada</returns>
-        /// <response code="200">Caja mayor creada exitosamente. El objModel contiene un objeto CreateCajaMayorResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPost("caja-mayor")]
-        [ProducesResponseType(typeof(CreateCajaMayorResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult CreateCajaMayor([FromBody] CreateCajaMayorRequest request)
+        [HttpGet("caja-mayor-cierre/exists")]
+        [ProducesResponseType(typeof(CajaMayorCierreExistsResponse), StatusCodes.Status200OK)]
+        public IActionResult CajaMayorCierreExists([FromQuery] int anio, [FromQuery] int mes)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.CreateCajaMayor(request);
+                var request = new CheckCierreExistsRequest { Anio = anio, Mes = mes };
+                var response = _cajaLogic.CajaMayorCierreExists(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -51,22 +40,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Actualizar una caja mayor existente
-        /// </summary>
-        /// <param name="request">Datos para actualizar la caja mayor</param>
-        /// <returns>Respuesta con la caja mayor actualizada</returns>
-        /// <response code="200">Caja mayor actualizada exitosamente. El objModel contiene un objeto CreateCajaMayorResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPut("caja-mayor")]
-        [ProducesResponseType(typeof(CreateCajaMayorResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult UpdateCajaMayor([FromBody] UpdateCajaMayorRequest request)
+        [HttpGet("caja-mayor-cierre")]
+        [ProducesResponseType(typeof(IEnumerable<CajaMayorCabeceraResponse>), StatusCodes.Status200OK)]
+        public IActionResult GetListCabecera([FromQuery] string anio, [FromQuery] string mes, [FromQuery] byte? estadoCierre, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.UpdateCajaMayor(request);
+                var request = new GetListCabeceraRequest { Anio = anio, Mes = mes, EstadoCierre = estadoCierre, Page = page, PageSize = pageSize };
+                var response = _cajaLogic.GetListCabecera(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -75,22 +57,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Obtener lista de cajas mayor con filtros
-        /// </summary>
-        /// <param name="request">Filtros de búsqueda</param>
-        /// <returns>Lista de cajas mayor</returns>
-        /// <response code="200">Lista obtenida exitosamente. El objModel contiene una lista de CajaMayorListResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpGet("caja-mayor")]
-        [ProducesResponseType(typeof(List<CajaMayorListResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult GetCajaMayorList([FromQuery] GetCajaMayorListRequest request)
+        [HttpGet("caja-mayor-cierre/rango")]
+        [ProducesResponseType(typeof(IEnumerable<CajaMayorCabeceraResponse>), StatusCodes.Status200OK)]
+        public IActionResult GetCierresPorRango([FromQuery] int periodoDesde, [FromQuery] int periodoHasta, [FromQuery] byte? estadoCierre, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.GetCajaMayorList(request);
+                var request = new GetCierresPorRangoRequest { PeriodoDesde = periodoDesde, PeriodoHasta = periodoHasta, EstadoCierre = estadoCierre, Page = page, PageSize = pageSize };
+                var response = _cajaLogic.GetCierresPorRango(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -99,22 +74,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Obtener detalle completo de una caja mayor
-        /// </summary>
-        /// <param name="id">ID de la caja mayor</param>
-        /// <returns>Detalle completo de la caja mayor</returns>
-        /// <response code="200">Detalle obtenido exitosamente. El objModel contiene un objeto CajaMayorDetalleResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpGet("caja-mayor/{id}")]
-        [ProducesResponseType(typeof(CajaMayorDetalleResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult GetCajaMayorDetalle([FromRoute] int id)
+        [HttpGet("caja-mayor-cierre/rango/resumen-mensual-por-tipo")]
+        [ProducesResponseType(typeof(IEnumerable<CajaMayorResumenMensualTipoResponse>), StatusCodes.Status200OK)]
+        public IActionResult GetResumenMensualPorTipo([FromQuery] int periodoDesde, [FromQuery] int periodoHasta, [FromQuery] int? idTipoCaja, [FromQuery] byte? estadoCierre, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.GetCajaMayorDetalle(id);
+                var request = new ResumenMensualPorTipoRequest { PeriodoDesde = periodoDesde, PeriodoHasta = periodoHasta, IdTipoCaja = idTipoCaja, EstadoCierre = estadoCierre, Page = page, PageSize = pageSize };
+                var response = _cajaLogic.ResumenMensualPorTipo(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -123,22 +91,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Cerrar una caja mayor
-        /// </summary>
-        /// <param name="request">Datos del cierre</param>
-        /// <returns>Respuesta del cierre</returns>
-        /// <response code="200">Caja mayor cerrada exitosamente. El objModel contiene un objeto CerrarCajaMayorResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPatch("caja-mayor/cerrar")]
-        [ProducesResponseType(typeof(CerrarCajaMayorResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult CerrarCajaMayor([FromBody] CerrarCajaMayorRequest request)
+        [HttpGet("caja-mayor-cierre/{id}")]
+        [ProducesResponseType(typeof(CajaMayorCabeceraResponse), StatusCodes.Status200OK)]
+        public IActionResult GetCabecera([FromRoute] int id)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.CerrarCajaMayor(request);
+                var request = new GetCabeceraRequest { IdCajaMayorCierre = id };
+                var response = _cajaLogic.GetCabecera(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -147,22 +108,14 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Eliminar una caja mayor (solo si está abierta)
-        /// </summary>
-        /// <param name="request">Datos de la eliminación</param>
-        /// <returns>Respuesta de la eliminación</returns>
-        /// <response code="200">Caja mayor eliminada exitosamente. El objModel contiene un objeto DeleteCajaMayorResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpDelete("caja-mayor")]
-        [ProducesResponseType(typeof(DeleteCajaMayorResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult DeleteCajaMayor([FromBody] DeleteCajaMayorRequest request)
+        [HttpPost("caja-mayor-cierre")]
+        [ProducesResponseType(typeof(CajaMayorCabeceraResponse), StatusCodes.Status200OK)]
+        public IActionResult CierreCreateUpdate([FromBody] CierreCreateUpdateRequest request)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.DeleteCajaMayor(request);
+                var response = _cajaLogic.CierreCreateUpdate(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -171,22 +124,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Insertar detalle individual a una caja mayor existente (Compatible con SQL Server 2012)
-        /// </summary>
-        /// <param name="request">Datos del detalle a insertar</param>
-        /// <returns>Respuesta de la inserción</returns>
-        /// <response code="200">Detalle insertado exitosamente. El objModel contiene un objeto CreateCajaMayorResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPost("caja-mayor/detalle")]
-        [ProducesResponseType(typeof(CreateCajaMayorResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult InsertCajaMayorDetalle([FromBody] InsertCajaMayorDetalleRequest request)
+        [HttpPost("caja-mayor-cierre/{id}/cerrar")]
+        [ProducesResponseType(typeof(CajaMayorCabeceraResponse), StatusCodes.Status200OK)]
+        public IActionResult Cerrar([FromRoute] int id, [FromBody] CerrarRequest body)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.InsertCajaMayorDetalle(request);
+                var request = new CerrarRequest { IdCajaMayorCierre = id, ActualizaIdUsuario = body.ActualizaIdUsuario };
+                var response = _cajaLogic.Cerrar(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -195,26 +141,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        // ================================================
-        // ENDPOINTS PARA INGRESOS MENSUALES
-        // ================================================
-
-        /// <summary>
-        /// Registrar un nuevo ingreso mensual
-        /// </summary>
-        /// <param name="request">Datos del ingreso</param>
-        /// <returns>Respuesta con el ingreso creado</returns>
-        /// <response code="200">Ingreso registrado exitosamente. El objModel contiene un objeto CreateIngresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPost("ingresos-mensuales")]
-        [ProducesResponseType(typeof(CreateIngresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult CreateIngresoMensual([FromBody] CreateIngresoMensualRequest request)
+        [HttpPost("caja-mayor-cierre/{id}/confirmar")]
+        [ProducesResponseType(typeof(CajaMayorCabeceraResponse), StatusCodes.Status200OK)]
+        public IActionResult Confirmar([FromRoute] int id, [FromBody] ConfirmarRequest body)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.CreateIngresoMensual(request);
+                var request = new ConfirmarRequest { IdCajaMayorCierre = id, ActualizaIdUsuario = body.ActualizaIdUsuario };
+                var response = _cajaLogic.Confirmar(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -223,22 +158,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Obtener lista de ingresos mensuales con filtros
-        /// </summary>
-        /// <param name="request">Filtros de búsqueda</param>
-        /// <returns>Lista de ingresos mensuales</returns>
-        /// <response code="200">Lista obtenida exitosamente. El objModel contiene una lista de IngresoMensualListResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpGet("ingresos-mensuales")]
-        [ProducesResponseType(typeof(List<IngresoMensualListResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult GetIngresoMensualList([FromQuery] GetIngresoMensualListRequest request)
+        [HttpDelete("caja-mayor-cierre/{id}")]
+        [ProducesResponseType(typeof(DeleteCajaMayorCierreResponse), StatusCodes.Status200OK)]
+        public IActionResult DeleteCajaMayorCierre([FromRoute] int id, [FromBody] DeleteCierreRequest body)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.GetIngresoMensualList(request);
+                var request = new DeleteCierreRequest { IdCajaMayorCierre = id, EliminaIdUsuario = body.EliminaIdUsuario };
+                var response = _cajaLogic.DeleteCajaMayorCierrePhysical(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -247,22 +175,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Actualizar un ingreso mensual existente
-        /// </summary>
-        /// <param name="request">Datos actualizados del ingreso</param>
-        /// <returns>Respuesta de la actualización</returns>
-        /// <response code="200">Ingreso actualizado exitosamente. El objModel contiene un objeto UpdateIngresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPut("ingresos-mensuales")]
-        [ProducesResponseType(typeof(UpdateIngresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult UpdateIngresoMensual([FromBody] UpdateIngresoMensualRequest request)
+        [HttpPost("caja-mayor-cierre/{id}/resumen-tipos")]
+        [ProducesResponseType(typeof(IEnumerable<CajaMayorResumenTipoResponse>), StatusCodes.Status200OK)]
+        public IActionResult ResumenTipos([FromRoute] int id, [FromBody] ResumenTiposRequest body)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.UpdateIngresoMensual(request);
+                var request = new ResumenTiposRequest { IdCajaMayorCierre = id, ActualizaIdUsuario = body.ActualizaIdUsuario };
+                var response = _cajaLogic.ResumenTipos(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -271,22 +192,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Eliminar un ingreso mensual (eliminación lógica)
-        /// </summary>
-        /// <param name="request">Datos de la eliminación</param>
-        /// <returns>Respuesta de la eliminación</returns>
-        /// <response code="200">Ingreso eliminado exitosamente. El objModel contiene un objeto DeleteIngresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpDelete("ingresos-mensuales")]
-        [ProducesResponseType(typeof(DeleteIngresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult DeleteIngresoMensual([FromBody] DeleteIngresoMensualRequest request)
+        [HttpPost("caja-mayor-cierre/{id}/recalcular-totales")]
+        [ProducesResponseType(typeof(CajaMayorTotalesResponse), StatusCodes.Status200OK)]
+        public IActionResult RecalcularTotales([FromRoute] int id, [FromBody] RecalcularTotalesRequest body)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.DeleteIngresoMensual(request);
+                var request = new RecalcularTotalesRequest { IdCajaMayorCierre = id, ActualizaIdUsuario = body.ActualizaIdUsuario };
+                var response = _cajaLogic.RecalcularTotales(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -295,26 +209,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        // ================================================
-        // ENDPOINTS PARA EGRESOS MENSUALES
-        // ================================================
-
-        /// <summary>
-        /// Registrar un nuevo egreso mensual
-        /// </summary>
-        /// <param name="request">Datos del egreso</param>
-        /// <returns>Respuesta con el egreso creado</returns>
-        /// <response code="200">Egreso registrado exitosamente. El objModel contiene un objeto CreateEgresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPost("egresos-mensuales")]
-        [ProducesResponseType(typeof(CreateEgresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult CreateEgresoMensual([FromBody] CreateEgresoMensualRequest request)
+        [HttpPost("caja-mayor-cierre/{id}/saldo-inicial")]
+        [ProducesResponseType(typeof(CajaMayorResumenTipoResponse), StatusCodes.Status200OK)]
+        public IActionResult UpdateSaldoInicialTipoCaja([FromRoute] int id, [FromBody] UpdateSaldoInicialTipoCajaRequest body)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.CreateEgresoMensual(request);
+                var request = new UpdateSaldoInicialTipoCajaRequest { IdCajaMayorCierre = id, IdTipoCaja = body.IdTipoCaja, SaldoInicial = body.SaldoInicial, ActualizaIdUsuario = body.ActualizaIdUsuario };
+                var response = _cajaLogic.UpdateSaldoInicialTipoCaja(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -323,22 +226,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Obtener lista de egresos mensuales con filtros
-        /// </summary>
-        /// <param name="request">Filtros de búsqueda</param>
-        /// <returns>Lista de egresos mensuales</returns>
-        /// <response code="200">Lista obtenida exitosamente. El objModel contiene una lista de EgresoMensualListResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpGet("egresos-mensuales")]
-        [ProducesResponseType(typeof(List<EgresoMensualListResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult GetEgresoMensualList([FromQuery] GetEgresoMensualListRequest request)
+        [HttpPost("caja-mayor-cierre/{id}/generar-egresos-desde-ventas")]
+        [ProducesResponseType(typeof(IEnumerable<CajaMayorMovimientoDbResponse>), StatusCodes.Status200OK)]
+        public IActionResult GenerarEgresosDesdeVentas([FromRoute] int id, [FromBody] GenerarEgresosDesdeVentasRequest body)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.GetEgresoMensualList(request);
+                var request = new GenerarEgresosDesdeVentasRequest { IdCajaMayorCierre = id, InsertaIdUsuario = body.InsertaIdUsuario, DefaultIdTipoCaja = body.DefaultIdTipoCaja };
+                var response = _cajaLogic.GenerarEgresosDesdeVentas(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -347,22 +243,15 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Actualizar un egreso mensual existente
-        /// </summary>
-        /// <param name="request">Datos actualizados del egreso</param>
-        /// <returns>Respuesta de la actualización</returns>
-        /// <response code="200">Egreso actualizado exitosamente. El objModel contiene un objeto UpdateEgresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPut("egresos-mensuales")]
-        [ProducesResponseType(typeof(UpdateEgresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult UpdateEgresoMensual([FromBody] UpdateEgresoMensualRequest request)
+        [HttpPost("caja-mayor-cierre/{id}/generar-ingresos-desde-cobranzas")]
+        [ProducesResponseType(typeof(IEnumerable<CajaMayorMovimientoDbResponse>), StatusCodes.Status200OK)]
+        public IActionResult GenerarIngresosDesdeCobranzas([FromRoute] int id, [FromBody] GenerarIngresosDesdeCobranzasRequest body)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.UpdateEgresoMensual(request);
+                var request = new GenerarIngresosDesdeCobranzasRequest { IdCajaMayorCierre = id, InsertaIdUsuario = body.InsertaIdUsuario, DefaultIdTipoCaja = body.DefaultIdTipoCaja };
+                var response = _cajaLogic.GenerarIngresosDesdeCobranzas(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -371,22 +260,16 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Eliminar un egreso mensual (eliminación lógica)
-        /// </summary>
-        /// <param name="request">Datos de la eliminación</param>
-        /// <returns>Respuesta de la eliminación</returns>
-        /// <response code="200">Egreso eliminado exitosamente. El objModel contiene un objeto DeleteEgresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpDelete("egresos-mensuales")]
-        [ProducesResponseType(typeof(DeleteEgresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult DeleteEgresoMensual([FromBody] DeleteEgresoMensualRequest request)
+        [HttpGet("caja-mayor-cierre/{id}/movimientos")]
+        [ProducesResponseType(typeof(IEnumerable<CajaMayorMovimientoResponse>), StatusCodes.Status200OK)]
+        public IActionResult GetMovimientos([FromRoute] int id, [FromQuery] int? idCajaMayorCierre, [FromQuery] int? idTipoCaja, [FromQuery] string? tipoMovimiento, [FromQuery] string? origen, [FromQuery] DateTime? fechaDesde, [FromQuery] DateTime? fechaHasta, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] bool? sinPaginacion = null)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.DeleteEgresoMensual(request);
+                var cierreId = idCajaMayorCierre ?? id;
+                var request = new GetMovimientosRequest { IdCajaMayorCierre = cierreId, IdTipoCaja = idTipoCaja, TipoMovimiento = tipoMovimiento, Origen = origen, FechaDesde = fechaDesde, FechaHasta = fechaHasta, Page = page, PageSize = pageSize, SinPaginacion = sinPaginacion };
+                var response = _cajaLogic.GetMovimientos(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -395,26 +278,33 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        // ================================================
-        // ENDPOINTS PARA TIPOS DE CAJA
-        // ================================================
-
-        /// <summary>
-        /// Crear un nuevo tipo de caja
-        /// </summary>
-        /// <param name="request">Datos del tipo de caja</param>
-        /// <returns>Respuesta con el tipo de caja creado</returns>
-        /// <response code="200">Tipo de caja creado exitosamente. El objModel contiene un objeto CreateTipoCajaResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPost("tipos-caja")]
-        [ProducesResponseType(typeof(CreateTipoCajaResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult CreateTipoCaja([FromBody] CreateTipoCajaRequest request)
+        [HttpPost("caja-mayor-cierre/{id}/movimientos/manual")]
+        [ProducesResponseType(typeof(CajaMayorMovimientoDbResponse), StatusCodes.Status200OK)]
+        public IActionResult InsertMovimientoManual([FromRoute] int id, [FromBody] InsertMovimientoManualRequest body)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.CreateTipoCaja(request);
+                var request = new InsertMovimientoManualRequest
+                {
+                    IdCajaMayorCierre = id,
+                    IdTipoCaja = body.IdTipoCaja,
+                    TipoMovimiento = body.TipoMovimiento,
+                    // Nuevos campos
+                    ConceptoMovimiento = body.ConceptoMovimiento,
+                    Subtotal = body.Subtotal,
+                    IGV = body.IGV,
+                    Origen = string.IsNullOrWhiteSpace(body.Origen) ? "manual" : body.Origen,
+                    Total = body.Total,
+                    FechaRegistro = body.FechaRegistro,
+                    Observaciones = body.Observaciones,
+                    CodigoDocumento = body.CodigoDocumento,
+                    SerieDocumento = body.SerieDocumento,
+                    NumeroDocumento = body.NumeroDocumento,
+                    IdVenta = body.IdVenta,
+                    InsertaIdUsuario = body.InsertaIdUsuario
+                };
+                var response = _cajaLogic.InsertMovimientoManual(request);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -423,23 +313,14 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Obtener lista de tipos de caja
-        /// </summary>
-        /// <param name="includeInactive">Incluir tipos inactivos</param>
-        /// <returns>Lista de tipos de caja</returns>
-        /// <response code="200">Lista obtenida exitosamente. El objModel contiene una lista de TipoCajaResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpGet("tipos-caja")]
-        [ProducesResponseType(typeof(List<TipoCajaResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
+        [HttpGet("caja-mayor/tipos-caja")]
+        [ProducesResponseType(typeof(IEnumerable<TipoCajaResponse>), StatusCodes.Status200OK)]
         public IActionResult GetTiposCaja([FromQuery] bool includeInactive = false)
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var request = new GetTiposCajaRequest { IncludeInactive = includeInactive };
-                var response = _cajaLogic.GetTiposCaja(request);
+                var response = _cajaLogic.GetTiposCaja(includeInactive);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
@@ -448,277 +329,14 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        /// <summary>
-        /// Actualizar un tipo de caja
-        /// </summary>
-        /// <param name="request">Datos actualizados del tipo de caja</param>
-        /// <returns>Respuesta de la actualización</returns>
-        /// <response code="200">Tipo de caja actualizado exitosamente. El objModel contiene un objeto UpdateTipoCajaResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPut("tipos-caja")]
-        [ProducesResponseType(typeof(UpdateTipoCajaResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult UpdateTipoCaja([FromBody] UpdateTipoCajaRequest request)
+        [HttpGet("caja-mayor-cierre/estados")]
+        [ProducesResponseType(typeof(IEnumerable<EstadoCierreResponse>), StatusCodes.Status200OK)]
+        public IActionResult GetEstadosCierre()
         {
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var response = _cajaLogic.UpdateTipoCaja(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        /// <summary>
-        /// Eliminar un tipo de caja (eliminación lógica)
-        /// </summary>
-        /// <param name="request">Datos de la eliminación</param>
-        /// <returns>Respuesta de la eliminación</returns>
-        /// <response code="200">Tipo de caja eliminado exitosamente. El objModel contiene un objeto DeleteTipoCajaResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpDelete("tipos-caja")]
-        [ProducesResponseType(typeof(DeleteTipoCajaResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult DeleteTipoCaja([FromBody] DeleteTipoCajaRequest request)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var response = _cajaLogic.DeleteTipoCaja(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        // ================================================
-        // ENDPOINTS PARA TIPOS DE INGRESO MENSUAL
-        // ================================================
-
-        /// <summary>
-        /// Crear un nuevo tipo de ingreso mensual
-        /// </summary>
-        /// <param name="request">Datos del tipo de ingreso</param>
-        /// <returns>Respuesta con el tipo de ingreso creado</returns>
-        /// <response code="200">Tipo de ingreso creado exitosamente. El objModel contiene un objeto CreateTipoIngresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPost("tipos-ingreso-mensual")]
-        [ProducesResponseType(typeof(CreateTipoIngresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult CreateTipoIngresoMensual([FromBody] CreateTipoIngresoMensualRequest request)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var response = _cajaLogic.CreateTipoIngresoMensual(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        /// <summary>
-        /// Obtener lista de tipos de ingreso mensual
-        /// </summary>
-        /// <param name="includeInactive">Incluir tipos inactivos</param>
-        /// <returns>Lista de tipos de ingreso mensual</returns>
-        /// <response code="200">Lista obtenida exitosamente. El objModel contiene una lista de TipoIngresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpGet("tipos-ingreso-mensual")]
-        [ProducesResponseType(typeof(List<TipoIngresoMensualResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult GetTiposIngresoMensual([FromQuery] bool includeInactive = false)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var request = new GetTiposIngresoMensualRequest { IncludeInactive = includeInactive };
-                var response = _cajaLogic.GetTiposIngresoMensual(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        /// <summary>
-        /// Actualizar un tipo de ingreso mensual
-        /// </summary>
-        /// <param name="request">Datos actualizados del tipo de ingreso</param>
-        /// <returns>Respuesta de la actualización</returns>
-        /// <response code="200">Tipo de ingreso actualizado exitosamente. El objModel contiene un objeto UpdateTipoIngresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPut("tipos-ingreso-mensual")]
-        [ProducesResponseType(typeof(UpdateTipoIngresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult UpdateTipoIngresoMensual([FromBody] UpdateTipoIngresoMensualRequest request)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var response = _cajaLogic.UpdateTipoIngresoMensual(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        /// <summary>
-        /// Eliminar un tipo de ingreso mensual (eliminación lógica)
-        /// </summary>
-        /// <param name="request">Datos de la eliminación</param>
-        /// <returns>Respuesta de la eliminación</returns>
-        /// <response code="200">Tipo de ingreso eliminado exitosamente. El objModel contiene un objeto DeleteTipoIngresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpDelete("tipos-ingreso-mensual")]
-        [ProducesResponseType(typeof(DeleteTipoIngresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult DeleteTipoIngresoMensual([FromBody] DeleteTipoIngresoMensualRequest request)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var response = _cajaLogic.DeleteTipoIngresoMensual(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        // ================================================
-        // ENDPOINTS PARA TIPOS DE EGRESO MENSUAL
-        // ================================================
-
-        /// <summary>
-        /// Crear un nuevo tipo de egreso mensual
-        /// </summary>
-        /// <param name="request">Datos del tipo de egreso</param>
-        /// <returns>Respuesta con el tipo de egreso creado</returns>
-        /// <response code="200">Tipo de egreso creado exitosamente. El objModel contiene un objeto CreateTipoEgresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPost("tipos-egreso-mensual")]
-        [ProducesResponseType(typeof(CreateTipoEgresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult CreateTipoEgresoMensual([FromBody] CreateTipoEgresoMensualRequest request)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var response = _cajaLogic.CreateTipoEgresoMensual(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        /// <summary>
-        /// Obtener lista de tipos de egreso mensual
-        /// </summary>
-        /// <param name="includeInactive">Incluir tipos inactivos</param>
-        /// <returns>Lista de tipos de egreso mensual</returns>
-        /// <response code="200">Lista obtenida exitosamente. El objModel contiene una lista de TipoEgresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpGet("tipos-egreso-mensual")]
-        [ProducesResponseType(typeof(List<TipoEgresoMensualResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult GetTiposEgresoMensual([FromQuery] bool includeInactive = false)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var request = new GetTiposEgresoMensualRequest { IncludeInactive = includeInactive };
-                var response = _cajaLogic.GetTiposEgresoMensual(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        /// <summary>
-        /// Actualizar un tipo de egreso mensual
-        /// </summary>
-        /// <param name="request">Datos actualizados del tipo de egreso</param>
-        /// <returns>Respuesta de la actualización</returns>
-        /// <response code="200">Tipo de egreso actualizado exitosamente. El objModel contiene un objeto UpdateTipoEgresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpPut("tipos-egreso-mensual")]
-        [ProducesResponseType(typeof(UpdateTipoEgresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult UpdateTipoEgresoMensual([FromBody] UpdateTipoEgresoMensualRequest request)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var response = _cajaLogic.UpdateTipoEgresoMensual(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        /// <summary>
-        /// Eliminar un tipo de egreso mensual (eliminación lógica)
-        /// </summary>
-        /// <param name="request">Datos de la eliminación</param>
-        /// <returns>Respuesta de la eliminación</returns>
-        /// <response code="200">Tipo de egreso eliminado exitosamente. El objModel contiene un objeto DeleteTipoEgresoMensualResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpDelete("tipos-egreso-mensual")]
-        [ProducesResponseType(typeof(DeleteTipoEgresoMensualResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult DeleteTipoEgresoMensual([FromBody] DeleteTipoEgresoMensualRequest request)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var response = _cajaLogic.DeleteTipoEgresoMensual(request);
-                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
-            }
-            catch (Exception e)
-            {
-                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
-            }
-        }
-
-        // ================================================
-        // ENDPOINTS PARA SALDO CAJA
-        // ================================================
-
-        /// <summary>
-        /// Obtener saldo actual de caja por tipo
-        /// </summary>
-        /// <param name="idTipoCaja">ID del tipo de caja (opcional, si no se especifica devuelve todos)</param>
-        /// <returns>Lista de saldos por tipo de caja</returns>
-        /// <response code="200">Saldos obtenidos exitosamente. El objModel contiene una lista de SaldoCajaResponse</response>
-        /// <response code="400">Error en la solicitud</response>
-        [HttpGet("saldo-caja")]
-        [ProducesResponseType(typeof(List<SaldoCajaResponse>), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
-        public IActionResult GetSaldoCaja([FromQuery] int? idTipoCaja = null)
-        {
-            _ResponseDTO = new ResponseDTO();
-            try
-            {
-                var request = new GetSaldoCajaRequest { IdTipoCaja = idTipoCaja };
-                var response = _cajaLogic.GetSaldoCaja(request);
+                var response = _cajaLogic.GetEstadosCierre();
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
             }
             catch (Exception e)
