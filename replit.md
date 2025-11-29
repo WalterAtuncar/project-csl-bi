@@ -45,12 +45,14 @@ Medical clinic management system with business intelligence capabilities. Built 
 2. Configured Vite dev server:
    - Port: 5000
    - Host: 0.0.0.0
-   - Enabled for Replit proxy
+   - HMR configured for Replit proxy (clientPort: 443)
+   - **Note:** HMR WebSocket may show intermittent reconnection attempts through Replit's proxy, which is normal behavior
 3. Updated backend configuration:
    - Changed port from 7036/5174 to 8080
    - Disabled HTTPS redirection for development
 4. Created environment configuration (.env)
-5. Set up frontend workflow for automatic deployment
+   - Points to external production API at http://190.116.90.35:8183/api
+5. Set up frontend workflow for automatic deployment on port 5000
 
 ### Configuration Files
 - **Frontend:** `react-project/vite.config.ts` - Configured for Replit (port 5000, host 0.0.0.0)
