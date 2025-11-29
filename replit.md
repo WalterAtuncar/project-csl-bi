@@ -40,6 +40,34 @@ Medical clinic management system with business intelligence capabilities. Built 
 
 ## Recent Changes (Nov 29, 2025)
 
+### SUNAT Formato 8.1 - Registro de Compras Module
+Implemented complete SUNAT-compliant purchase registration integrated with expense tracking:
+
+**Frontend Components:**
+- `RegistroComprasModal.tsx` - Main modal with all SUNAT 8.1 fields
+  - Provider autocomplete with quick creation
+  - Document type (Factura, Boleta, Nota Crédito/Débito, etc.)
+  - Serie/Número comprobante
+  - Amounts breakdown (Base Imponible, IGV, ISC, etc.)
+  - Detraction/Retention controls
+- `ProveedorQuickModal.tsx` - Quick provider creation (RUC, Razón Social, Dirección, Email)
+- Modified `CajaMayorNew.tsx` to use RegistroComprasModal for expenses
+
+**Backend Endpoints:**
+- `GET /api/Caja/proveedores/buscar?termino=X` - Search providers
+- `POST /api/Caja/proveedores` - Create provider
+- `POST /api/Caja/caja-mayor-cierre/{id}/registro-compras` - Insert purchase record
+
+**Database Scripts (to execute in SQL Server):**
+- `scriptCaja/tabla_proveedores.sql` - Providers table
+- `scriptCaja/tabla_registro_compras.sql` - Purchase records table (SUNAT 8.1)
+- `scriptCaja/sp_Proveedores_Buscar.sql` - Search providers SP
+- `scriptCaja/sp_Proveedores_Insert.sql` - Insert provider SP
+- `scriptCaja/sp_RegistroCompras_Insert.sql` - Insert purchase record SP
+
+**Integration Pattern:**
+Sequential API calls - First insert expense movement, then insert purchase record with id_movimiento_egreso as FK
+
 ### Replit Environment Setup
 1. Installed Node.js 20 and .NET 8.0 (compatible with .NET 6)
 2. Configured Vite dev server:
