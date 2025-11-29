@@ -40,6 +40,48 @@ const MONEDAS = [
   { codigo: 'EUR', nombre: 'Euros (EUR)' },
 ];
 
+const FAMILIAS_EGRESO = [
+  { id: 1, nombre: 'Pagos Operativos' },
+  { id: 2, nombre: 'Gastos Administrativos' },
+  { id: 3, nombre: 'Inversiones' },
+  { id: 4, nombre: 'Pagos a Terceros' },
+  { id: 5, nombre: 'Otros Egresos' },
+];
+
+const TIPOS_EGRESO: Record<number, { id: number; nombre: string }[]> = {
+  1: [
+    { id: 101, nombre: 'Planilla' },
+    { id: 102, nombre: 'CTS' },
+    { id: 103, nombre: 'Gratificaciones' },
+    { id: 104, nombre: 'EsSalud' },
+    { id: 105, nombre: 'AFP/ONP' },
+  ],
+  2: [
+    { id: 201, nombre: 'Servicios Públicos' },
+    { id: 202, nombre: 'Alquiler' },
+    { id: 203, nombre: 'Seguros' },
+    { id: 204, nombre: 'Mantenimiento' },
+    { id: 205, nombre: 'Suministros' },
+  ],
+  3: [
+    { id: 301, nombre: 'Equipos Médicos' },
+    { id: 302, nombre: 'Mobiliario' },
+    { id: 303, nombre: 'Sistemas/Software' },
+    { id: 304, nombre: 'Infraestructura' },
+  ],
+  4: [
+    { id: 401, nombre: 'Honorarios Profesionales' },
+    { id: 402, nombre: 'Servicios Contables' },
+    { id: 403, nombre: 'Servicios Legales' },
+    { id: 404, nombre: 'Consultorías' },
+  ],
+  5: [
+    { id: 501, nombre: 'Gastos Varios' },
+    { id: 502, nombre: 'Imprevistos' },
+    { id: 503, nombre: 'Donaciones' },
+  ],
+};
+
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
@@ -84,6 +126,9 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
   const [showDropdown, setShowDropdown] = useState(false);
   const [showProveedorModal, setShowProveedorModal] = useState(false);
   const [calcularDesdeTotal, setCalcularDesdeTotal] = useState<boolean>(true);
+  const [idFamiliaEgreso, setIdFamiliaEgreso] = useState<number | null>(null);
+  const [idTipoEgreso, setIdTipoEgreso] = useState<number | null>(null);
+  const tiposEgresoFiltrados = idFamiliaEgreso ? (TIPOS_EGRESO[idFamiliaEgreso] || []) : [];
 
   useEffect(() => {
     if (isOpen) {
@@ -115,6 +160,8 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
       setProveedorOptions([]);
       setProveedorSelected(null);
       setCalcuarDesdeTotal(true);
+      setIdFamiliaEgreso(null);
+      setIdTipoEgreso(null);
     }
   }, [isOpen, fechaMin]);
 
@@ -355,6 +402,8 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
         aplicaRetencion: aplicaRetencion,
         montoRetencion: aplicaRetencion ? montoRetencion : null,
         observaciones: observaciones,
+        idFamiliaEgreso: idFamiliaEgreso,
+        idTipoEgreso: idTipoEgreso,
       };
 
       await cajaService.insertRegistroCompras(idCajaMayorCierre, registroComprasBody);
@@ -755,6 +804,53 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
                         />
                       </div>
                     )}
+                  </div>
+                </div>
+
+                <div className="bg-teal-50 dark:bg-teal-900/20 rounded-lg p-4 border border-teal-200 dark:border-teal-800">
+                  <h4 className="text-sm font-semibold text-teal-700 dark:text-teal-300 mb-3">
+                    Control Interno
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Familia del Egreso
+                      </label>
+                      <select
+                        className="w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white"
+                        value={idFamiliaEgreso || ''}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : null;
+                          setIdFamiliaEgreso(val);
+                          setIdTipoEgreso(null);
+                        }}
+                      >
+                        <option value="">-- Seleccione --</option>
+                        {FAMILIAS_EGRESO.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Tipo de Egreso
+                      </label>
+                      <select
+                        className="w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
+                        value={idTipoEgreso || ''}
+                        onChange={(e) => setIdTipoEgreso(e.target.value ? Number(e.target.value) : null)}
+                        disabled={!idFamiliaEgreso}
+                      >
+                        <option value="">-- Seleccione --</option>
+                        {tiposEgresoFiltrados.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 

@@ -33,6 +33,8 @@ BEGIN
         [aplica_retencion] BIT NOT NULL DEFAULT 0,
         [monto_retencion] DECIMAL(12,2) NULL,
         [observaciones] NVARCHAR(500) NULL,
+        [id_familia_egreso] INT NULL,
+        [id_tipo_egreso] INT NULL,
         [estado] NVARCHAR(1) NOT NULL DEFAULT '1',
         [inserta_id_usuario] INT NOT NULL,
         [inserta_fecha] DATETIME NOT NULL DEFAULT GETDATE(),

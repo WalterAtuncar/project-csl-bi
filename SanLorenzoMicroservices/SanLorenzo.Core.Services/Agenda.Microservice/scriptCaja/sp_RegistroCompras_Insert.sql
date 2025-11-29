@@ -28,6 +28,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_RegistroCompras_Insert]
     @AplicaRetencion BIT = 0,
     @MontoRetencion DECIMAL(12,2) = NULL,
     @Observaciones NVARCHAR(500) = NULL,
+    @IdFamiliaEgreso INT = NULL,
+    @IdTipoEgreso INT = NULL,
     @InsertaIdUsuario INT
 AS
 BEGIN
@@ -68,6 +70,8 @@ BEGIN
         aplica_retencion,
         monto_retencion,
         observaciones,
+        id_familia_egreso,
+        id_tipo_egreso,
         estado,
         inserta_id_usuario,
         inserta_fecha
@@ -98,6 +102,8 @@ BEGIN
         @AplicaRetencion,
         @MontoRetencion,
         @Observaciones,
+        @IdFamiliaEgreso,
+        @IdTipoEgreso,
         '1', -- Estado: Anotado correctamente
         @InsertaIdUsuario,
         @Now
@@ -132,6 +138,8 @@ BEGIN
         aplica_retencion AS AplicaRetencion,
         monto_retencion AS MontoRetencion,
         observaciones AS Observaciones,
+        id_familia_egreso AS IdFamiliaEgreso,
+        id_tipo_egreso AS IdTipoEgreso,
         estado AS Estado,
         inserta_id_usuario AS InsertaIdUsuario,
         inserta_fecha AS InsertaFecha

@@ -282,6 +282,8 @@ namespace Data.Access.ImplementationsRepo.caja
             p.Add("@AplicaRetencion", request.AplicaRetencion);
             p.Add("@MontoRetencion", request.MontoRetencion);
             p.Add("@Observaciones", request.Observaciones);
+            p.Add("@IdFamiliaEgreso", request.IdFamiliaEgreso);
+            p.Add("@IdTipoEgreso", request.IdTipoEgreso);
             p.Add("@InsertaIdUsuario", request.InsertaIdUsuario);
             using var cn = new SqlConnection(_connectionString);
             return cn.Query<RegistroComprasResponse>("[dbo].[sp_RegistroCompras_Insert]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();

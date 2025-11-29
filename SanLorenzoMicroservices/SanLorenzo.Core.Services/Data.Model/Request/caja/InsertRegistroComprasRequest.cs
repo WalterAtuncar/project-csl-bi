@@ -28,6 +28,8 @@ namespace Data.Model.Request.caja
         public bool AplicaRetencion { get; set; }
         public decimal? MontoRetencion { get; set; }
         public string Observaciones { get; set; }
+        public int? IdFamiliaEgreso { get; set; }
+        public int? IdTipoEgreso { get; set; }
         public int InsertaIdUsuario { get; set; }
     }
 }
