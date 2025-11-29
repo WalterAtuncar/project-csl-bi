@@ -49,8 +49,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
-
 // Habilitar CORS
 app.UseCors("AllowAll");
 

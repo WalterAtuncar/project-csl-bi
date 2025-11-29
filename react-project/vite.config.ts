@@ -12,18 +12,15 @@ export default defineConfig({
     global: 'globalThis',
   },
   server: {
-    // Eliminamos los headers CORS restrictivos que causan problemas con Hugging Face
-    // headers: {
-    //   'Cross-Origin-Opener-Policy': 'same-origin',
-    //   'Cross-Origin-Embedder-Policy': 'require-corp',
-    // },
+    port: 5000,
+    host: '0.0.0.0',
+    strictPort: true,
+    hmr: {
+      clientPort: 443,
+    },
     fs: {
       allow: ['..']
     },
-    // Configuración de proxy para evitar problemas CORS en desarrollo
-    proxy: {
-      // No necesitamos proxy para Hugging Face ya que soporta CORS
-    }
   },
   worker: {
     format: 'es'
