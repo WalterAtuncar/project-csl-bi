@@ -344,5 +344,54 @@ namespace Agenda.Microservice.Controllers.caja
                 return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
             }
         }
+
+        [HttpGet("proveedores/buscar")]
+        [ProducesResponseType(typeof(IEnumerable<ProveedorResponse>), StatusCodes.Status200OK)]
+        public IActionResult BuscarProveedores([FromQuery] string termino)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var request = new BuscarProveedoresRequest { Termino = termino };
+                var response = _cajaLogic.BuscarProveedores(request);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        [HttpPost("proveedores")]
+        [ProducesResponseType(typeof(ProveedorResponse), StatusCodes.Status200OK)]
+        public IActionResult CrearProveedor([FromBody] CrearProveedorRequest body)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var response = _cajaLogic.CrearProveedor(body);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        [HttpPost("caja-mayor-cierre/{id}/registro-compras")]
+        [ProducesResponseType(typeof(RegistroComprasResponse), StatusCodes.Status200OK)]
+        public IActionResult InsertRegistroCompras([FromRoute] int id, [FromBody] InsertRegistroComprasRequest body)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var response = _cajaLogic.InsertRegistroCompras(body);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
     }
 }

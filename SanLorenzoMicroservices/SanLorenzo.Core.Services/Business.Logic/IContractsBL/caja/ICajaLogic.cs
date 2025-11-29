@@ -24,5 +24,8 @@ namespace Business.Logic.IContractsBL.caja
         IEnumerable<EstadoCierreResponse> GetEstadosCierre();
         CajaMayorCierreExistsResponse CajaMayorCierreExists(CheckCierreExistsRequest request);
         DeleteCajaMayorCierreResponse DeleteCajaMayorCierrePhysical(DeleteCierreRequest request);
+        IEnumerable<ProveedorResponse> BuscarProveedores(BuscarProveedoresRequest request);
+        ProveedorResponse CrearProveedor(CrearProveedorRequest request);
+        RegistroComprasResponse InsertRegistroCompras(InsertRegistroComprasRequest request);
     }
 }

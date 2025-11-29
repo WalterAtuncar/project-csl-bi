@@ -12,6 +12,7 @@ import { ExportService } from '../../services/ExportService';
 import type { CajaMayorCabeceraResponse, GetListCabeceraRequest } from '../../@types/caja';
 import { getInsertaIdUsuario } from '../../utils/auth';
 import MovimientoManualModal from '../../components/CajaMayor/MovimientoManualModal';
+import RegistroComprasModal from '../../components/CajaMayor/RegistroComprasModal';
 
 // En esta nueva vista el backend está habilitado
 const BACKEND_DISABLED = false;
@@ -79,6 +80,9 @@ const CajaMayorNew: React.FC = () => {
   // Modal de movimiento manual (Ingreso/Egreso)
   const [showMovModal, setShowMovModal] = useState(false);
   const [movModalState, setMovModalState] = useState<{ tipoMovimiento: 'I' | 'E'; idTipoCaja: number } | null>(null);
+  // Modal de Registro de Compras (para Egresos)
+  const [showRegistroComprasModal, setShowRegistroComprasModal] = useState(false);
+  const [registroComprasIdTipoCaja, setRegistroComprasIdTipoCaja] = useState<number>(0);
 
   // Modal: Ver movimientos por tipo de caja
   const [showMovimientosModal, setShowMovimientosModal] = useState(false);
@@ -993,14 +997,14 @@ const CajaMayorNew: React.FC = () => {
                               <PlusCircle className="w-5 h-5" />
                             </button>
 
-                            {/* Egreso */}
+                            {/* Egreso - Abre modal de Registro de Compras */}
                             <button
-                              title="Agregar egreso"
+                              title="Agregar egreso (Registro de Compras)"
                               aria-label="Agregar egreso"
                               className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-300 dark:border-gray-600 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
                               onClick={() => {
-                                setMovModalState({ tipoMovimiento: 'E', idTipoCaja: Number(r.idTipoCaja) });
-                                setShowMovModal(true);
+                                setRegistroComprasIdTipoCaja(Number(r.idTipoCaja));
+                                setShowRegistroComprasModal(true);
                               }}
                             >
                               <MinusCircle className="w-5 h-5" />
@@ -1486,14 +1490,13 @@ const CajaMayorNew: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Modal: Movimiento manual (Ingreso/Egreso) */}
+      {/* Modal: Movimiento manual (Solo para Ingresos ahora) */}
       {detalleVisible && detalleCabecera && movModalState && (
         <MovimientoManualModal
           isOpen={showMovModal}
           tipoMovimiento={movModalState.tipoMovimiento}
           idCajaMayorCierre={Number(detalleCabecera.idCajaMayorCierre)}
           idTipoCaja={movModalState.idTipoCaja}
-          // Pasar rango de fechas del período del cierre
           fechaMin={(() => { const anioNum = Number((detalleCabecera as any).anio ?? (detalleCabecera as any).Anio); const mesNum = Number((detalleCabecera as any).mes ?? (detalleCabecera as any).Mes); const { inicio } = calcRange(anioNum, mesNum); return inicio; })()}
           fechaMax={(() => { const anioNum = Number((detalleCabecera as any).anio ?? (detalleCabecera as any).Anio); const mesNum = Number((detalleCabecera as any).mes ?? (detalleCabecera as any).Mes); const { fin } = calcRange(anioNum, mesNum); return fin; })()}
           origenDefault={'manual'}
@@ -1501,17 +1504,40 @@ const CajaMayorNew: React.FC = () => {
           onSaved={async () => {
             try {
               setShowMovModal(false);
-              // Recalcular totales de la cabecera para reflejar ingresos/egresos y saldo en tiempo real
               const userId = getInsertaIdUsuario();
               await cajaService.recalcularTotales(Number(detalleCabecera.idCajaMayorCierre), {
                 idCajaMayorCierre: Number(detalleCabecera.idCajaMayorCierre),
                 actualizaIdUsuario: userId,
               });
-              // Refrescar grilla de cabeceras (top) y el detalle por tipo de caja (bottom)
               await loadCabeceras();
               await openDetalleGrid(detalleCabecera);
             } catch (e) {
-              // Si falla el recálculo, al menos refrescar el detalle para que el movimiento sea visible
+              await openDetalleGrid(detalleCabecera);
+            }
+          }}
+        />
+      )}
+
+      {/* Modal: Registro de Compras (para Egresos) */}
+      {detalleVisible && detalleCabecera && (
+        <RegistroComprasModal
+          isOpen={showRegistroComprasModal}
+          idCajaMayorCierre={Number(detalleCabecera.idCajaMayorCierre)}
+          idTipoCaja={registroComprasIdTipoCaja}
+          fechaMin={(() => { const anioNum = Number((detalleCabecera as any).anio ?? (detalleCabecera as any).Anio); const mesNum = Number((detalleCabecera as any).mes ?? (detalleCabecera as any).Mes); const { inicio } = calcRange(anioNum, mesNum); return inicio; })()}
+          fechaMax={(() => { const anioNum = Number((detalleCabecera as any).anio ?? (detalleCabecera as any).Anio); const mesNum = Number((detalleCabecera as any).mes ?? (detalleCabecera as any).Mes); const { fin } = calcRange(anioNum, mesNum); return fin; })()}
+          onClose={() => setShowRegistroComprasModal(false)}
+          onSaved={async () => {
+            try {
+              setShowRegistroComprasModal(false);
+              const userId = getInsertaIdUsuario();
+              await cajaService.recalcularTotales(Number(detalleCabecera.idCajaMayorCierre), {
+                idCajaMayorCierre: Number(detalleCabecera.idCajaMayorCierre),
+                actualizaIdUsuario: userId,
+              });
+              await loadCabeceras();
+              await openDetalleGrid(detalleCabecera);
+            } catch (e) {
               await openDetalleGrid(detalleCabecera);
             }
           }}

@@ -253,6 +253,36 @@ class CajaService extends BaseApiService {
     };
     return this.deleteWithBody<DeleteCajaMayorCierreResponse, DeleteCierreRequest>(`${this.baseUrl}/caja-mayor-cierre/${id}`, payload);
   }
+
+  // =============================
+  // Proveedores
+  // =============================
+  // GET: /api/Caja/proveedores/buscar?termino=XXX
+  async buscarProveedores(termino: string): Promise<CajaApiResponse<any[]>> {
+    const params: Record<string, string> = { termino };
+    return this.get<any[]>(`${this.baseUrl}/proveedores/buscar`, params);
+  }
+
+  // POST: /api/Caja/proveedores
+  async crearProveedor(data: { ruc: string; razonSocial: string; direccion: string; email?: string }): Promise<CajaApiResponse<any>> {
+    const payload = {
+      ...data,
+      insertaIdUsuario: ensureInsertaIdUsuario(),
+    };
+    return this.post<any, typeof payload>(`${this.baseUrl}/proveedores`, payload);
+  }
+
+  // =============================
+  // Registro de Compras
+  // =============================
+  // POST: /api/Caja/caja-mayor-cierre/{id}/registro-compras
+  async insertRegistroCompras(idCajaMayorCierre: number, body: any): Promise<CajaApiResponse<any>> {
+    const payload = {
+      ...body,
+      insertaIdUsuario: ensureInsertaIdUsuario(),
+    };
+    return this.post<any, typeof payload>(`${this.baseUrl}/caja-mayor-cierre/${idCajaMayorCierre}/registro-compras`, payload);
+  }
 }
 
 export default CajaService;

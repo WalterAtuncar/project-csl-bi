@@ -73,5 +73,14 @@ namespace Business.Logic.ImplementationsBL.caja
 
         public DeleteCajaMayorCierreResponse DeleteCajaMayorCierrePhysical(DeleteCierreRequest request)
             => _unitOfWork.ICaja.DeleteCajaMayorCierrePhysical(request);
+
+        public IEnumerable<ProveedorResponse> BuscarProveedores(BuscarProveedoresRequest request)
+            => _unitOfWork.ICaja.BuscarProveedores(request);
+
+        public ProveedorResponse CrearProveedor(CrearProveedorRequest request)
+            => _unitOfWork.ICaja.CrearProveedor(request);
+
+        public RegistroComprasResponse InsertRegistroCompras(InsertRegistroComprasRequest request)
+            => _unitOfWork.ICaja.InsertRegistroCompras(request);
     }
 }

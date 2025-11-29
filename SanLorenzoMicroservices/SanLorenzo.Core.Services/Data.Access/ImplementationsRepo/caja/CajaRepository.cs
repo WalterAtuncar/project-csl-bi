@@ -234,5 +234,57 @@ namespace Data.Access.ImplementationsRepo.caja
             using var cn = new SqlConnection(_connectionString);
             return cn.Query<DeleteCajaMayorCierreResponse>("[dbo].[sp_CajaMayor_Cierre_DeletePhysical]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();
         }
+
+        public IEnumerable<ProveedorResponse> BuscarProveedores(BuscarProveedoresRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("@Termino", request.Termino);
+            using var cn = new SqlConnection(_connectionString);
+            return cn.Query<ProveedorResponse>("[dbo].[sp_Proveedores_Buscar]", p, commandType: CommandType.StoredProcedure);
+        }
+
+        public ProveedorResponse CrearProveedor(CrearProveedorRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("@Ruc", request.Ruc);
+            p.Add("@RazonSocial", request.RazonSocial);
+            p.Add("@Direccion", request.Direccion);
+            p.Add("@Email", request.Email);
+            p.Add("@InsertaIdUsuario", request.InsertaIdUsuario);
+            using var cn = new SqlConnection(_connectionString);
+            return cn.Query<ProveedorResponse>("[dbo].[sp_Proveedores_Insert]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();
+        }
+
+        public RegistroComprasResponse InsertRegistroCompras(InsertRegistroComprasRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("@IdMovimientoEgreso", request.IdMovimientoEgreso);
+            p.Add("@IdProveedor", request.IdProveedor);
+            p.Add("@RucProveedor", request.RucProveedor);
+            p.Add("@RazonSocialProveedor", request.RazonSocialProveedor);
+            p.Add("@FechaEmision", request.FechaEmision);
+            p.Add("@FechaVencimiento", request.FechaVencimiento);
+            p.Add("@TipoComprobante", request.TipoComprobante);
+            p.Add("@Serie", request.Serie);
+            p.Add("@Numero", request.Numero);
+            p.Add("@BaseImponible", request.BaseImponible);
+            p.Add("@IGV", request.IGV);
+            p.Add("@ISC", request.ISC);
+            p.Add("@OtrosTributos", request.OtrosTributos);
+            p.Add("@ValorNoGravado", request.ValorNoGravado);
+            p.Add("@ImporteTotal", request.ImporteTotal);
+            p.Add("@CodigoMoneda", request.CodigoMoneda);
+            p.Add("@TipoCambio", request.TipoCambio);
+            p.Add("@AplicaDetraccion", request.AplicaDetraccion);
+            p.Add("@PorcentajeDetraccion", request.PorcentajeDetraccion);
+            p.Add("@MontoDetraccion", request.MontoDetraccion);
+            p.Add("@NumeroConstanciaDetraccion", request.NumeroConstanciaDetraccion);
+            p.Add("@AplicaRetencion", request.AplicaRetencion);
+            p.Add("@MontoRetencion", request.MontoRetencion);
+            p.Add("@Observaciones", request.Observaciones);
+            p.Add("@InsertaIdUsuario", request.InsertaIdUsuario);
+            using var cn = new SqlConnection(_connectionString);
+            return cn.Query<RegistroComprasResponse>("[dbo].[sp_RegistroCompras_Insert]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();
+        }
     }
 }
