@@ -10,6 +10,7 @@ namespace Data.Model.Request.caja
         public decimal Total { get; set; }
         public System.DateTime FechaRegistro { get; set; }
         public string Observaciones { get; set; }
+        public int? IdFormaPago { get; set; }
         // Nuevos campos para movimiento manual (compatibles con cajamayor_movimiento)
         public string ConceptoMovimiento { get; set; }
         public decimal? Subtotal { get; set; }

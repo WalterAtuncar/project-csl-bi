@@ -5,6 +5,8 @@ import Login from './pages/Login/Login';
 import { GeneralDashboard, FinancialDashboard, SalesDashboard } from './pages/Dashboard';
 import { CajaMayor } from './pages/CajaMayor';
 import { HonorariosMedicos } from './pages/HonorariosMedicos';
+import { FlujoCaja } from './pages/FlujoCaja';
+import { RegistroCompras } from './pages/RegistroCompras';
 import NotFound from './pages/NotFound';
 import ProtectedRoute from './components/ProtectedRoute';
 import ExampleAssets from './components/ExampleAssets';
@@ -37,6 +39,8 @@ const App: React.FC = () => {
             </Route>
             
             <Route path="caja-mayor" element={<CajaMayor />} />
+            <Route path="flujo-caja" element={<FlujoCaja />} />
+            <Route path="registro-compras" element={<RegistroCompras />} />
             <Route path="honorarios-medicos" element={<HonorariosMedicos />} />
 
             {/* Ruta para probar los recursos estáticos */}

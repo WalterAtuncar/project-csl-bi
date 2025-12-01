@@ -9,6 +9,7 @@ namespace Data.Model.Response.caja
         public int IdTipoCaja { get; set; }
         public string NombreTipoCaja { get; set; }
         public string TipoMovimiento { get; set; }
+        public int? IdFormaPago { get; set; }
         public decimal Total { get; set; }
         public System.DateTime FechaRegistro { get; set; }
         public string ConceptoMovimiento { get; set; }

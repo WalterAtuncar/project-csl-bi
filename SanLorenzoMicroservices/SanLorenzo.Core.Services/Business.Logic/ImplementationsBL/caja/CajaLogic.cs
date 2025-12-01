@@ -8,7 +8,7 @@ namespace Business.Logic.ImplementationsBL.caja
 {
     public class CajaLogic : ICajaLogic
     {
-        private IUnitOfWork _unitOfWork;
+        private readonly IUnitOfWork _unitOfWork;
 
         public CajaLogic(IUnitOfWork unitOfWork)
         {
@@ -82,5 +82,23 @@ namespace Business.Logic.ImplementationsBL.caja
 
         public RegistroComprasResponse InsertRegistroCompras(InsertRegistroComprasRequest request)
             => _unitOfWork.ICaja.InsertRegistroCompras(request);
+
+        public RegistroComprasResponse GetRegistroComprasById(GetRegistroComprasByIdRequest request)
+            => _unitOfWork.ICaja.GetRegistroComprasById(request);
+
+        public RegistroComprasResponse PagarRegistroCompras(UpdateRegistroComprasPagoRequest request)
+            => _unitOfWork.ICaja.PagarRegistroCompras(request);
+
+        public IEnumerable<CategoriaEgresoResponse> GetCategoriaEgresos(int groupId)
+            => _unitOfWork.ICaja.GetCategoriaEgresos(groupId);
+
+        public IEnumerable<FlujoCajaConsolidadoResponse> FlujoCajaConsolidado(FlujoCajaConsolidadoRequest request)
+            => _unitOfWork.ICaja.FlujoCajaConsolidado(request);
+
+        public IEnumerable<FlujoCajaDetalladoResponse> FlujoCajaDetallado(FlujoCajaDetalladoRequest request)
+            => _unitOfWork.ICaja.FlujoCajaDetallado(request);
+
+        public (IEnumerable<RegistroComprasListItemResponse> data, int totalRows) ListRegistroCompras(RegistroComprasListRequest request)
+            => _unitOfWork.ICaja.ListRegistroCompras(request);
     }
 }

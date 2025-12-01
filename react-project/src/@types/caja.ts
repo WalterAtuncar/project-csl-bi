@@ -24,6 +24,46 @@ export interface TipoCajaResponse {
   FechaCreacion?: string;
 }
 
+// =============================
+// Flujo de Caja Consolidado
+// =============================
+export interface FlujoCajaConsolidadoRequest {
+  anio: number;
+  idsTipoCaja: number[]; // lista de ids seleccionados
+  tipoMovimiento: 'I' | 'E' | 'T' | null; // 'T' = Todos (no enviar al SP)
+}
+
+export interface FlujoCajaConsolidadoResponse {
+  idTipoCaja: number;
+  nombreTipoCaja: string;
+  tipoMovimiento: 'I' | 'E';
+  ene: number; feb: number; mar: number; abr: number; may: number; jun: number;
+  jul: number; ago: number; set: number; oct: number; nov: number; dic: number;
+  // Compatibilidad PascalCase
+  IdTipoCaja?: number; NombreTipoCaja?: string; TipoMovimiento?: 'I' | 'E';
+  Ene?: number; Feb?: number; Mar?: number; Abr?: number; May?: number; Jun?: number;
+  Jul?: number; Ago?: number; Set?: number; Oct?: number; Nov?: number; Dic?: number;
+}
+
+// Flujo detallado (por clasificador)
+export interface FlujoCajaDetalladoResponse {
+  idTipoCaja: number;
+  nombreTipoCaja: string;
+  tipoMovimiento: 'I' | 'E';
+  detalleTipo: string; // 'FORMA_PAGO' o 'ORIGEN'
+  idDetalle: number;
+  nombreDetalle: string;
+  ene: number; feb: number; mar: number; abr: number; may: number; jun: number;
+  jul: number; ago: number; set: number; oct: number; nov: number; dic: number;
+  total: number;
+  // Compatibilidad PascalCase
+  IdTipoCaja?: number; NombreTipoCaja?: string; TipoMovimiento?: 'I' | 'E';
+  DetalleTipo?: string; IdDetalle?: number; NombreDetalle?: string;
+  Ene?: number; Feb?: number; Mar?: number; Abr?: number; May?: number; Jun?: number;
+  Jul?: number; Ago?: number; Set?: number; Oct?: number; Nov?: number; Dic?: number;
+  Total?: number;
+}
+
 // Response de estados de cierre (DTO backend)
 export interface EstadoCierreResponse {
   idEstado: number;
@@ -345,4 +385,20 @@ export interface CajaMayorMovimientoDbResponse {
   t_InsertaFecha?: string;
   i_ActualizaIdUsuario?: number;
   t_ActualizaFecha?: string;
+}
+
+// =============================
+// Catálogo: Categorías de Egreso
+// =============================
+export interface CategoriaEgresoResponse {
+  // Estructura general de catálogo jerárquico
+  key: number;
+  parentKeyId?: number | null;
+  value1?: string; // nombre
+  value2?: string; // descripción opcional
+  // Compatibilidad PascalCase
+  Key?: number;
+  ParentKeyId?: number | null;
+  Value1?: string;
+  Value2?: string;
 }

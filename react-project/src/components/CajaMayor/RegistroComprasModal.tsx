@@ -5,6 +5,7 @@ import { FileText, X, Save, Search, Plus, Building2 } from 'lucide-react';
 import CajaService from '../../services/CajaService';
 import ToastAlerts from '../UI/ToastAlerts';
 import ProveedorQuickModal, { type CrearProveedorData, type ProveedorCreado } from './ProveedorQuickModal';
+import type { CajaMayorMovimientoDbResponse } from '../../@types/caja';
 
 interface RegistroComprasModalProps {
   isOpen: boolean;
@@ -24,63 +25,19 @@ interface ProveedorOption {
   email?: string;
 }
 
-const TIPOS_COMPROBANTE = [
-  { codigo: '01', nombre: 'Factura' },
-  { codigo: '03', nombre: 'Boleta de Venta' },
-  { codigo: '07', nombre: 'Nota de Crédito' },
-  { codigo: '08', nombre: 'Nota de Débito' },
-  { codigo: '12', nombre: 'Ticket o cinta emitido por máquina registradora' },
-  { codigo: '14', nombre: 'Recibo de Servicios Públicos' },
-  { codigo: '91', nombre: 'Comprobante emitido por bancos' },
-];
+// Tipos de comprobante se cargan dinámicamente desde categorías de egreso (groupId=153)
+type TipoComprobanteItem = { codigo: string; label: string; key?: number; parentKeyId?: number };
+type TipoMonedaItem = { codigo: string; label: string; key?: number; parentKeyId?: number };
 
-const MONEDAS = [
-  { codigo: 'PEN', nombre: 'Soles (PEN)' },
-  { codigo: 'USD', nombre: 'Dólares (USD)' },
-  { codigo: 'EUR', nombre: 'Euros (EUR)' },
-];
+// Monedas se cargan dinámicamente desde categorías de egreso (groupId=154)
 
-const FAMILIAS_EGRESO = [
-  { id: 1, nombre: 'Pagos Operativos' },
-  { id: 2, nombre: 'Gastos Administrativos' },
-  { id: 3, nombre: 'Inversiones' },
-  { id: 4, nombre: 'Pagos a Terceros' },
-  { id: 5, nombre: 'Otros Egresos' },
-];
-
-const TIPOS_EGRESO: Record<number, { id: number; nombre: string }[]> = {
-  1: [
-    { id: 101, nombre: 'Planilla' },
-    { id: 102, nombre: 'CTS' },
-    { id: 103, nombre: 'Gratificaciones' },
-    { id: 104, nombre: 'EsSalud' },
-    { id: 105, nombre: 'AFP/ONP' },
-  ],
-  2: [
-    { id: 201, nombre: 'Servicios Públicos' },
-    { id: 202, nombre: 'Alquiler' },
-    { id: 203, nombre: 'Seguros' },
-    { id: 204, nombre: 'Mantenimiento' },
-    { id: 205, nombre: 'Suministros' },
-  ],
-  3: [
-    { id: 301, nombre: 'Equipos Médicos' },
-    { id: 302, nombre: 'Mobiliario' },
-    { id: 303, nombre: 'Sistemas/Software' },
-    { id: 304, nombre: 'Infraestructura' },
-  ],
-  4: [
-    { id: 401, nombre: 'Honorarios Profesionales' },
-    { id: 402, nombre: 'Servicios Contables' },
-    { id: 403, nombre: 'Servicios Legales' },
-    { id: 404, nombre: 'Consultorías' },
-  ],
-  5: [
-    { id: 501, nombre: 'Gastos Varios' },
-    { id: 502, nombre: 'Imprevistos' },
-    { id: 503, nombre: 'Donaciones' },
-  ],
-};
+// Catálogo dinámico de Familias/Tipos de Egreso desde API
+type CategoriaItem = { id: number; nombre: string; key?: number; parentKeyId?: number };
+const mapCategoria = (c: any): CategoriaItem => ({
+  id: c.key ?? c.Key ?? 0,
+  nombre: c.value1 ?? c.Value1 ?? '',
+  parentKeyId: c.parentKeyId ?? c.ParentKeyId ?? undefined,
+});
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -128,7 +85,11 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
   const [calcularDesdeTotal, setCalcularDesdeTotal] = useState<boolean>(true);
   const [idFamiliaEgreso, setIdFamiliaEgreso] = useState<number | null>(null);
   const [idTipoEgreso, setIdTipoEgreso] = useState<number | null>(null);
-  const tiposEgresoFiltrados = idFamiliaEgreso ? (TIPOS_EGRESO[idFamiliaEgreso] || []) : [];
+  const [familiasEgresoOpts, setFamiliasEgresoOpts] = useState<{ id: number; nombre: string }[]>([]);
+  const [tiposEgresoOpts, setTiposEgresoOpts] = useState<{ id: number; nombre: string }[]>([]);
+  const [categoriasCatalogo, setCategoriasCatalogo] = useState<CategoriaItem[]>([]);
+  const [tipoComprobanteOpts, setTipoComprobanteOpts] = useState<TipoComprobanteItem[]>([]);
+  const [monedaOpts, setMonedaOpts] = useState<TipoMonedaItem[]>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -162,6 +123,70 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
       setCalcuarDesdeTotal(true);
       setIdFamiliaEgreso(null);
       setIdTipoEgreso(null);
+      // Cargar catálogo completo (groupId = 152); familias tienen ParentKeyId = -1
+      (async () => {
+        try {
+          const resp = await cajaService.getCategoriasEgreso(152);
+          const rawList = Array.isArray(resp?.objModel) ? resp.objModel : [];
+          const mapped = rawList.map(mapCategoria);
+          setCategoriasCatalogo(mapped);
+          const familias = mapped
+            .filter((x) => (x.parentKeyId ?? -1) === -1 && !!x.nombre)
+            .map((x) => ({ id: x.id, nombre: x.nombre }));
+          setFamiliasEgresoOpts(familias);
+        } catch (err) {
+          console.warn('No se pudo cargar familias de egreso:', err);
+          setFamiliasEgresoOpts([]);
+          setCategoriasCatalogo([]);
+        }
+      })();
+      // Cargar tipos de comprobante (groupId = 153)
+      (async () => {
+        try {
+          const resp = await cajaService.getCategoriasEgreso(153);
+          const list = Array.isArray(resp?.objModel) ? resp.objModel : [];
+          const items: TipoComprobanteItem[] = list
+            .filter((c: any) => (c.parentKeyId ?? c.ParentKeyId ?? -1) === -1 && (c.value2 ?? c.Value2))
+            .map((c: any) => {
+              const code = String(c.value2 ?? c.Value2);
+              const name = String(c.value1 ?? c.Value1 ?? '');
+              return { codigo: code, label: `${code} - ${name}`, key: c.key ?? c.Key, parentKeyId: c.parentKeyId ?? c.ParentKeyId };
+            });
+          setTipoComprobanteOpts(items);
+          // Ajustar valor seleccionado si no existe en catálogo
+          const codes = items.map((i) => i.codigo);
+          if (!codes.includes(tipoComprobante)) {
+            if (codes.includes('01')) setTipoComprobante('01');
+            else if (codes.length > 0) setTipoComprobante(codes[0]);
+          }
+        } catch (err) {
+          console.warn('No se pudo cargar tipos de comprobante (groupId=153):', err);
+          setTipoComprobanteOpts([]);
+        }
+      })();
+      // Cargar monedas (groupId = 154)
+      (async () => {
+        try {
+          const resp = await cajaService.getCategoriasEgreso(154);
+          const list = Array.isArray(resp?.objModel) ? resp.objModel : [];
+          const items: TipoMonedaItem[] = list
+            .filter((c: any) => (c.parentKeyId ?? c.ParentKeyId ?? -1) === -1 && (c.value2 ?? c.Value2))
+            .map((c: any) => {
+              const code = String(c.value2 ?? c.Value2); // key = Value2 (PEN|USD|EUR)
+              const name = String(c.value1 ?? c.Value1 ?? ''); // value = Value1 (Soles (PEN) ...)
+              return { codigo: code, label: name, key: c.key ?? c.Key, parentKeyId: c.parentKeyId ?? c.ParentKeyId };
+            });
+          setMonedaOpts(items);
+          const codes = items.map((i) => i.codigo);
+          if (!codes.includes(codigoMoneda)) {
+            if (codes.includes('PEN')) setCodigoMoneda('PEN');
+            else if (codes.length > 0) setCodigoMoneda(codes[0]);
+          }
+        } catch (err) {
+          console.warn('No se pudo cargar monedas (groupId=154):', err);
+          setMonedaOpts([]);
+        }
+      })();
     }
   }, [isOpen, fechaMin]);
 
@@ -272,6 +297,18 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
     setIgvInput(String(igv ?? 0));
   };
 
+  // Filtrar Tipos de Egreso desde el catálogo según la familia seleccionada
+  useEffect(() => {
+    if (idFamiliaEgreso) {
+      const tipos = categoriasCatalogo
+        .filter((x) => (x.parentKeyId ?? 0) === idFamiliaEgreso && !!x.nombre)
+        .map((x) => ({ id: x.id, nombre: x.nombre }));
+      setTiposEgresoOpts(tipos);
+    } else {
+      setTiposEgresoOpts([]);
+    }
+  }, [idFamiliaEgreso, categoriasCatalogo]);
+
   const searchProveedores = useCallback(async (term: string) => {
     if (term.length < 2) {
       setProveedorOptions([]);
@@ -369,10 +406,11 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
       };
 
       const egresoResp = await cajaService.insertMovimientoManual(idCajaMayorCierre, egresoBody);
-      const egresoData = egresoResp?.objModel;
-      const idMovimiento = egresoData?.idMovimiento || egresoData?.i_IdMovimiento;
+      const egresoData = egresoResp?.objModel as CajaMayorMovimientoDbResponse;
+      const idMovimiento = egresoData?.idMovimiento ?? egresoData?.i_IdMovimiento ?? null;
+      console.debug('[RegistroComprasModal] Egreso creado', { egresoData, idMovimiento });
 
-      if (!idMovimiento) {
+      if (!idMovimiento || idMovimiento <= 0) {
         ToastAlerts.error({ title: 'Error', message: 'No se pudo obtener el ID del movimiento de egreso.' });
         return;
       }
@@ -406,7 +444,13 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
         idTipoEgreso: idTipoEgreso,
       };
 
+      console.debug('[RegistroComprasModal] Preparando registro de compras', {
+        idMovimientoEgreso: registroComprasBody.idMovimientoEgreso,
+        referenciaIdMovimiento: idMovimiento,
+      });
+
       await cajaService.insertRegistroCompras(idCajaMayorCierre, registroComprasBody);
+      console.debug('[RegistroComprasModal] Registro de compras insertado', { idMovimientoEgreso: idMovimiento });
 
       ToastAlerts.success({ title: 'Registro exitoso', message: 'Egreso y registro de compras guardados correctamente.' });
       onSaved && onSaved();
@@ -540,9 +584,9 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
                       value={tipoComprobante}
                       onChange={(e) => setTipoComprobante(e.target.value)}
                     >
-                      {TIPOS_COMPROBANTE.map((t) => (
+                      {tipoComprobanteOpts.map((t) => (
                         <option key={t.codigo} value={t.codigo}>
-                          {t.codigo} - {t.nombre}
+                          {t.label}
                         </option>
                       ))}
                     </select>
@@ -711,9 +755,9 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
                       value={codigoMoneda}
                       onChange={(e) => setCodigoMoneda(e.target.value)}
                     >
-                      {MONEDAS.map((m) => (
+                      {monedaOpts.map((m) => (
                         <option key={m.codigo} value={m.codigo}>
-                          {m.nombre}
+                          {m.label}
                         </option>
                       ))}
                     </select>
@@ -826,7 +870,7 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
                         }}
                       >
                         <option value="">-- Seleccione --</option>
-                        {FAMILIAS_EGRESO.map((f) => (
+                        {familiasEgresoOpts.map((f) => (
                           <option key={f.id} value={f.id}>
                             {f.nombre}
                           </option>
@@ -844,7 +888,7 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
                         disabled={!idFamiliaEgreso}
                       >
                         <option value="">-- Seleccione --</option>
-                        {tiposEgresoFiltrados.map((t) => (
+                        {tiposEgresoOpts.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.nombre}
                           </option>

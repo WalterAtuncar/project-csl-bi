@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Data.Model.Response.caja
 {
@@ -34,5 +35,11 @@ namespace Data.Model.Response.caja
         public string Estado { get; set; }
         public int InsertaIdUsuario { get; set; }
         public DateTime? InsertaFecha { get; set; }
+        private static readonly Dictionary<string, string> EstadoDictionary = new Dictionary<string, string>
+        {
+            { "1", "Pagado" },
+            { "0", "Por Pagar" }
+        };
+        public string EstadoName => EstadoDictionary.TryGetValue(Estado, out var name) ? name : Estado;
     }
 }

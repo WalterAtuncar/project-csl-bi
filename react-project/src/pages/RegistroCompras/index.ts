@@ -1,0 +1,1 @@
+export { default as RegistroCompras } from './RegistroCompras';

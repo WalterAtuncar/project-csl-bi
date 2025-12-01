@@ -2,10 +2,7 @@ using Business.Logic.IContractsBL.caja;
 using Data.Model;
 using Data.Model.Request.caja;
 using Data.Model.Response.caja;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System;
-using System.Collections.Generic;
 
 namespace Agenda.Microservice.Controllers.caja
 {
@@ -322,6 +319,110 @@ namespace Agenda.Microservice.Controllers.caja
             {
                 var response = _cajaLogic.GetTiposCaja(includeInactive);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        [HttpGet("caja-mayor/categorias-egreso")]
+        [ProducesResponseType(typeof(IEnumerable<CategoriaEgresoResponse>), StatusCodes.Status200OK)]
+        public IActionResult GetCategoriasEgreso([FromQuery] int groupId)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var response = _cajaLogic.GetCategoriaEgresos(groupId);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        [HttpPost("caja-mayor/flujos-consolidado")]
+        [ProducesResponseType(typeof(IEnumerable<FlujoCajaConsolidadoResponse>), StatusCodes.Status200OK)]
+        public IActionResult FlujoCajaConsolidado([FromBody] FlujoCajaConsolidadoRequest body)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var response = _cajaLogic.FlujoCajaConsolidado(body);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        [HttpPost("caja-mayor/flujos-detallado")]
+        [ProducesResponseType(typeof(IEnumerable<FlujoCajaDetalladoResponse>), StatusCodes.Status200OK)]
+        public IActionResult FlujoCajaDetallado([FromBody] FlujoCajaDetalladoRequest body)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var response = _cajaLogic.FlujoCajaDetallado(body);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        [HttpGet("caja-mayor/registro-compras")]
+        [ProducesResponseType(typeof(IEnumerable<RegistroComprasListItemResponse>), StatusCodes.Status200OK)]
+        public IActionResult ListRegistroCompras([FromQuery] int? periodo, [FromQuery] DateTime? fechaInicial, [FromQuery] DateTime? fechaFinal, [FromQuery] string? tipoComprobante, [FromQuery] int? idProveedor, [FromQuery] int? idTipoCaja, [FromQuery] string? estado, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var request = new RegistroComprasListRequest { Periodo = periodo, FechaInicial = fechaInicial, FechaFinal = fechaFinal, TipoComprobante = tipoComprobante, IdProveedor = idProveedor, IdTipoCaja = idTipoCaja, Estado = estado, Page = page, PageSize = pageSize };
+                var (data, totalRows) = _cajaLogic.ListRegistroCompras(request);
+                
+                // Crear objeto paginado con los parámetros de la petición
+                var objPaginated = new { Page = page, PageSize = pageSize };
+                return Ok(_ResponseDTO.Success(_ResponseDTO, data, objPaginated, totalRows));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        [HttpGet("caja-mayor/registro-compras/{id}")]
+        [ProducesResponseType(typeof(RegistroComprasResponse), StatusCodes.Status200OK)]
+        public IActionResult GetRegistroComprasById([FromRoute] int id)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var req = new GetRegistroComprasByIdRequest { IdRegistroCompra = id };
+                var resp = _cajaLogic.GetRegistroComprasById(req);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, resp));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        public class PagarRegistroComprasBody { public DateTime FechaPago { get; set; } public int? ActualizaIdUsuario { get; set; } }
+
+        [HttpPost("caja-mayor/registro-compras/{id}/pagar")]
+        [ProducesResponseType(typeof(RegistroComprasResponse), StatusCodes.Status200OK)]
+        public IActionResult PagarRegistroCompras([FromRoute] int id, [FromBody] PagarRegistroComprasBody body)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var req = new UpdateRegistroComprasPagoRequest { IdRegistroCompra = id, FechaPago = body.FechaPago, ActualizaIdUsuario = body.ActualizaIdUsuario };
+                var resp = _cajaLogic.PagarRegistroCompras(req);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, resp));
             }
             catch (Exception e)
             {

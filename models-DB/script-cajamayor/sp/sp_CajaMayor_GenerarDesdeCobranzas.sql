@@ -1,29 +1,4 @@
-/*
-  SP: sp_CajaMayor_GenerarDesdeCobranzas
-  Descripción: Genera movimientos de INGRESO ('I') en cajamayor_movimiento desde cobranzas
-               del período del cierre indicado. Determina el tipo de caja mediante
-               tipocaja_clientetipo (venta.i_ClienteEsAgente).
-
-  Política de despliegue: usar BEGIN TRAN + ROLLBACK para revisión manual.
-
-  Notas clave:
-  - Fuente: [20505310072].[dbo].[cobranzadetalle] vinculada a [20505310072].[dbo].[venta].
-  - Filtro de ventas: solo series que comienzan con 'F', 'B' o 'I'.
-  - Excluir documentos internos: series que comienzan con 'THM' y 'TFM'.
-  - Total: se usa c.d_ImporteSoles (sin conversión de moneda).
-  - v_CodigoDocumento: COALESCE(documento.v_Siglas, venta.v_SerieDocumento).
-  - Número de documento: construido como serie + '-' + correlativo.
-  - Concepto: concatenado desde ventadetalle.v_DescripcionProducto con pipes (|).
-  - Subtotal/IGV: derivados de la venta; IGV proporcional al importe pagado.
-*/
-
-SET ANSI_NULLS ON;
-SET QUOTED_IDENTIFIER ON;
-GO
-IF OBJECT_ID('dbo.sp_CajaMayor_GenerarDesdeCobranzas','P') IS NOT NULL
-    DROP PROCEDURE dbo.sp_CajaMayor_GenerarDesdeCobranzas;
-GO
-CREATE PROCEDURE dbo.sp_CajaMayor_GenerarDesdeCobranzas
+ALTER PROCEDURE [dbo].[sp_CajaMayor_GenerarDesdeCobranzas]
     @IdCajaMayorCierre INT,
     @InsertaIdUsuario  INT,
     @DefaultIdTipoCaja INT = NULL -- opcional, se usa si no se encuentra mapeo
@@ -97,6 +72,7 @@ BEGIN
             d_Subtotal,
             d_IGV,
             d_Total,
+            i_IdFormaPago,
             t_FechaMovimiento,
             v_Observaciones,
             v_Origen,
@@ -122,6 +98,7 @@ BEGIN
                    ELSE 0
                END AS d_IGV,
                ISNULL(c.d_ImporteSoles,0) AS d_Total,
+               c.i_IdFormaPago AS i_IdFormaPago,
                c.t_InsertaFecha AS t_FechaMovimiento,
                CONCAT('Cobranza ', ISNULL(c.v_IdCobranza,'')) AS v_Observaciones,
                'cobranzas' AS v_Origen,
@@ -164,4 +141,3 @@ BEGIN
         RAISERROR(@ErrorMessage, 16, 1);
     END CATCH
 END
-GO

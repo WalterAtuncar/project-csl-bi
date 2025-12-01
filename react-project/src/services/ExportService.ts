@@ -126,6 +126,108 @@ export class ExportService {
   }
 
   /**
+   * Exporta la lista de Registro de Compras a un PDF profesional
+   */
+  static async exportRegistroComprasToPDF(
+    items: Array<{
+      fecha: string;
+      proveedor: string;
+      tipoCaja: string;
+      numeroDocumento: string;
+      concepto: string;
+      estadoName: string;
+      fechaVencimiento?: string | null;
+      baseImponible?: number;
+      igv?: number;
+      monto: number;
+    }>,
+    config: { title: string; subtitle?: string; filename: string }
+  ): Promise<void> {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' }) as ExtendedJsPDF;
+    const margins = { top: 18, right: 15, bottom: 18, left: 15 };
+
+    // Encabezado
+    doc.setFont('helvetica');
+    doc.setFontSize(18);
+    doc.setTextColor(30, 58, 138);
+    doc.text(config.title, margins.left, margins.top);
+    let currentY = margins.top + 8;
+    if (config.subtitle) {
+      doc.setFontSize(10);
+      doc.setTextColor(80, 80, 80);
+      doc.text(config.subtitle, margins.left, currentY);
+      currentY += 8;
+    }
+
+    // Tabla principal
+    const head = [[
+      'Fecha',
+      'Proveedor',
+      'Tipo Caja',
+      'Documento',
+      'Concepto',
+      'Estado',
+      'Vencimiento',
+      'Base',
+      'IGV',
+      'Total'
+    ]];
+
+    const body = items.map(i => [
+      new Date(i.fecha).toLocaleDateString('es-PE'),
+      i.proveedor || '',
+      (i.tipoCaja || '').replaceAll('_', ' '),
+      i.numeroDocumento || '',
+      i.concepto || '',
+      i.estadoName || '',
+      i.fechaVencimiento ? new Date(i.fechaVencimiento).toLocaleDateString('es-PE') : '-',
+      (i.baseImponible ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }),
+      (i.igv ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2 }),
+      (i.monto ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })
+    ]);
+
+    autoTable(doc, {
+      head,
+      body,
+      startY: currentY + 2,
+      styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: { fillColor: [30, 58, 138], textColor: 255 },
+      bodyStyles: { textColor: 20 },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      tableWidth: 'auto',
+      margin: { left: margins.left, right: margins.right },
+      columnStyles: {
+        0: { cellWidth: 18 },
+        1: { cellWidth: 54 },
+        2: { cellWidth: 30 },
+        3: { cellWidth: 28 },
+        4: { cellWidth: 34 },
+        5: { cellWidth: 22 },
+        6: { cellWidth: 24 },
+        7: { cellWidth: 20, halign: 'right' },
+        8: { cellWidth: 20, halign: 'right' },
+        9: { cellWidth: 21, halign: 'right' },
+      }
+    });
+
+    // Totales
+    const total = items.reduce((acc, i) => acc + (i.monto ?? 0), 0);
+    const base = items.reduce((acc, i) => acc + (i.baseImponible ?? 0), 0);
+    const igv = items.reduce((acc, i) => acc + (i.igv ?? 0), 0);
+    const y = (doc.lastAutoTable?.finalY ?? currentY) + 8;
+    doc.setFontSize(10);
+    doc.setTextColor(40, 40, 40);
+    const pageW = doc.internal.pageSize.getWidth();
+    doc.text(`Base: S/. ${base.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, margins.left, y);
+    doc.text(`IGV: S/. ${igv.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, pageW / 2, y, { align: 'center' });
+    doc.text(`Total: S/. ${total.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`, pageW - margins.right, y, { align: 'right' });
+
+    // Pie
+    this.addFooter(doc);
+    doc.save(`${config.filename}.pdf`);
+  }
+
+  /**
    * Exporta los datos del dashboard general a Excel
    */
   static async exportDashboardToExcel(

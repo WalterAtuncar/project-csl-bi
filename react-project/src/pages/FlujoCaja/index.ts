@@ -1,0 +1,1 @@
+export { default as FlujoCaja } from './FlujoCaja';

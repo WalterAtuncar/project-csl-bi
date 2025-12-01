@@ -27,5 +27,11 @@ namespace Business.Logic.IContractsBL.caja
         IEnumerable<ProveedorResponse> BuscarProveedores(BuscarProveedoresRequest request);
         ProveedorResponse CrearProveedor(CrearProveedorRequest request);
         RegistroComprasResponse InsertRegistroCompras(InsertRegistroComprasRequest request);
+        RegistroComprasResponse GetRegistroComprasById(GetRegistroComprasByIdRequest request);
+        RegistroComprasResponse PagarRegistroCompras(UpdateRegistroComprasPagoRequest request);
+        IEnumerable<CategoriaEgresoResponse> GetCategoriaEgresos(int groupId);
+    IEnumerable<FlujoCajaConsolidadoResponse> FlujoCajaConsolidado(FlujoCajaConsolidadoRequest request);
+    IEnumerable<FlujoCajaDetalladoResponse> FlujoCajaDetallado(FlujoCajaDetalladoRequest request);
+    (IEnumerable<RegistroComprasListItemResponse> data, int totalRows) ListRegistroCompras(RegistroComprasListRequest request);
     }
 }

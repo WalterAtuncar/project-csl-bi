@@ -12,9 +12,9 @@
     "Agenda.Microservice": {
       "commandName": "Project",
       "dotnetRunMessages": true,
-      "launchBrowser": false,
+      "launchBrowser": true,
       "launchUrl": "swagger",
-      "applicationUrl": "http://localhost:8080",
+      "applicationUrl": "https://localhost:7036",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

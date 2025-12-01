@@ -30,8 +30,10 @@ import type {
   CheckCierreExistsRequest,
   CajaMayorCierreExistsResponse,
   DeleteCierreRequest,
-  DeleteCajaMayorCierreResponse
+  DeleteCajaMayorCierreResponse,
+  CategoriaEgresoResponse
 } from '../@types/caja';
+import type { FlujoCajaConsolidadoRequest, FlujoCajaConsolidadoResponse, FlujoCajaDetalladoResponse } from '../@types/caja';
 import { ensureInsertaIdUsuario } from '../utils/auth';
 
 // Servicio de Caja alineado al nuevo backend (solo endpoints auxiliares)
@@ -60,6 +62,32 @@ class CajaService extends BaseApiService {
   // GET: /api/Caja/caja-mayor-cierre/estados
   async getEstadosCierre(): Promise<CajaApiResponse<EstadoCierreResponse[]>> {
     return this.get<EstadoCierreResponse[]>(`${this.baseUrl}/caja-mayor-cierre/estados`);
+  }
+
+  // GET: /api/Caja/caja-mayor/categorias-egreso?groupId=XXX
+  async getCategoriasEgreso(groupId: number): Promise<CajaApiResponse<CategoriaEgresoResponse[]>> {
+    const params: Record<string, string> = { groupId: String(groupId) };
+    return this.get<CategoriaEgresoResponse[]>(`${this.baseUrl}/caja-mayor/categorias-egreso`, params);
+  }
+
+  // POST: /api/Caja/caja-mayor/flujos-consolidado
+  async flujoCajaConsolidado(body: FlujoCajaConsolidadoRequest): Promise<CajaApiResponse<FlujoCajaConsolidadoResponse[]>> {
+    const payload = {
+      anio: body.anio,
+      idsTipoCaja: body.idsTipoCaja,
+      tipoMovimiento: body.tipoMovimiento ?? null,
+    };
+    return this.post<FlujoCajaConsolidadoResponse[], typeof payload>(`${this.baseUrl}/caja-mayor/flujos-consolidado`, payload);
+  }
+
+  // POST: /api/Caja/caja-mayor/flujos-detallado
+  async flujoCajaDetallado(body: FlujoCajaConsolidadoRequest): Promise<CajaApiResponse<FlujoCajaDetalladoResponse[]>> {
+    const payload = {
+      anio: body.anio,
+      idsTipoCaja: body.idsTipoCaja,
+      tipoMovimiento: body.tipoMovimiento ?? null,
+    };
+    return this.post<FlujoCajaDetalladoResponse[], typeof payload>(`${this.baseUrl}/caja-mayor/flujos-detallado`, payload);
   }
 
   // =============================
@@ -275,6 +303,40 @@ class CajaService extends BaseApiService {
   // =============================
   // Registro de Compras
   // =============================
+  // GET: /api/Caja/caja-mayor/registro-compras
+  async listRegistroCompras(paramsIn: {
+    periodo?: number;
+    fechaInicial?: string;
+    fechaFinal?: string;
+    tipoComprobante?: string;
+    idProveedor?: number;
+    idTipoCaja?: number;
+    estado?: string | null;
+    page?: number;
+    pageSize?: number;
+  }): Promise<CajaApiResponse<any[]>> {
+    const params: Record<string, string> = {};
+    if (paramsIn.periodo !== undefined) params.periodo = String(paramsIn.periodo);
+    if (paramsIn.fechaInicial) params.fechaInicial = paramsIn.fechaInicial;
+    if (paramsIn.fechaFinal) params.fechaFinal = paramsIn.fechaFinal;
+    if (paramsIn.tipoComprobante) params.tipoComprobante = paramsIn.tipoComprobante;
+    if (paramsIn.idProveedor !== undefined && paramsIn.idProveedor !== null) params.idProveedor = String(paramsIn.idProveedor);
+    if (paramsIn.idTipoCaja !== undefined && paramsIn.idTipoCaja !== null) params.idTipoCaja = String(paramsIn.idTipoCaja);
+    if (paramsIn.estado !== undefined && paramsIn.estado !== null) params.estado = String(paramsIn.estado);
+    params.page = String(paramsIn.page ?? 1);
+    params.pageSize = String(paramsIn.pageSize ?? 5);
+    return this.get<any[]>(`${this.baseUrl}/caja-mayor/registro-compras`, params);
+  }
+  // GET: /api/Caja/caja-mayor/registro-compras/{id}
+  async getRegistroComprasById(id: number): Promise<CajaApiResponse<any>> {
+    return this.get<any>(`${this.baseUrl}/caja-mayor/registro-compras/${id}`);
+  }
+  // POST: /api/Caja/caja-mayor/registro-compras/{id}/pagar
+  async pagarRegistroCompras(id: number, fechaPago: string, actualizaIdUsuario?: number): Promise<CajaApiResponse<any>> {
+    const payload: { fechaPago: string; actualizaIdUsuario?: number } = { fechaPago };
+    if (actualizaIdUsuario !== undefined) payload.actualizaIdUsuario = actualizaIdUsuario;
+    return this.post<any, typeof payload>(`${this.baseUrl}/caja-mayor/registro-compras/${id}/pagar`, payload);
+  }
   // POST: /api/Caja/caja-mayor-cierre/{id}/registro-compras
   async insertRegistroCompras(idCajaMayorCierre: number, body: any): Promise<CajaApiResponse<any>> {
     const payload = {

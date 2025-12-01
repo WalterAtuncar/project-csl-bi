@@ -154,7 +154,10 @@ namespace Data.Access.ImplementationsRepo.caja
             var p = new DynamicParameters();
             p.Add("@IdCajaMayorCierre", request.IdCajaMayorCierre);
             p.Add("@IdTipoCaja", request.IdTipoCaja);
-            p.Add("@TipoMovimiento", request.TipoMovimiento);
+            if (!string.IsNullOrWhiteSpace(request.TipoMovimiento) && !string.Equals(request.TipoMovimiento, "T", StringComparison.OrdinalIgnoreCase))
+            {
+                p.Add("@TipoMovimiento", request.TipoMovimiento);
+            }
             p.Add("@Origen", request.Origen);
             // Normalizar rango de fechas: inicio 00:00:00, fin 23:59:59
             var fechaDesde = request.FechaDesde.StartOfDayOrNull();
@@ -177,6 +180,7 @@ namespace Data.Access.ImplementationsRepo.caja
                 p.Add("@IdTipoCaja", request.IdTipoCaja);
                 p.Add("@TipoMovimiento", request.TipoMovimiento);
                 // Nuevos campos
+                if (request.IdFormaPago.HasValue) p.Add("@IdFormaPago", request.IdFormaPago);
                 p.Add("@ConceptoMovimiento", request.ConceptoMovimiento);
                 p.Add("@Subtotal", request.Subtotal);
                 p.Add("@IGV", request.IGV);
@@ -287,6 +291,94 @@ namespace Data.Access.ImplementationsRepo.caja
             p.Add("@InsertaIdUsuario", request.InsertaIdUsuario);
             using var cn = new SqlConnection(_connectionString);
             return cn.Query<RegistroComprasResponse>("[dbo].[sp_RegistroCompras_Insert]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();
+        }
+
+        public RegistroComprasResponse GetRegistroComprasById(GetRegistroComprasByIdRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("@IdRegistroCompra", request.IdRegistroCompra);
+            using var cn = new SqlConnection(_connectionString);
+            return cn.Query<RegistroComprasResponse>("[dbo].[sp_RegistroCompras_GetById]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();
+        }
+
+        public RegistroComprasResponse PagarRegistroCompras(UpdateRegistroComprasPagoRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("@IdRegistroCompra", request.IdRegistroCompra);
+            p.Add("@FechaPago", request.FechaPago);
+            if (request.ActualizaIdUsuario.HasValue) p.Add("@ActualizaIdUsuario", request.ActualizaIdUsuario);
+            using var cn = new SqlConnection(_connectionString);
+            return cn.Query<RegistroComprasResponse>("[dbo].[sp_RegistroCompras_Pagar]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();
+        }
+
+        public IEnumerable<CategoriaEgresoResponse> GetCategoriaEgresos(int groupId)
+        {
+            var p = new DynamicParameters();
+            p.Add("@GroupId", groupId);
+            using var cn = new SqlConnection(_connectionString);
+            return cn.Query<CategoriaEgresoResponse>("[dbo].[sp_CategoriasEgreso_GetList]", p, commandType: CommandType.StoredProcedure);
+        }
+
+        public IEnumerable<FlujoCajaConsolidadoResponse> FlujoCajaConsolidado(FlujoCajaConsolidadoRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("@Anio", request.Anio);
+            string csv = null;
+            if (request.IdsTipoCaja != null && request.IdsTipoCaja.Count > 0)
+            {
+                csv = string.Join(",", request.IdsTipoCaja);
+            }
+            p.Add("@IdsTipoCajaCsv", csv);
+            if (!string.IsNullOrWhiteSpace(request.TipoMovimiento) && !string.Equals(request.TipoMovimiento, "T", StringComparison.OrdinalIgnoreCase))
+            {
+                p.Add("@TipoMovimiento", request.TipoMovimiento);
+            }
+            using var cn = new SqlConnection(_connectionString);
+            return cn.Query<FlujoCajaConsolidadoResponse>("[dbo].[sp_CajaMayor_FlujoConsolidado]", p, commandType: CommandType.StoredProcedure);
+        }
+
+        public IEnumerable<FlujoCajaDetalladoResponse> FlujoCajaDetallado(FlujoCajaDetalladoRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("@Anio", request.Anio);
+            string csv = null;
+            if (request.IdsTipoCaja != null && request.IdsTipoCaja.Count > 0)
+            {
+                csv = string.Join(",", request.IdsTipoCaja);
+            }
+            p.Add("@IdsTipoCajaCsv", csv);
+            if (!string.IsNullOrWhiteSpace(request.TipoMovimiento) && !string.Equals(request.TipoMovimiento, "T", StringComparison.OrdinalIgnoreCase))
+            {
+                p.Add("@TipoMovimiento", request.TipoMovimiento);
+            }
+            using var cn = new SqlConnection(_connectionString);
+            return cn.Query<FlujoCajaDetalladoResponse>("[dbo].[sp_CajaMayor_FlujoDetallado]", p, commandType: CommandType.StoredProcedure);
+        }
+
+        public (IEnumerable<RegistroComprasListItemResponse> data, int totalRows) ListRegistroCompras(RegistroComprasListRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("@Periodo", request.Periodo);
+            p.Add("@FechaInicial", request.FechaInicial);
+            p.Add("@FechaFinal", request.FechaFinal);
+            p.Add("@TipoComprobante", request.TipoComprobante);
+            p.Add("@IdProveedor", request.IdProveedor);
+            p.Add("@IdTipoCaja", request.IdTipoCaja);
+            p.Add("@Estado", request.Estado);
+            p.Add("@Page", request.Page);
+            p.Add("@PageSize", request.PageSize);
+            
+            using var cn = new SqlConnection(_connectionString);
+            using var multi = cn.QueryMultiple("[dbo].[sp_RegistroCompras_List]", p, commandType: CommandType.StoredProcedure);
+
+            var data = multi.Read<RegistroComprasListItemResponse>().ToList();
+            var totalRows = 0;
+            if (!multi.IsConsumed)
+            {
+                totalRows = multi.Read<int>().FirstOrDefault();
+            }
+
+            return (data, totalRows);
         }
     }
 }

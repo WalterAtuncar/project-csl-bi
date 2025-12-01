@@ -8,6 +8,7 @@ namespace Data.Model.Response.caja
         public int i_IdCajaMayorCierre { get; set; }
         public int i_IdTipoCaja { get; set; }
         public string v_TipoMovimiento { get; set; }
+        public int? i_IdFormaPago { get; set; }
         public decimal d_Total { get; set; }
         public System.DateTime t_FechaMovimiento { get; set; }
         public string v_Observaciones { get; set; }

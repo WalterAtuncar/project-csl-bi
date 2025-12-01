@@ -38,10 +38,18 @@ BEGIN
     DECLARE @IdRegistroCompra INT;
     DECLARE @Now DATETIME = GETDATE();
     DECLARE @Periodo NVARCHAR(8);
+    DECLARE @Estado NVARCHAR(1);
 
     -- Calcular período YYYYMM00
     SET @Periodo = CONVERT(NVARCHAR(4), YEAR(@FechaEmision)) + 
                    RIGHT('0' + CONVERT(NVARCHAR(2), MONTH(@FechaEmision)), 2) + '00';
+
+    -- Determinar estado según fecha de vencimiento
+    -- Regla: Si FechaVencimiento es NULL o <= hoy => '1' (Pagado); si > hoy => '0' (Por Pagar)
+    SET @Estado = CASE
+        WHEN @FechaVencimiento IS NULL OR @FechaVencimiento <= CAST(@Now AS DATE) THEN '1'
+        ELSE '0'
+    END;
 
     -- Insertar registro de compras
     INSERT INTO registro_compras (
@@ -104,7 +112,7 @@ BEGIN
         @Observaciones,
         @IdFamiliaEgreso,
         @IdTipoEgreso,
-        '1', -- Estado: Anotado correctamente
+        @Estado,
         @InsertaIdUsuario,
         @Now
     );

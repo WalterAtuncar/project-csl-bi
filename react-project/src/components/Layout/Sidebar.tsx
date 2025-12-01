@@ -7,7 +7,13 @@ import {
   LineChart, Activity,
   Search,
   // Icon for Honorarios Médicos
-  Stethoscope
+  Stethoscope,
+  // Icon for Gestión de Caja
+  Wallet,
+  // Icon for Flujo de Caja
+  TrendingUp as TrendingUpIcon,
+  // Icon for Registro de Compras
+  ShoppingCart
 } from 'lucide-react';
 
 // Variantes de animación
@@ -165,9 +171,14 @@ const menuItems: MenuItem[] = [
     ]
   },
   {
-    name: 'Caja Mayor',
-    path: '/caja-mayor',
-    icon: <DollarSign className="w-5 h-5" />
+    name: 'Gestión de Caja',
+    path: '/gestion-caja',
+    icon: <Wallet className="w-5 h-5" />,
+    subItems: [
+      { name: 'Caja Mayor', path: '/caja-mayor', icon: <DollarSign className="w-4 h-4" /> },
+      { name: 'Flujo de Caja', path: '/flujo-caja', icon: <TrendingUpIcon className="w-4 h-4" /> },
+      { name: 'Registro de Compras', path: '/registro-compras', icon: <ShoppingCart className="w-4 h-4" /> }
+    ]
   },
   {
     name: 'Honorarios Médicos',
