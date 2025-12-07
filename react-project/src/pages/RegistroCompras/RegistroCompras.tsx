@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Filter, Calendar, User, Layers, X, Search, ChevronLeft, ChevronRight, Eye, CreditCard, FileDown } from 'lucide-react';
+import { Filter, Calendar, User, Layers, X, Search, ChevronLeft, ChevronRight, Eye, CreditCard, FileDown, Trash2, AlertTriangle } from 'lucide-react';
 import { ExportService } from '../../services/ExportService';
 import CajaService from '../../services/CajaService';
 import { Paginator } from '../../@types/pagination';
@@ -70,6 +70,11 @@ const RegistroCompras: React.FC = () => {
   const [showPayModal, setShowPayModal] = useState(false);
   const [payData, setPayData] = useState<Compra | null>(null);
   const [payDate, setPayDate] = useState<string>('');
+  const [newEstado, setNewEstado] = useState<'1' | '0'>('1');
+  const [serieEdit, setSerieEdit] = useState<string>('');
+  const [numeroEdit, setNumeroEdit] = useState<string>('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Compra | null>(null);
   const [showProveedorDropdown, setShowProveedorDropdown] = useState(false);
   const [proveedorSearch, setProveedorSearch] = useState('');
   const inputProveedorRef = useRef<HTMLDivElement>(null);
@@ -362,6 +367,12 @@ const RegistroCompras: React.FC = () => {
   const handlePagar = (compra: Compra) => {
     setPayData(compra);
     setPayDate(new Date().toISOString().split('T')[0]);
+    const estadoActual = (compra.estadoName || '').toLowerCase() === 'pagado' ? '1' : '0';
+    setNewEstado(estadoActual);
+    // Prefill serie/numero desde el númeroDocumento si corresponde
+    const parts = (compra.numeroDocumento || '').split('-');
+    setSerieEdit(parts.length > 1 ? parts[0] : '');
+    setNumeroEdit(parts.length > 1 ? parts[1] : (parts[0] || ''));
     setShowPayModal(true);
   };
 
@@ -369,11 +380,52 @@ const RegistroCompras: React.FC = () => {
     if (!payData || !payDate) return;
     try {
       const svc = CajaService.getInstance();
-      const resp = await svc.pagarRegistroCompras(payData.id, payDate);
+      const payload: { fechaPago?: string; estado?: string; serie?: string; numero?: string } = {};
+      if (newEstado === '1') payload.fechaPago = payDate; else payload.fechaPago = undefined;
+      payload.estado = newEstado;
+      payload.serie = serieEdit?.trim() || undefined;
+      payload.numero = numeroEdit?.trim() || undefined;
+      const resp = await svc.pagarRegistroCompras(payData.id, payload);
       setShowPayModal(false);
       await cargarCompras();
     } catch (e) {
       console.error('Error al pagar:', e);
+    }
+  };
+
+  const handleEliminar = (compra: Compra) => {
+    setDeleteTarget(compra);
+    setShowDeleteModal(true);
+  };
+
+  const confirmEliminar = async () => {
+    if (!deleteTarget) return;
+    try {
+      const svc = CajaService.getInstance();
+      let anioStr: string;
+      let mesStr: string;
+      if (!useDateRange && filters.anio && filters.mes) {
+        anioStr = String(filters.anio);
+        mesStr = String(filters.mes).padStart(2, '0');
+      } else {
+        const d = new Date(deleteTarget.fecha);
+        anioStr = String(d.getFullYear());
+        mesStr = String(d.getMonth() + 1).padStart(2, '0');
+      }
+      const existsResp = await svc.checkCierreExists({ anio: anioStr, mes: mesStr });
+      const model: any = existsResp?.objModel ?? {};
+      const idCierre = (model.idCajaMayorCierre ?? model.IdCajaMayorCierre) as number;
+      if (!idCierre || idCierre <= 0) {
+        alert('No se encontró un cierre de caja para el periodo seleccionado.');
+        return;
+      }
+      await svc.deleteRegistroCompras(deleteTarget.id, { idCajaMayorCierre: idCierre });
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+      await cargarCompras();
+    } catch (e) {
+      console.error('Error al eliminar registro de compras:', e);
+      alert('Ocurrió un error al eliminar el registro.');
     }
   };
 
@@ -678,8 +730,10 @@ const RegistroCompras: React.FC = () => {
                       const today = new Date();
                       today.setHours(0,0,0,0);
                       const isPastDue = compra.fechaVencimiento ? (new Date(compra.fechaVencimiento) < today) : false;
-                      const rowClass = `hover:bg-gray-50 dark:hover:bg-gray-700 ${isPastDue ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}`;
                       const estado = (compra.estadoName || '').toLowerCase();
+                      const isPorPagar = estado === 'por pagar';
+                      const warn = isPastDue && isPorPagar;
+                      const rowClass = `hover:bg-gray-50 dark:hover:bg-gray-700 ${warn ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}`;
                       const estadoBadgeClass = estado === 'pagado'
                         ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                         : estado === 'por pagar'
@@ -730,6 +784,13 @@ const RegistroCompras: React.FC = () => {
                               title="Pagar"
                             >
                               <CreditCard className="w-4 h-4 text-green-600" />
+                            </button>
+                            <button
+                              onClick={() => handleEliminar(compra)}
+                              className="p-2 rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
                             </button>
                           </div>
                         </td>
@@ -859,7 +920,7 @@ const RegistroCompras: React.FC = () => {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-full max-w-xl">
             <div className="flex items-center justify-between bg-primary text-white rounded-t-lg px-6 py-4">
-              <h3 className="text-lg font-semibold">Registrar Pago</h3>
+              <h3 className="text-lg font-semibold">Cambiar estado de registro</h3>
               <button onClick={() => setShowPayModal(false)} className="p-2 rounded-md hover:bg-primary-dark/70">
                 <X className="w-4 h-4 text-white" />
               </button>
@@ -870,19 +931,84 @@ const RegistroCompras: React.FC = () => {
               <div className="text-sm text-gray-900 dark:text-white"><span className="font-medium">Documento:</span> {payData.numeroDocumento}</div>
               <div className="text-sm text-gray-900 dark:text-white"><span className="font-medium">Total:</span> {formatCurrency(payData.monto)}</div>
             </div>
+            <div className="mb-4">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Estado</label>
+              <div className="mt-2 inline-flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+                <button onClick={() => setNewEstado('0')} className={`px-4 py-2 text-sm ${newEstado==='0'?'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200':'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>Por Pagar</button>
+                <button onClick={() => setNewEstado('1')} className={`px-4 py-2 text-sm border-l border-gray-300 dark:border-gray-600 ${newEstado==='1'?'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200':'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>Pagado</button>
+              </div>
+            </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Fecha de pago</label>
-              <input
-                type="date"
-                value={payDate}
-                onChange={(e) => setPayDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
+              {newEstado === '1' ? (
+                <>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Fecha de pago</label>
+                <input
+                  type="date"
+                  value={payDate}
+                  onChange={(e) => setPayDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Serie (opcional)</label>
+                    <input
+                      type="text"
+                      value={serieEdit}
+                      onChange={(e) => setSerieEdit(e.target.value.toUpperCase())}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white uppercase"
+                      maxLength={20}
+                      placeholder="Ej: F001"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Número (opcional)</label>
+                    <input
+                      type="text"
+                      value={numeroEdit}
+                      onChange={(e) => setNumeroEdit(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      maxLength={20}
+                      placeholder="Ej: 00001234"
+                    />
+                  </div>
+                </div>
+                </>
+              ) : (
+                <div className="text-xs text-gray-600 dark:text-gray-400">Al marcar "Por Pagar" se limpia la fecha de pago.</div>
+              )}
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setShowPayModal(false)} className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600">Cancelar</button>
-              <button onClick={submitPago} className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700">Pagar</button>
+              <button onClick={submitPago} className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700">Guardar</button>
             </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Eliminar Registro */}
+      {showDeleteModal && deleteTarget && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-full max-w-xl">
+            <div className="flex items-center justify-between bg-red-600 text-white rounded-t-lg px-6 py-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2"><AlertTriangle className="w-5 h-5"/> Confirmar eliminación</h3>
+              <button onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); }} className="p-2 rounded-md hover:bg-red-700">
+                <X className="w-4 h-4 text-white" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4 mb-4 border border-yellow-200 dark:border-yellow-800">
+                <div className="text-sm text-gray-900 dark:text-white"><span className="font-medium">Proveedor:</span> {deleteTarget.proveedor}</div>
+                <div className="text-sm text-gray-900 dark:text-white"><span className="font-medium">Documento:</span> {deleteTarget.numeroDocumento}</div>
+                <div className="text-sm text-gray-900 dark:text-white"><span className="font-medium">Total:</span> {formatCurrency(deleteTarget.monto)}</div>
+                <div className="text-sm text-gray-900 dark:text-white"><span className="font-medium">Fecha emisión:</span> {new Date(deleteTarget.fecha).toLocaleDateString('es-PE')}</div>
+                <div className="text-sm text-gray-900 dark:text-white"><span className="font-medium">Vencimiento:</span> {deleteTarget.fechaVencimiento ? new Date(deleteTarget.fechaVencimiento).toLocaleDateString('es-PE') : '-'}</div>
+              </div>
+              <p className="text-sm text-gray-700 dark:text-gray-300">¿Está seguro de eliminar este registro? Esta acción eliminará el egreso vinculado y recalculará el cierre de caja.</p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); }} className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600">Cancelar</button>
+                <button onClick={confirmEliminar} className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700">Eliminar</button>
+              </div>
             </div>
           </div>
         </div>

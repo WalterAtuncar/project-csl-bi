@@ -155,6 +155,8 @@ export interface PagoMedicoDetalle {
   montoPagadoReal?: number;
   porcentajePagadoReal?: number;
   esValido?: boolean;
+  idFormaPago?: number;
+  formaPagoName?: string;
 }
 
 export interface OrganizationInfoResponse {

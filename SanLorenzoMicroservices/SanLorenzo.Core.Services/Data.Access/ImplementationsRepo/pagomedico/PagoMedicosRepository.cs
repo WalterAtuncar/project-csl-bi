@@ -74,9 +74,9 @@ namespace Data.Access.ImplementationsRepo.pagomedico
                     {
                         servicesDetailsTable.Rows.Add(
                             detail.v_ServiceId,
-                            detail.r_Price,
-                            detail.r_Porcentaje,
-                            detail.r_Pagado
+                            detail.r_Price.HasValue ? (object)detail.r_Price.Value : DBNull.Value,
+                            detail.r_Porcentaje.HasValue ? (object)detail.r_Porcentaje.Value : DBNull.Value,
+                            detail.r_Pagado.HasValue ? (object)detail.r_Pagado.Value : DBNull.Value
                         );
                     }
 

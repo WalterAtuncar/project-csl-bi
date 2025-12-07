@@ -411,7 +411,7 @@ namespace Agenda.Microservice.Controllers.caja
             }
         }
 
-        public class PagarRegistroComprasBody { public DateTime FechaPago { get; set; } public int? ActualizaIdUsuario { get; set; } }
+        public class PagarRegistroComprasBody { public DateTime? FechaPago { get; set; } public string? Estado { get; set; } public string? Serie { get; set; } public string? Numero { get; set; } public int? ActualizaIdUsuario { get; set; } }
 
         [HttpPost("caja-mayor/registro-compras/{id}/pagar")]
         [ProducesResponseType(typeof(RegistroComprasResponse), StatusCodes.Status200OK)]
@@ -420,8 +420,45 @@ namespace Agenda.Microservice.Controllers.caja
             _ResponseDTO = new ResponseDTO();
             try
             {
-                var req = new UpdateRegistroComprasPagoRequest { IdRegistroCompra = id, FechaPago = body.FechaPago, ActualizaIdUsuario = body.ActualizaIdUsuario };
+                var req = new UpdateRegistroComprasPagoRequest { IdRegistroCompra = id, FechaPago = body.FechaPago, Estado = body.Estado, Serie = body.Serie, Numero = body.Numero, ActualizaIdUsuario = body.ActualizaIdUsuario };
                 var resp = _cajaLogic.PagarRegistroCompras(req);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, resp));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        public class DeleteRegistroComprasBody { public int IdCajaMayorCierre { get; set; } public int EliminaIdUsuario { get; set; } }
+
+        [HttpDelete("caja-mayor/registro-compras/{id}")]
+        [ProducesResponseType(typeof(RegistroComprasResponse), StatusCodes.Status200OK)]
+        public IActionResult DeleteRegistroCompras([FromRoute] int id, [FromBody] DeleteRegistroComprasBody body)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var req = new DeleteRegistroComprasRequest { IdRegistroCompra = id, IdCajaMayorCierre = body.IdCajaMayorCierre, EliminaIdUsuario = body.EliminaIdUsuario };
+                var resp = _cajaLogic.DeleteRegistroCompras(req);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, resp));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        public class RecalcularIncrementalBody { public int? DefaultIdTipoCaja { get; set; } public bool? Preview { get; set; } }
+
+        [HttpPost("caja-mayor-cierre/{id}/recalcular-incremental")]
+        public IActionResult RecalcularIncremental([FromRoute] int id, [FromBody] RecalcularIncrementalBody body)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var req = new RecalcularIncrementalRequest { IdCajaMayorCierre = id, DefaultIdTipoCaja = body?.DefaultIdTipoCaja ?? 1, Preview = body?.Preview ?? false };
+                var resp = _cajaLogic.RecalcularIncremental(req);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, resp));
             }
             catch (Exception e)

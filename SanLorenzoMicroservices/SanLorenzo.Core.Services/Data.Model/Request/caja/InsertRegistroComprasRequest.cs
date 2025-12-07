@@ -11,8 +11,8 @@ namespace Data.Model.Request.caja
         public DateTime FechaEmision { get; set; }
         public DateTime? FechaVencimiento { get; set; }
         public string TipoComprobante { get; set; }
-        public string Serie { get; set; }
-        public string Numero { get; set; }
+        public string? Serie { get; set; }
+        public string? Numero { get; set; }
         public decimal BaseImponible { get; set; }
         public decimal IGV { get; set; }
         public decimal ISC { get; set; }
@@ -24,10 +24,10 @@ namespace Data.Model.Request.caja
         public bool AplicaDetraccion { get; set; }
         public decimal? PorcentajeDetraccion { get; set; }
         public decimal? MontoDetraccion { get; set; }
-        public string NumeroConstanciaDetraccion { get; set; }
+        public string? NumeroConstanciaDetraccion { get; set; }
         public bool AplicaRetencion { get; set; }
         public decimal? MontoRetencion { get; set; }
-        public string Observaciones { get; set; }
+        public string? Observaciones { get; set; }
         public int? IdFamiliaEgreso { get; set; }
         public int? IdTipoEgreso { get; set; }
         public int InsertaIdUsuario { get; set; }

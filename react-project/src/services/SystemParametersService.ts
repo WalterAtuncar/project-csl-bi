@@ -24,7 +24,7 @@ class SystemParametersService extends BaseApiService {
   constructor() {
     // Apunta al microservicio de Atención Médica (7012) por defecto,
     // permitiendo override vía variable de entorno.
-    super(import.meta.env.VITE_SERVICE_API_BASE_URL || 'https://localhost:7012/api');
+    super('http://190.116.90.35:8182/api' );//|| 'https://localhost:7012/api'
   }
 
   /**

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Filter, Eye, PlusCircle, MinusCircle, X, Save,
-  ChevronLeft, ChevronRight, ListChecks, ArrowUpCircle, ArrowDownCircle, Calculator, Download, BarChart3
+  ChevronLeft, ChevronRight, ListChecks, ArrowUpCircle, ArrowDownCircle, Calculator, Download, BarChart3, RefreshCw
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import ToastAlerts from '../../components/UI/ToastAlerts';
@@ -566,10 +566,10 @@ const CajaMayorNew: React.FC = () => {
       // Validación por periodo: seleccionado vs concurrente (actual)
       const selectedPeriod = (createForm.anio * 100) + createForm.mes;
       const currentPeriod = (currentYear * 100) + currentMonth;
-      if (selectedPeriod >= currentPeriod) {
+      if (selectedPeriod > currentPeriod) {
         ToastAlerts.error({
           title: 'Período no permitido',
-          message: 'No se puede generar cierre para un período actual o futuro.'
+          message: 'No se puede generar cierre para un período futuro.'
         });
         return;
       }
@@ -636,7 +636,7 @@ const CajaMayorNew: React.FC = () => {
                 ToastAlerts.error({ title: 'Orquestación de cierre', message: 'Ocurrió un error generando ingresos/egresos o cargando el resumen.' });
               }
             } else {
-              // Igual al período concurrente: solo creación
+              // Igual al período concurrente: creación permitida, recálculo incremental disponible desde el botón en el detalle
             }
           }
 
@@ -795,7 +795,7 @@ const CajaMayorNew: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Estado</label>
                 <select
                   className="w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white"
-                  value={filters.estadoCierre || 2}
+                  value={filters.estadoCierre ?? 2}
                   onChange={e => setFilters(prev => ({ ...prev, estadoCierre: Number(e.target.value) }))}
                 >
                   {estadosOptions.map(o => (
@@ -939,6 +939,31 @@ const CajaMayorNew: React.FC = () => {
                 title="Ver gráfico comparativo"
               >
                 <BarChart3 className="w-4 h-4 inline mr-1" /> Ver gráfico
+              </button>
+              <button
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={async () => {
+                  if (!detalleCabecera) return;
+                  const svc = CajaService.getInstance();
+                  const periodoStr = `${detalleCabecera.anio}-${String(detalleCabecera.mes).padStart(2,'0')}`;
+                  const firstDay = new Date(Number(detalleCabecera.anio), Number(detalleCabecera.mes)-1, 1);
+                  const lastDay = new Date(Number(detalleCabecera.anio), Number(detalleCabecera.mes), 0);
+                  const today = new Date();
+                  const endDate = (today > lastDay) ? lastDay : today;
+                  const confirmMsg = `Se recalcularán ingresos (cobranzas) y egresos (ventas) del periodo ${periodoStr} desde ${firstDay.toLocaleDateString('es-PE')} hasta ${endDate.toLocaleDateString('es-PE')}. ¿Desea continuar?`;
+                  if (!confirm(confirmMsg)) return;
+                  const loadingId = ToastAlerts.loading('');
+                  try {
+                    await svc.recalcularIncremental(detalleCabecera.idCajaMayorCierre, { defaultIdTipoCaja: Number(detalleCabecera.idTipoCajaDefault || 1), preview: false });
+                    ToastAlerts.promiseToSuccess(loadingId, { title: 'Recalculo completado', message: 'Se actualizaron movimientos y totales del cierre.' });
+                    await reloadDetalleCabecera();
+                  } catch (e) {
+                    ToastAlerts.promiseToError(loadingId, { title: 'Error al recalcular', message: 'No se pudo completar el recálculo incremental.' });
+                  }
+                }}
+                title="Recalcular ahora"
+              >
+                <RefreshCw className="w-4 h-4 inline mr-1" /> Recalcular ahora
               </button>
               <button
                 className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"

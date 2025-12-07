@@ -17,8 +17,8 @@ namespace Data.Model.Request.caja
         public decimal? IGV { get; set; }
         public string Origen { get; set; }
         public string CodigoDocumento { get; set; }
-        public string SerieDocumento { get; set; }
-        public string NumeroDocumento { get; set; }
+        public string? SerieDocumento { get; set; }
+        public string? NumeroDocumento { get; set; }
         public string IdVenta { get; set; }
         public int InsertaIdUsuario { get; set; }
     }

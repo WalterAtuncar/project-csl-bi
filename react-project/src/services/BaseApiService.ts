@@ -73,7 +73,7 @@ export abstract class BaseApiService {
    * Obtiene la URL base desde variables de entorno o configuración
    */
   private getBaseURL(): string {
-    return import.meta.env.VITE_API_BASE_URL || 'https://localhost:7036/api'; //'http://190.116.90.35:8183/api'; //
+    return 'http://190.116.90.35:8183/api'; //import.meta.env.VITE_API_BASE_URL || 'https://localhost:7036/api'; //
   }
 
   /**

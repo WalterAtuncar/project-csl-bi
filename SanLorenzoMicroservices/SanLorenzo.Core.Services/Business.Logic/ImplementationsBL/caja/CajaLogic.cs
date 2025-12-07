@@ -89,6 +89,9 @@ namespace Business.Logic.ImplementationsBL.caja
         public RegistroComprasResponse PagarRegistroCompras(UpdateRegistroComprasPagoRequest request)
             => _unitOfWork.ICaja.PagarRegistroCompras(request);
 
+        public RegistroComprasResponse DeleteRegistroCompras(DeleteRegistroComprasRequest request)
+            => _unitOfWork.ICaja.DeleteRegistroCompras(request);
+
         public IEnumerable<CategoriaEgresoResponse> GetCategoriaEgresos(int groupId)
             => _unitOfWork.ICaja.GetCategoriaEgresos(groupId);
 
@@ -100,5 +103,8 @@ namespace Business.Logic.ImplementationsBL.caja
 
         public (IEnumerable<RegistroComprasListItemResponse> data, int totalRows) ListRegistroCompras(RegistroComprasListRequest request)
             => _unitOfWork.ICaja.ListRegistroCompras(request);
+
+        public object RecalcularIncremental(RecalcularIncrementalRequest request)
+            => _unitOfWork.ICaja.RecalcularIncremental(request);
     }
 }

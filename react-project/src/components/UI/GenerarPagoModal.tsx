@@ -29,6 +29,8 @@ import {
   GenerarPagoMedicoRequest,
   ServicesPaidDetailRequest
 } from '../../services/PagoMedicosService';
+import CajaService from '../../services/CajaService';
+import RegistroComprasModal, { type RegistroComprasFormData } from '../CajaMayor/RegistroComprasModal';
 import { systemParametersService, KeyValueDtoResponse } from '../../services/SystemParametersService';
 import ToastAlerts from './ToastAlerts';
 import { usePDFBuilder } from './';
@@ -53,6 +55,9 @@ const formatDateForDisplay = (dateString: string): string => {
     year: 'numeric'
   });
 };
+
+// Formateador de moneda S/ con locale es-PE
+const fmtCurrency = (n: number) => `S/ ${n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 interface GenerarPagoModalProps {
   isOpen: boolean;
@@ -165,36 +170,66 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [isValidationActive, setIsValidationActive] = useState(false);
+  const [excelValidatedOk, setExcelValidatedOk] = useState(false);
 
   // Estados para el PDF
   const [generatingPDF, setGeneratingPDF] = useState(false);
+  const [manualPercents, setManualPercents] = useState<number[]>([]);
+  const [manualInput, setManualInput] = useState<string>('');
+  const [includeIgv, setIncludeIgv] = useState<boolean>(true);
+  const [visaDiscountPercent, setVisaDiscountPercent] = useState<number>(4);
+  
+  const [isPeriodoModalOpen, setIsPeriodoModalOpen] = useState(false);
+  const [periodoAnio, setPeriodoAnio] = useState<string>(String(new Date().getFullYear()));
+  const [periodoMes, setPeriodoMes] = useState<string>(String(new Date().getMonth() + 1).padStart(2, '0'));
+  const [cierreId, setCierreId] = useState<number | null>(null);
+  const [showRegistroCompras, setShowRegistroCompras] = useState(false);
+  const [registroComprasInitial, setRegistroComprasInitial] = useState<RegistroComprasFormData | undefined>(undefined);
+  const [proveedorFromCompra, setProveedorFromCompra] = useState<number | null>(null);
+  const [pdfToView, setPdfToView] = useState<string | null>(null);
+  const [proveedorNameFromCompra, setProveedorNameFromCompra] = useState<string | null>(null);
+  const [movimientoEgresoFromCompra, setMovimientoEgresoFromCompra] = useState<number | null>(null);
+  const [fechaEmisionFromCompra, setFechaEmisionFromCompra] = useState<string | null>(null);
 
   // Ref para el input de archivo
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Hook para construir PDFs
   const { generatePDF } = usePDFBuilder();
+  const cajaService = React.useMemo(() => CajaService.getInstance(), []);
 
   // Función para generar el PDF del pago médico
-  const generatePagoMedicoPDF = async (cabeceras: PagoMedicoCabecera[], detallesSeleccionados: PagoMedicoDetalle[]): Promise<string> => {
+  const generatePagoMedicoPDF = async (
+    cabeceras: PagoMedicoCabecera[],
+    detallesSeleccionados: PagoMedicoDetalle[],
+    providerName?: string | null,
+    providerRuc?: string | null,
+    providerId?: number | null,
+    movimientoId?: number | null,
+    periodoYYYYMM?: string | null,
+    fechaEmisionYYYYMMDD?: string | null
+  ): Promise<string> => {
     const logoPath = '/assets/images/logo-csl.png';
     
-    // Función para generar número de documento con timestamp
-    const generateDocumentNumber = (): string => {
-      const now = new Date();
-      const day = now.getDate().toString().padStart(2, '0');
-      const month = (now.getMonth() + 1).toString().padStart(2, '0');
-      const year = now.getFullYear().toString();
-      const hours = now.getHours().toString().padStart(2, '0');
-      const minutes = now.getMinutes().toString().padStart(2, '0');
-      const seconds = now.getSeconds().toString().padStart(2, '0');
-      const milliseconds = now.getMilliseconds().toString().padStart(3, '0');
-      
-      // Formato: ddMMyyyHHmmss + milisegundos (20 caracteres total)
-      const timestamp = `${day}${month}${year}${hours}${minutes}${seconds}${milliseconds}`;
-      
-      // Asegurar que tenga exactamente 20 caracteres
-      return timestamp.padEnd(20, '0').substring(0, 20);
+    const pad2 = (n: number) => n.toString().padStart(2, '0');
+    const normalizeFecha = (isoDate?: string | null): string => {
+      if (!isoDate) {
+        const d = new Date();
+        return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+      }
+      const parts = isoDate.split('-');
+      if (parts.length === 3) return `${parts[0]}${parts[1]}${parts[2]}`;
+      const d = new Date(isoDate);
+      return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+    };
+    const buildDocumentNumber = (): string => {
+      const periodo = periodoYYYYMM ?? `${periodoAnio}${periodoMes}`;
+      const fechaEmi = normalizeFecha(fechaEmisionYYYYMMDD ?? fechaEmisionFromCompra ?? formData.fechaInicio);
+      if (providerId && movimientoId && periodo) {
+        return `${providerId}-${movimientoId}-${periodo}-${fechaEmi}`;
+      }
+      const d = new Date();
+      return `${pad2(d.getDate())}${pad2(d.getMonth() + 1)}${d.getFullYear()}${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}${d.getMilliseconds().toString().padStart(3, '0')}`.padEnd(20, '0').substring(0, 20);
     };
 
     // Obtener información de la organización desde el endpoint
@@ -215,14 +250,14 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
     }
     
     const headerData: PDFHeaderData = {
-      titulo: 'COMPROBANTE DE PAGO MÉDICO',
+      titulo: 'RECIBO DE PAGO MÉDICO',
       subtitulo: 'Honorarios Profesionales',
       companyName: organizationInfo.v_Name,
       companyAddress: organizationInfo.v_Address,
       companyPhone: organizationInfo.v_PhoneNumber,
       companyEmail: organizationInfo.v_Mail,
       logoUrl: logoPath,
-      'Número de Documento': generateDocumentNumber(),
+      'Número de Documento': buildDocumentNumber(),
       'Fecha de Documento': new Date().toLocaleDateString('es-ES', { 
         weekday: 'long',
         year: 'numeric', 
@@ -231,40 +266,33 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
       })
     };
 
-    const columns: PDFColumn[] = [
-      { key: 'fecha', header: 'Fecha', width: 20 },
-      { key: 'paciente', header: 'Paciente', width: 35 },
-      { key: 'comprobante', header: 'Comprobante', width: 25 },
-      { key: 'monto', header: 'Pago Médico', width: 20, align: 'right' }
-    ];
-
-    const details: PDFDetailItem[] = detallesSeleccionados.map(detalle => ({
-      fecha: new Date(detalle.d_ServiceDate).toLocaleDateString('es-ES'),
-      paciente: detalle.paciente || 'N/A',
-      comprobante: detalle.v_ComprobantePago || 'N/A',
-      monto: `S/ ${detalle.pagoMedico.toFixed(2)}`
-    }));
+    const columns: PDFColumn[] = [];
+    const details: PDFDetailItem[] = [];
 
     const totalMonto = detallesSeleccionados.reduce((sum, detalle) => sum + detalle.pagoMedico, 0);
 
     const profesionalLabel = cabeceras && cabeceras.length === 1
       ? (cabeceras[0].nombreMedico || 'N/A')
       : 'Varios médicos';
-    const especialidadLabel = cabeceras && cabeceras.length === 1
+    const especialidadLabel = formData.consultorioNombre || (cabeceras && cabeceras.length === 1
       ? (cabeceras[0].especialidadMedico || 'N/A')
-      : '—';
+      : '—');
 
     const pdfData: PDFData = {
-      header: headerData,
+      header: {
+        ...headerData,
+        'Nombre del Proveedor': providerName || '',
+        'RUC del Proveedor': providerRuc || '',
+      },
       columns: columns,
       details: details,
       summary: {
-        'Total de servicios': detallesSeleccionados.length,
-        'Monto total': totalMonto,
-        'Profesional': profesionalLabel,
+        'Número de atenciones': detallesSeleccionados.length,
         'Especialidad': especialidadLabel,
+        'Monto pagado': Number(appliedTotalMedicoCurrent.toFixed(2)),
         'Período': `${formatDateForDisplay(formData.fechaInicio)} - ${formatDateForDisplay(formData.fechaFin)}`
-      }
+      },
+      options: { size: 'A4', orientation: 'portrait', receipt: true }
     };
 
     const pdfBase64 = await generatePDF(pdfData);
@@ -307,8 +335,40 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
     return allDetalles.filter(d => typeof (d as any).medicoId === 'number' && selectedMedicos.has((d as any).medicoId as number));
   }, [analisisData, selectedMedicos]);
 
-  // Función principal para generar el pago completo
-  const handleGenerarPagoCompleto = async () => {
+  const selectedDetalles = useMemo(() => {
+    return detallesFiltrados.filter(d => {
+      const id = d.v_ServiceComponentId || `${d.numeroLinea}`;
+      return selectedServicios.has(id);
+    });
+  }, [detallesFiltrados, selectedServicios]);
+
+  const totalVisa = useMemo(() => {
+    return selectedDetalles.reduce((sum, d) => {
+      const name = (d as any).formaPagoName?.toString().toUpperCase() || '';
+      return name.includes('VISA') ? sum + (d.precioServicio || 0) : sum;
+    }, 0);
+  }, [selectedDetalles]);
+  const totalEfectivo = useMemo(() => {
+    return selectedDetalles.reduce((sum, d) => {
+      const name = (d as any).formaPagoName?.toString().toUpperCase() || '';
+      return name.includes('EFECTIVO') ? sum + (d.precioServicio || 0) : sum;
+    }, 0);
+  }, [selectedDetalles]);
+  const descuentoVisa = useMemo(() => {
+    const p = Math.max(0, Math.min(visaDiscountPercent, 100));
+    return totalVisa * (1 - p / 100);
+  }, [totalVisa, visaDiscountPercent]);
+  const totalGeneral = useMemo(() => totalEfectivo + descuentoVisa, [totalEfectivo, descuentoVisa]);
+  const totalSinIgv = useMemo(() => (includeIgv ? totalGeneral * 0.82 : totalGeneral), [totalGeneral, includeIgv]);
+  const manualFactor = useMemo(() => {
+    return manualPercents.reduce((acc, p) => acc * (p / 100), 1);
+  }, [manualPercents]);
+  const appliedTotalMedicoCurrent = useMemo(() => {
+    return totalSinIgv * (manualPercents.length ? manualFactor : 1);
+  }, [totalSinIgv, manualPercents, manualFactor]);
+
+  // Función principal para generar el pago completo (requiere cierreId)
+  const generateNow = async (cierreIdParam?: number) => {
     if (!pagoRequest || !pagoRequest.servicesDetails || pagoRequest.servicesDetails.length === 0) {
       ToastAlerts.warning({
         title: "Selección requerida",
@@ -325,40 +385,77 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
       return;
     }
 
+    const cierre = typeof cierreIdParam === 'number' ? cierreIdParam : cierreId;
+    if (!cierre || cierre <= 0) {
+      ToastAlerts.warning({ title: 'Periodo requerido', message: 'Seleccione año y mes con cierre de Caja Mayor' });
+      return;
+    }
+
     setGeneratingPDF(true);
     
     try {
-      // Obtener solo los detalles seleccionados
-      const detallesSeleccionados = analisisData.detalles?.filter(detalle => {
-        const serviceId = detalle.v_ServiceComponentId || `${detalle.numeroLinea}`;
-        return selectedServicios.has(serviceId);
-      }) || [];
+      // Obtener detalles visibles (por médicos seleccionados), omitimos ya pagados
+      const detallesSeleccionados = (detallesFiltrados || []).filter(d => d.esPagado !== 1);
+      const pdfBase64 = await generatePagoMedicoPDF(
+        analisisData.cabecera,
+        detallesSeleccionados,
+        proveedorNameFromCompra,
+        null,
+        proveedorFromCompra,
+        movimientoEgresoFromCompra,
+        `${periodoAnio}${periodoMes}`,
+        fechaEmisionFromCompra
+      );
+      
+      // ServicesDetails de toda la grid
+      const servicesDetailsAll: ServicesPaidDetailRequest[] = (detallesFiltrados || []).map(detalle => ({
+        v_ServiceId: detalle.v_ServiceId,
+        r_Price: 0.0,
+        r_Porcentaje: 0.0,
+        r_Pagado: 0.0
+      }));
 
-      // Generar el PDF
-      const pdfBase64 = await generatePagoMedicoPDF(analisisData.cabecera, detallesSeleccionados);
-      
-      // Crear el request con el PDF incluido
-      const pagoRequestWithPDF: GenerarPagoMedicoRequest = {
-        ...pagoRequest,
-        v_Comprobante: pdfBase64 // Incluir el PDF en base64
-      };
+      {
+        // Crear el request con el PDF incluido
+        const pagoRequestWithPDF: GenerarPagoMedicoRequest = {
+          ...pagoRequest,
+          i_MedicoTratanteId: proveedorFromCompra ?? pagoRequest?.i_MedicoTratanteId,
+          servicesDetails: servicesDetailsAll,
+          r_PagadoTotal: Number(appliedTotalMedicoCurrent.toFixed(2)),
+          v_Comprobante: pdfBase64
+        };
 
-      // Enviar el POST a la base de datos
-      const response = await pagoMedicosService.generarPagoMedico(pagoRequestWithPDF);
-      
-      ToastAlerts.success({
-        title: "Pago generado exitosamente",
-        message: `Se ha generado el pago ID: ${response.paidId} por S/ ${pagoRequest.r_PagadoTotal.toFixed(2)}`,
-        duration: 5000
-      });
-      
-      // Cerrar el modal principal
-      onClose();
-      
-      if (onPagoGenerado) {
-        onPagoGenerado();
+        // Enviar el POST a la base de datos
+        const response = await pagoMedicosService.generarPagoMedico(pagoRequestWithPDF);
+        
+        ToastAlerts.success({
+          title: "Pago generado exitosamente",
+          message: `Se ha generado el pago ID: ${response.paidId} por ${fmtCurrency(appliedTotalMedicoCurrent)}`,
+          duration: 5000
+        });
+        
+        // Cerrar el modal principal
+        onClose();
+        
+        if (onPagoGenerado) {
+          onPagoGenerado();
+        }
+        setPdfToView(pdfBase64);
       }
       
+      // Abrir Registro de Compras con prefill
+      const hoy = new Date().toISOString().split('T')[0];
+      setRegistroComprasInitial({
+        fechaEmision: hoy,
+        importeTotal: Number(appliedTotalMedicoCurrent.toFixed(2)),
+        codigoMoneda: 'PEN',
+        idFamiliaEgreso: 8,
+        idTipoEgreso: 48,
+        observaciones: `Pago de médicos periodo ${periodoAnio}-${periodoMes}`,
+        origen: 'pago_de_medicos'
+      } as any);
+      setShowRegistroCompras(true);
+
     } catch (error) {
       console.error('Error al generar pago completo:', error);
       ToastAlerts.error({
@@ -368,6 +465,24 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
     } finally {
       setGeneratingPDF(false);
     }
+  };
+
+  const handleGenerarPagoCompleto = async () => {
+    if (!cierreId || cierreId <= 0) {
+      setIsPeriodoModalOpen(true);
+      return;
+    }
+    const hoy = new Date().toISOString().split('T')[0];
+    setRegistroComprasInitial({
+      fechaEmision: hoy,
+      importeTotal: Number(appliedTotalMedicoCurrent.toFixed(2)),
+      codigoMoneda: 'PEN',
+      idFamiliaEgreso: 8,
+      idTipoEgreso: 48,
+      observaciones: `Pago de médicos periodo ${periodoAnio}-${periodoMes}`,
+      origen: 'pago_de_medicos'
+    } as any);
+    setShowRegistroCompras(true);
   };
 
   // Función para generar y descargar solo el PDF (sin guardar en BD)
@@ -413,13 +528,8 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
-      // Generar nombre de archivo con timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const nombreArchivoProfesional = (analisisData.cabecera && analisisData.cabecera.length === 1)
-        ? (analisisData.cabecera[0].nombreMedico?.replace(/\s+/g, '-') || 'profesional')
-        : 'varios-medicos';
-      link.download = `comprobante-pago-medico-${nombreArchivoProfesional}-${timestamp}.pdf`;
+      const docNumber = buildCurrentDocumentNumber();
+      link.download = `${docNumber}.pdf`;
       
       // Agregar al DOM, hacer click y remover
       document.body.appendChild(link);
@@ -829,6 +939,7 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
 
       setValidationErrors(errores);
       setIsValidationActive(true);
+      setExcelValidatedOk(errores.length === 0);
 
              // Actualizar analisisData con la validación
        setAnalisisData({
@@ -925,6 +1036,7 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
     setValidationErrors([]);
     setShowValidationModal(false);
     setIsValidationActive(false);
+    setExcelValidatedOk(false);
     
     ToastAlerts.info({
       title: "Formulario limpiado",
@@ -1242,7 +1354,23 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
                       setSelectedServicios={setSelectedServicios}
                       isValidationActive={isValidationActive}
                       isAnalysisLoaded={true}
+                      excelValidatedOk={excelValidatedOk}
                       cabeceras={analisisData?.cabecera || []}
+                      manualPercents={manualPercents}
+                      manualInput={manualInput}
+                      setManualPercents={setManualPercents}
+                      setManualInput={setManualInput}
+                      includeIgv={includeIgv}
+                      setIncludeIgv={setIncludeIgv}
+                      visaDiscountPercent={visaDiscountPercent}
+                      setVisaDiscountPercent={setVisaDiscountPercent}
+                      totalVisa={totalVisa}
+                      totalEfectivo={totalEfectivo}
+                      descuentoVisa={descuentoVisa}
+                      totalGeneral={totalGeneral}
+                      totalSinIgv={totalSinIgv}
+                      manualFactor={manualFactor}
+                      appliedTotalMedicoCurrent={appliedTotalMedicoCurrent}
                       onSelectionChange={(nuevasSelecciones) => {
                         const nuevoPagoRequest = construirPagoRequest(nuevasSelecciones, (detallesFiltrados || []) as PagoMedicoDetalle[]);
                         setPagoRequest(nuevoPagoRequest);
@@ -1264,9 +1392,11 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
                 Cancelar
               </button>
               
+              
               {/* Botón de Imprimir PDF */}
               {showAnalisis && analisisData && (
                 <motion.button
+                  style={{ display: 'none' }}
                   onClick={handleImprimirPDF}
                   disabled={!pagoRequest || !pagoRequest.servicesDetails || pagoRequest.servicesDetails.length === 0 || generatingPDF}
                   className={`px-6 py-2 rounded-lg font-medium transition-colors ${
@@ -1313,7 +1443,7 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
                     <>
                       <CheckCircle className="w-4 h-4 inline mr-2" />
                       {pagoRequest && pagoRequest.servicesDetails && pagoRequest.servicesDetails.length > 0 
-                        ? `Generar Pago (S/ ${pagoRequest.r_PagadoTotal.toFixed(2)})` 
+                        ? `Generar Pago (${fmtCurrency(appliedTotalMedicoCurrent)})` 
                         : 'Seleccione servicios'
                       }
                     </>
@@ -1323,6 +1453,142 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
             </div>
           </div>
         </motion.div>
+
+        {/* Mini Modal de selección de periodo */}
+        <AnimatePresence>
+          {isPeriodoModalOpen && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 z-[10000] flex items-center justify-center p-4">
+              <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }} className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md border border-gray-200 dark:border-gray-700">
+                <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                  <h4 className="text-base font-semibold text-gray-900 dark:text-white">Seleccionar periodo</h4>
+                  <button onClick={() => setIsPeriodoModalOpen(false)} className="text-gray-500 hover:text-gray-700"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="px-5 py-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Año</label>
+                      <select value={periodoAnio} onChange={(e) => setPeriodoAnio(e.target.value)} className="w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white">
+                        {Array.from({ length: 5 }).map((_, idx) => {
+                          const y = new Date().getFullYear() - (4 - idx);
+                          return <option key={y} value={String(y)}>{y}</option>;
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mes</label>
+                      <select value={periodoMes} onChange={(e) => setPeriodoMes(e.target.value)} className="w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white">
+                        {Array.from({ length: 12 }).map((_, i) => {
+                          const m = String(i + 1).padStart(2, '0');
+                          return <option key={m} value={m}>{m}</option>;
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Se validará si existe un cierre de Caja Mayor para el periodo seleccionado.</p>
+                </div>
+                <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+                  <button onClick={() => setIsPeriodoModalOpen(false)} className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md">Cancelar</button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const resp = await cajaService.checkCierreExists({ anio: periodoAnio, mes: periodoMes });
+                        const model = (resp as any)?.objModel ?? {};
+                        const exists = (model.Exists ?? model.exists) === true;
+                        const id = model.IdCajaMayorCierre ?? model.idCajaMayorCierre;
+                        if (!exists || !id || Number(id) <= 0) {
+                          ToastAlerts.error({ title: 'Periodo sin Caja', message: 'No hay caja creada para ese periodo' });
+                          setIsPeriodoModalOpen(false);
+                          return;
+                        }
+                        const idNum = Number(id);
+                        setCierreId(idNum);
+                        setIsPeriodoModalOpen(false);
+                        const hoy = new Date().toISOString().split('T')[0];
+                        setRegistroComprasInitial({
+                          fechaEmision: hoy,
+                          importeTotal: Number(appliedTotalMedicoCurrent.toFixed(2)),
+                          codigoMoneda: 'PEN',
+                          idFamiliaEgreso: 8,
+                          idTipoEgreso: 48,
+                          observaciones: `Pago de médicos periodo ${periodoAnio}-${periodoMes}`,
+                          origen: 'pago_de_medicos'
+                        } as any);
+                        setShowRegistroCompras(true);
+                      } catch (e) {
+                        ToastAlerts.error({ title: 'Error', message: 'No se pudo validar el periodo' });
+                      }
+                    }}
+                  className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark"
+                  >
+                    Seleccionar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Modal Registro de Compras post-pago */}
+        <RegistroComprasModal
+          isOpen={showRegistroCompras}
+          idCajaMayorCierre={cierreId ?? 0}
+          idTipoCaja={1}
+          onClose={() => setShowRegistroCompras(false)}
+          onSaved={() => setShowRegistroCompras(false)}
+          mode={'create'}
+          initialData={registroComprasInitial}
+          onCompraRegistrada={async ({ idProveedor, razonSocialProveedor, rucProveedor, idMovimientoEgreso, fechaEmision }) => {
+            try {
+              setProveedorFromCompra(idProveedor);
+              setProveedorNameFromCompra(razonSocialProveedor);
+              setMovimientoEgresoFromCompra(idMovimientoEgreso);
+              setFechaEmisionFromCompra(fechaEmision);
+              const pdfBase64 = await generatePagoMedicoPDF(
+                analisisData?.cabecera || [],
+                (detallesFiltrados || []) as PagoMedicoDetalle[],
+                razonSocialProveedor,
+                rucProveedor,
+                idProveedor,
+                idMovimientoEgreso,
+                `${periodoAnio}${periodoMes}`,
+                fechaEmision
+              );
+              const servicesDetailsAll: ServicesPaidDetailRequest[] = (detallesFiltrados || []).map(detalle => ({
+                v_ServiceId: detalle.v_ServiceId,
+                r_Price: 0.0,
+                r_Porcentaje: 0.0,
+                r_Pagado: 0.0
+              }));
+              const pagoRequestWithPDF: GenerarPagoMedicoRequest = {
+                ...pagoRequest!,
+                i_MedicoTratanteId: idProveedor,
+                servicesDetails: servicesDetailsAll,
+                r_PagadoTotal: Number(appliedTotalMedicoCurrent.toFixed(2)),
+                v_Comprobante: pdfBase64
+              };
+              const response = await pagoMedicosService.generarPagoMedico(pagoRequestWithPDF);
+              ToastAlerts.success({ title: 'Pago generado exitosamente', message: `Pago ID: ${response.paidId} • Proveedor: ${razonSocialProveedor}` });
+              setPdfToView(pdfBase64);
+            } catch (e) {
+              console.error('Error flujo pago tras registro de compra:', e);
+              ToastAlerts.error({ title: 'Error', message: 'No se pudo completar el pago médico' });
+            }
+          }}
+        />
+        {/* Visor PDF */}
+        <AnimatePresence>
+          {pdfToView && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 z-[10000] flex items-center justify-center p-4">
+              <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }} className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-5xl h-[80vh] overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                  <h4 className="text-base font-semibold text-gray-900 dark:text-white">Comprobante generado</h4>
+                  <button onClick={() => { setPdfToView(null); onClose(); }} className="text-gray-500 hover:text-gray-700"><X className="w-5 h-5" /></button>
+                </div>
+                <iframe className="w-full h-full" src={`data:application/pdf;base64,${pdfToView}`} title="Pago Médico PDF" />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Modal de errores de validación */}
         <AnimatePresence>
@@ -1642,23 +1908,28 @@ const DetallesGrid: React.FC<{
   isValidationActive?: boolean;
   isAnalysisLoaded?: boolean;
   cabeceras?: PagoMedicoCabecera[];
-}> = ({ detalles, selectedServicios, setSelectedServicios, onSelectionChange, isValidationActive = false, isAnalysisLoaded = false, cabeceras = [] }) => {
+  excelValidatedOk?: boolean;
+  manualPercents: number[];
+  manualInput: string;
+  setManualPercents: React.Dispatch<React.SetStateAction<number[]>>;
+  setManualInput: React.Dispatch<React.SetStateAction<string>>;
+  includeIgv: boolean;
+  setIncludeIgv: React.Dispatch<React.SetStateAction<boolean>>;
+  visaDiscountPercent: number;
+  setVisaDiscountPercent: React.Dispatch<React.SetStateAction<number>>;
+  totalVisa: number;
+  totalEfectivo: number;
+  descuentoVisa: number;
+  totalGeneral: number;
+  totalSinIgv: number;
+  manualFactor: number;
+  appliedTotalMedicoCurrent: number;
+}> = ({ detalles, selectedServicios, setSelectedServicios, onSelectionChange, isValidationActive = false, isAnalysisLoaded = false, cabeceras = [], excelValidatedOk = false, manualPercents, manualInput, setManualPercents, setManualInput, includeIgv, setIncludeIgv, visaDiscountPercent, setVisaDiscountPercent, totalVisa, totalEfectivo, descuentoVisa, totalGeneral, totalSinIgv, manualFactor, appliedTotalMedicoCurrent }) => {
 
-  // Los checkboxes están deshabilitados si hay análisis cargado O si la validación está activa
-  const areCheckboxesDisabled = isAnalysisLoaded || isValidationActive;
+  const areCheckboxesDisabled = false;
 
   // Función para manejar la selección individual de servicios
   const handleSelectServicio = (serviceId: string, isChecked: boolean) => {
-    // Bloquear si los checkboxes están deshabilitados
-    if (areCheckboxesDisabled) {
-      ToastAlerts.warning({
-        title: "Selección deshabilitada",
-        message: "Los checkboxes están deshabilitados después de cargar el análisis",
-        duration: 2000
-      });
-      return;
-    }
-    
     const newSelected = new Set(selectedServicios);
     if (isChecked) {
       newSelected.add(serviceId);
@@ -1671,16 +1942,6 @@ const DetallesGrid: React.FC<{
 
   // Función para seleccionar/deseleccionar todos los servicios no pagados
   const handleSelectAll = (isChecked: boolean) => {
-    // Bloquear si los checkboxes están deshabilitados
-    if (areCheckboxesDisabled) {
-      ToastAlerts.warning({
-        title: "Selección deshabilitada",
-        message: "Los checkboxes están deshabilitados después de cargar el análisis",
-        duration: 2000
-      });
-      return;
-    }
-    
     let nuevosSeleccionados: Set<string>;
     if (isChecked) {
       nuevosSeleccionados = new Set<string>();
@@ -1717,6 +1978,141 @@ const DetallesGrid: React.FC<{
 
   const globalServiciosSeleccionados = selectedDetails.length;
   const globalTotalComprobantes = selectedDetails.reduce((sum, d) => sum + (d.precioServicio || 0), 0);
+
+  
+
+  const addManualPercent = () => {
+    const value = Number(manualInput);
+    if (isNaN(value)) return;
+    if (value <= 0 || value > 100) return;
+    setManualPercents(prev => [...prev, Math.round(value * 100) / 100]);
+    setManualInput('');
+  };
+  const removeManualPercent = (idx: number) => {
+    setManualPercents(prev => prev.filter((_, i) => i !== idx));
+  };
+  const resetManualPercents = () => {
+    setManualPercents([]);
+    setManualInput('');
+  };
+
+  const detalleYResumenRows = useMemo(() => (
+    <>
+      {detalles.map((detalle, index) => (
+        <motion.tr
+          key={generateUniqueKey(detalle as any, index)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: index * 0.02 }}
+          className="hover:bg-gray-50 dark:hover:bg-gray-700"
+        >
+          <td className="px-4 py-3">
+            <input
+              type="checkbox"
+              disabled={(detalle as any).esPagado === 1}
+              checked={selectedServicios.has((detalle as any).v_ServiceComponentId || `${(detalle as any).numeroLinea}`)}
+              onChange={(e) => handleSelectServicio(
+                (detalle as any).v_ServiceComponentId || `${(detalle as any).numeroLinea}`,
+                e.target.checked
+              )}
+              className={`w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed`}
+            />
+          </td>
+          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">{(detalle as any).numeroLinea}</td>
+          <td className="px-4 py-3 text-sm text-gray-500">{(detalle as any).fechaServicioFormateada || new Date((detalle as any).d_ServiceDate).toLocaleDateString()}</td>
+          {isValidationActive && (
+            <td className="px-4 py-3 text-center">
+              {(detalle as any).esValido === true ? (
+                <Check className="w-5 h-5 text-green-500 mx-auto" />
+              ) : (detalle as any).esValido === false ? (
+                <XCircle className="w-5 h-5 text-red-500 mx-auto" />
+              ) : (
+                <span className="text-gray-400">-</span>
+              )}
+            </td>
+          )}
+          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white w-32 truncate" title={(detalle as any).paciente || 'N/A'}>{(detalle as any).paciente || 'N/A'}</td>
+          <td className="px-4 py-3 text-sm text-gray-500 w-40 truncate" title={getFirstComprobante((detalle as any).v_ComprobantePago)}>{getFirstComprobante((detalle as any).v_ComprobantePago)}</td>
+          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white w-32 truncate" title={(detalle as any).formaPagoName || '-' }>{(detalle as any).formaPagoName || '-'}</td>
+          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap text-right">{(detalle as any).precioServicioFormateado || `S/ ${((detalle as any).precioServicio as number).toFixed(2)}`}</td>
+          <td className="px-4 py-3">
+            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+              (detalle as any).esPagado === 1
+                ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
+                : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
+            }`}>
+              {(detalle as any).estadoPago || ((detalle as any).esPagado === 1 ? 'Pagado' : 'Pendiente')}
+            </span>
+          </td>
+        </motion.tr>
+      ))}
+      {excelValidatedOk && (
+      <tr className="bg-gray-100 dark:bg-gray-700/40">
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        {isValidationActive && (<td className="px-4 py-3" />)}
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">TOTAL VISA</td>
+        <td className="px-4 py-3 text-sm font-semibold text-right text-gray-900 dark:text-white whitespace-nowrap">{fmtCurrency(totalVisa)}</td>
+        <td className="px-4 py-3" />
+      </tr>
+      )}
+      {excelValidatedOk && (
+      <tr className="bg-gray-100 dark:bg-gray-700/40">
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        {isValidationActive && (<td className="px-4 py-3" />)}
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">DESCUENTO VISA</td>
+        <td className="px-4 py-3 text-sm font-semibold text-right text-gray-900 dark:text-white whitespace-nowrap">{fmtCurrency(descuentoVisa)}</td>
+        <td className="px-4 py-3" />
+      </tr>
+      )}
+      {excelValidatedOk && (
+      <tr className="bg-gray-100 dark:bg-gray-700/40">
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        {isValidationActive && (<td className="px-4 py-3" />)}
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">TOTAL EFECTIVO</td>
+        <td className="px-4 py-3 text-sm font-semibold text-right text-gray-900 dark:text-white whitespace-nowrap">{fmtCurrency(totalEfectivo)}</td>
+        <td className="px-4 py-3" />
+      </tr>
+      )}
+      {excelValidatedOk && (
+      <tr className="bg-gray-200 dark:bg-gray-700/60">
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        {isValidationActive && (<td className="px-4 py-3" />)}
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3 text-sm font-bold text-gray-900 dark:text-white">TOTAL</td>
+        <td className="px-4 py-3 text-sm font-bold text-right text-gray-900 dark:text-white whitespace-nowrap">{fmtCurrency(totalGeneral)}</td>
+        <td className="px-4 py-3" />
+      </tr>
+      )}
+      {excelValidatedOk && (
+      <tr className="bg-gray-200 dark:bg-gray-700/60">
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        {isValidationActive && (<td className="px-4 py-3" />)}
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3" />
+        <td className="px-4 py-3 text-sm font-bold text-gray-900 dark:text-white">TOTAL SIN IGV</td>
+        <td className="px-4 py-3 text-sm font-bold text-right text-gray-900 dark:text-white whitespace-nowrap">{fmtCurrency(totalSinIgv)}</td>
+        <td className="px-4 py-3" />
+      </tr>
+      )}
+    </>
+  ), [detalles, selectedServicios, areCheckboxesDisabled, isValidationActive, totalVisa, descuentoVisa, totalEfectivo, totalGeneral, totalSinIgv, excelValidatedOk]);
 
   // Agrupar por médico y calcular totales y porcentajes
   const resumenPorMedico = useMemo(() => {
@@ -1766,13 +2162,7 @@ const DetallesGrid: React.FC<{
                     type="checkbox"
                     checked={selectedServicios.size > 0 && selectedServicios.size === detalles.filter(d => d.esPagado !== 1).length}
                     onChange={(e) => handleSelectAll(e.target.checked)}
-                    disabled={areCheckboxesDisabled}
-                    className={`w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed ${
-                      areCheckboxesDisabled ? 'opacity-30 cursor-not-allowed' : ''
-                    }`}
-                    style={{
-                      pointerEvents: areCheckboxesDisabled ? 'none' : 'auto'
-                    }}
+                    className={`w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary`}
                   />
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -1792,7 +2182,10 @@ const DetallesGrid: React.FC<{
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-40">
                   Comprobante
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-32">
+                  Forma Pago
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">
                   Precio Servicio
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -1803,128 +2196,171 @@ const DetallesGrid: React.FC<{
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {detalles.length === 0 ? (
               <tr>
-                <td colSpan={isValidationActive ? 8 : 7} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={isValidationActive ? 9 : 8} className="px-6 py-12 text-center text-gray-500">
                   <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                   <p>No se encontraron servicios en el período seleccionado</p>
                 </td>
               </tr>
             ) : (
-              detalles.map((detalle, index) => (
-                <motion.tr
-                  key={generateUniqueKey(detalle, index)}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: index * 0.02 }}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  <td className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      disabled={detalle.esPagado === 1 || areCheckboxesDisabled}
-                      checked={selectedServicios.has(detalle.v_ServiceComponentId || `${detalle.numeroLinea}`)}
-                      onChange={(e) => handleSelectServicio(
-                        detalle.v_ServiceComponentId || `${detalle.numeroLinea}`, 
-                        e.target.checked
-                      )}
-                      className={`w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed ${
-                        areCheckboxesDisabled ? 'opacity-30 cursor-not-allowed' : ''
-                      }`}
-                      style={{
-                        pointerEvents: areCheckboxesDisabled ? 'none' : 'auto'
-                      }}
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                    {detalle.numeroLinea}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {detalle.fechaServicioFormateada || new Date(detalle.d_ServiceDate).toLocaleDateString()}
-                  </td>
-                  {isValidationActive && (
-                    <td className="px-4 py-3 text-center">
-                      {detalle.esValido === true ? (
-                        <Check className="w-5 h-5 text-green-500 mx-auto" />
-                      ) : detalle.esValido === false ? (
-                        <XCircle className="w-5 h-5 text-red-500 mx-auto" />
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                  )}
-                  <td className="px-4 py-3 text-sm text-gray-900 dark:text-white w-32 truncate" title={detalle.paciente || 'N/A'}>
-                    {detalle.paciente || 'N/A'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500 w-40 truncate" title={getFirstComprobante(detalle.v_ComprobantePago)}>
-                    {getFirstComprobante(detalle.v_ComprobantePago)}
-                  </td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                    {detalle.precioServicioFormateado || `S/ ${detalle.precioServicio.toFixed(2)}`}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      detalle.esPagado === 1
-                        ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
-                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
-                    }`}>
-                      {detalle.estadoPago || (detalle.esPagado === 1 ? 'Pagado' : 'Pendiente')}
-                    </span>
-                  </td>
-                </motion.tr>
-              ))
+              detalleYResumenRows
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Resumen al pie del card */}
-      <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Servicios seleccionados</h4>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{globalServiciosSeleccionados}</p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Total comprobantes</h4>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{`S/ ${globalTotalComprobantes.toFixed(2)}`}</p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Pago médico total (aplicando % al total)</h4>
-            <p className="text-2xl font-bold text-green-700 dark:text-green-300">{`S/ ${pagoMedicoGlobal.toFixed(2)}`}</p>
-          </div>
-        </div>
-
-        {resumenPorMedico.length > 0 && (
-          <div className="mt-4">
-            <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Detalle por médico</h5>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100 dark:bg-gray-700">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Médico</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">% Médico</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Servicios</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Total comprobantes</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-300">Pago médico</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {resumenPorMedico.map((r) => (
-                    <tr key={`resumen-medico-${r.medicoId}`}>
-                      <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">{r.nombreMedico}</td>
-                      <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">{`${r.porcentaje}%`}</td>
-                      <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">{r.serviciosCount}</td>
-                      <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">{`S/ ${r.totalComprobantes.toFixed(2)}`}</td>
-                      <td className="px-3 py-2 text-sm font-medium text-green-700 dark:text-green-300">{`S/ ${r.pagoMedicoTotal.toFixed(2)}`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {/* Aplicar porcentaje manual al pago del médico */}
+      {excelValidatedOk && (
+        <div className="px-6 pt-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-base font-semibold text-gray-900 dark:text-white">Aplicar porcentaje manual al pago del médico</h4>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Base: {fmtCurrency(totalSinIgv)}</div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+              <div className="md:col-span-8 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={includeIgv}
+                      onChange={(e) => setIncludeIgv(e.target.checked)}
+                      className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary"
+                    />
+                    Restar IGV (18%)
+                  </label>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Descuento VISA %</label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        value={visaDiscountPercent}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (isNaN(v)) return;
+                          const clamped = Math.max(0, Math.min(v, 100));
+                          setVisaDiscountPercent(clamped);
+                        }}
+                        className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                      <span className="px-2 py-1 text-xs rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">{visaDiscountPercent}%</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Nuevo porcentaje</label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        step={0.01}
+                        value={manualInput}
+                        onChange={(e) => setManualInput(e.target.value)}
+                        placeholder="Ej: 80"
+                        className="w-36 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                      <button
+                        onClick={addManualPercent}
+                        className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg"
+                      >
+                        Aplicar
+                      </button>
+                      <button
+                        onClick={resetManualPercents}
+                        className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg border border-gray-300 dark:border-gray-600"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {[100, 90, 80, 70].map((preset) => (
+                        <button
+                          key={`preset-${preset}`}
+                          onClick={() => setManualPercents((prev) => [...prev, preset])}
+                          className="px-2.5 py-1 text-xs rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600"
+                          title={`Aplicar ${preset}%`}
+                        >
+                          {preset}%
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Se aplican en cadena. Ej: 80% luego 50% = factor 0.40</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Porcentajes aplicados</label>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {manualPercents.length === 0 ? (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Ninguno</span>
+                      ) : manualPercents.map((p, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-2 px-2.5 py-1 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                          ×{p}%
+                          <button onClick={() => removeManualPercent(idx)} className="text-blue-700 dark:text-blue-300">✕</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="md:col-span-4">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Resultado aplicado</label>
+                <div className="mt-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 p-4">
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Factor</div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">{manualPercents.length ? manualFactor.toFixed(4) : '1.0000'}</div>
+                  <div className="mt-3 text-xs text-gray-600 dark:text-gray-400">Pago médico</div>
+                  <div className="text-2xl font-bold text-green-700 dark:text-green-300">{fmtCurrency(appliedTotalMedicoCurrent)}</div>
+                </div>
+              </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Resumen al pie del card */}
+      {excelValidatedOk && (
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Servicios seleccionados</h4>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{globalServiciosSeleccionados}</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Total comprobantes</h4>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{fmtCurrency(totalSinIgv)}</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Pago médico total (aplicando % al total)</h4>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-300">{fmtCurrency(appliedTotalMedicoCurrent)}</p>
+            </div>
+          </div>
+
+        </div>
+      )}
     </div>
   );
 };
 
 export default GenerarPagoModal;
+  const buildCurrentDocumentNumber = (): string => {
+    const pad2 = (n: number) => n.toString().padStart(2, '0');
+    const normalizeFecha = (isoDate?: string | null): string => {
+      if (!isoDate) {
+        const d = new Date();
+        return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+      }
+      const parts = isoDate.split('-');
+      if (parts.length === 3) return `${parts[0]}${parts[1]}${parts[2]}`;
+      const d = new Date(isoDate);
+      return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+    };
+    const periodo = `${periodoAnio}${periodoMes}`;
+    const fechaEmi = normalizeFecha(fechaEmisionFromCompra ?? formData.fechaInicio);
+    if (proveedorFromCompra && movimientoEgresoFromCompra && periodo) {
+      return `${proveedorFromCompra}-${movimientoEgresoFromCompra}-${periodo}-${fechaEmi}`;
+    }
+    const d = new Date();
+    return `${pad2(d.getDate())}${pad2(d.getMonth() + 1)}${d.getFullYear()}${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}${d.getMilliseconds().toString().padStart(3, '0')}`.padEnd(20, '0').substring(0, 20);
+  };

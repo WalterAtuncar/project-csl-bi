@@ -692,30 +692,6 @@ const HonorariosMedicos: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
-                        <motion.button
-                          onClick={() => handleVer(honorario)}
-                          className="text-primary hover:text-primary-dark"
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.95 }}
-                          title="Ver detalles"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </motion.button>
-                        
-                        <motion.button
-                          onClick={() => handleEliminar(honorario)}
-                          disabled={honorario.i_IsDeleted === 1}
-                          className={`transition-colors ${
-                            honorario.i_IsDeleted === 1 
-                              ? 'text-gray-400 cursor-not-allowed' 
-                              : 'text-red-600 hover:text-red-800'
-                          }`}
-                          whileHover={honorario.i_IsDeleted === 1 ? {} : { scale: 1.1 }}
-                          whileTap={honorario.i_IsDeleted === 1 ? {} : { scale: 0.95 }}
-                          title={honorario.i_IsDeleted === 1 ? "Ya eliminado" : "Eliminar"}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </motion.button>
                         
                         <motion.button
                           onClick={() => handleImprimir(honorario)}

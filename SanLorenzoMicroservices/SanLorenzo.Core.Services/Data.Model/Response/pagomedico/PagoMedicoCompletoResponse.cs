@@ -59,5 +59,7 @@ namespace Data.Model.Response.pagomedico
         public string IconoEstado { get; set; }
         public decimal? MontoPagadoReal { get; set; }
         public decimal? PorcentajePagadoReal { get; set; }
+        public int? IdFormaPago { get; set; }
+        public string FormaPagoName { get; set; }
     }
 }

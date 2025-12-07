@@ -211,6 +211,7 @@ export interface PDFData {
   details: PDFDetailItem[];
   columns: PDFColumn[];
   summary?: PDFSummary;
+  options?: { size?: 'A4' | 'A5' | string; orientation?: 'portrait' | 'landscape'; receipt?: boolean };
 }
 
 // Componente para formatear valores según el tipo
@@ -277,7 +278,7 @@ const PDFDocument: React.FC<{ data: PDFData }> = ({ data }) => {
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
+      <Page size={data.options?.size || 'A4'} orientation={data.options?.orientation || 'portrait'} style={styles.page}>
         {/* Header con logo y datos de la empresa */}
         <View style={styles.header}>
           <View style={styles.logoSection}>
@@ -327,47 +328,64 @@ const PDFDocument: React.FC<{ data: PDFData }> = ({ data }) => {
           })}
         </View>
 
-        {/* Tabla de detalles */}
-        {data.details.length > 0 && (
-          <View style={styles.table}>
-            {/* Header de la tabla */}
-            <View style={styles.tableHeader}>
-              {data.columns.map((column) => (
-                <View key={column.key} style={{ width: `${column.width}%` }}>
-                  <Text style={styles.tableHeaderText}>{column.header}</Text>
-                </View>
-              ))}
+        {data.options?.receipt ? (
+          <View style={{ marginTop: 15, padding: 16, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8 }}>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1f2937', marginBottom: 8 }}>Datos del Proveedor</Text>
+            <View style={{ marginBottom: 10 }}>
+              <View style={styles.dataRow}>
+                <Text style={styles.dataLabel}>Razón Social:</Text>
+                <Text style={styles.dataValue}>{data.header['providerName'] || ''}</Text>
+              </View>
+              <View style={styles.dataRow}>
+                <Text style={styles.dataLabel}>RUC:</Text>
+                <Text style={styles.dataValue}>{data.header['providerRuc'] || ''}</Text>
+              </View>
             </View>
 
-            {/* Filas de datos */}
-            {data.details.map((item, index) => (
-              <View 
-                key={item.id || index} 
-                style={[
-                  styles.tableRow, 
-                  ...(index % 2 === 1 ? [styles.tableRowAlt] : [])
-                ]}
-              >
+            <Text style={{ fontSize: 12, color: '#374151', lineHeight: 1.5, marginBottom: 16 }}>
+              {`Se hace constar que se ha realizado el pago por ${String(data.summary?.['Número de atenciones'] || '')} atenciones del período ${String(data.summary?.['Período'] || '')}, correspondientes a la especialidad ${String(data.summary?.['Especialidad'] || '')}, por el monto de ${formatValue(Number(data.summary?.['Monto pagado'] || 0), 'currency')}.`}
+            </Text>
+
+            <View style={{ marginTop: 30, flexDirection: 'row', justifyContent: 'space-between' }}>
+              <View style={{ width: '48%', alignItems: 'center' }}>
+                <View style={{ height: 60, width: '100%', borderBottomWidth: 1, borderBottomColor: '#9ca3af' }} />
+                <Text style={{ fontSize: 10, color: '#6b7280', marginTop: 6 }}>{data.header['providerName'] || ''}</Text>
+                <Text style={{ fontSize: 9, color: '#6b7280' }}>Firma de recibido</Text>
+              </View>
+              <View style={{ width: '48%', alignItems: 'center' }}>
+                <View style={{ height: 60, width: '100%', borderBottomWidth: 1, borderBottomColor: '#9ca3af' }} />
+                <Text style={{ fontSize: 10, color: '#6b7280', marginTop: 6 }}>{data.header.companyName || ''}</Text>
+                <Text style={{ fontSize: 9, color: '#6b7280' }}>Representante</Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          data.details.length > 0 && (
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
                 {data.columns.map((column) => (
                   <View key={column.key} style={{ width: `${column.width}%` }}>
-                    <Text 
-                      style={[
-                        styles.tableCell,
-                        ...(column.align === 'left' ? [styles.tableCellLeft] : []),
-                        ...(column.align === 'right' ? [styles.tableCellRight] : []),
-                      ]}
-                    >
-                      {formatValue(item[column.key], column.format)}
-                    </Text>
+                    <Text style={styles.tableHeaderText}>{column.header}</Text>
                   </View>
                 ))}
               </View>
-            ))}
-          </View>
+              {data.details.map((item, index) => (
+                <View key={item.id || index} style={[styles.tableRow, ...(index % 2 === 1 ? [styles.tableRowAlt] : [])]}>
+                  {data.columns.map((column) => (
+                    <View key={column.key} style={{ width: `${column.width}%` }}>
+                      <Text style={[styles.tableCell, ...(column.align === 'left' ? [styles.tableCellLeft] : []), ...(column.align === 'right' ? [styles.tableCellRight] : [])]}>
+                        {formatValue(item[column.key], column.format)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
+          )
         )}
 
         {/* Resumen/Totales */}
-        {data.summary && (
+        {data.summary && !data.options?.receipt && (
           <View style={styles.summary}>
             <Text style={styles.summaryTitle}>Resumen</Text>
             {Object.entries(data.summary).map(([key, value]) => (

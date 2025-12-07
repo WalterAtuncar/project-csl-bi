@@ -29,9 +29,11 @@ namespace Business.Logic.IContractsBL.caja
         RegistroComprasResponse InsertRegistroCompras(InsertRegistroComprasRequest request);
         RegistroComprasResponse GetRegistroComprasById(GetRegistroComprasByIdRequest request);
         RegistroComprasResponse PagarRegistroCompras(UpdateRegistroComprasPagoRequest request);
+        RegistroComprasResponse DeleteRegistroCompras(DeleteRegistroComprasRequest request);
         IEnumerable<CategoriaEgresoResponse> GetCategoriaEgresos(int groupId);
     IEnumerable<FlujoCajaConsolidadoResponse> FlujoCajaConsolidado(FlujoCajaConsolidadoRequest request);
     IEnumerable<FlujoCajaDetalladoResponse> FlujoCajaDetallado(FlujoCajaDetalladoRequest request);
-    (IEnumerable<RegistroComprasListItemResponse> data, int totalRows) ListRegistroCompras(RegistroComprasListRequest request);
+        (IEnumerable<RegistroComprasListItemResponse> data, int totalRows) ListRegistroCompras(RegistroComprasListRequest request);
+        object RecalcularIncremental(RecalcularIncrementalRequest request);
     }
 }

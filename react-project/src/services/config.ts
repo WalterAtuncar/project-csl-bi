@@ -39,7 +39,7 @@ export interface AppConfig {
  */
 export const defaultConfig: AppConfig = {
   api: {
-    baseURL: import.meta.env.VITE_API_BASE_URL ||'https://localhost:7036/api', //'http://190.116.90.35:8183/api', //
+    baseURL: 'http://190.116.90.35:8183/api', //import.meta.env.VITE_API_BASE_URL ||'https://localhost:7036/api', //
     timeout: 30000, // 30 segundos
     retryAttempts: 3,
     retryDelay: 1000, // 1 segundo

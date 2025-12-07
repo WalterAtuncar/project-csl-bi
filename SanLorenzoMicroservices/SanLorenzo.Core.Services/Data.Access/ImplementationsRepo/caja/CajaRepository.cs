@@ -173,35 +173,44 @@ namespace Data.Access.ImplementationsRepo.caja
 
         public CajaMayorMovimientoDbResponse InsertMovimientoManual(InsertMovimientoManualRequest request)
         {
-            try
+            var p = new DynamicParameters();
+            p.Add("@IdCajaMayorCierre", request.IdCajaMayorCierre);
+            p.Add("@IdTipoCaja", request.IdTipoCaja);
+            p.Add("@TipoMovimiento", request.TipoMovimiento);
+            if (request.IdFormaPago.HasValue) p.Add("@IdFormaPago", request.IdFormaPago);
+            p.Add("@ConceptoMovimiento", request.ConceptoMovimiento);
+            p.Add("@Subtotal", request.Subtotal);
+            p.Add("@IGV", request.IGV);
+            p.Add("@Origen", string.IsNullOrWhiteSpace(request.Origen) ? "manual" : request.Origen);
+            p.Add("@Total", request.Total);
+            p.Add("@FechaRegistro", request.FechaRegistro);
+            p.Add("@Observaciones", request.Observaciones);
+            p.Add("@CodigoDocumento", request.CodigoDocumento);
+            p.Add("@SerieDocumento", request.SerieDocumento);
+            p.Add("@NumeroDocumento", request.NumeroDocumento);
+            p.Add("@IdVenta", request.IdVenta);
+            p.Add("@InsertaIdUsuario", request.InsertaIdUsuario);
+            p.Add("@OutIdMovimiento", dbType: DbType.Int32, direction: ParameterDirection.Output);
+            using var cn = new SqlConnection(_connectionString);
+            cn.Execute("[dbo].[sp_CajaMayor_InsertMovimientoManual]", p, commandType: CommandType.StoredProcedure);
+            int newId = p.Get<int>("@OutIdMovimiento");
+            return new CajaMayorMovimientoDbResponse
             {
-                var p = new DynamicParameters();
-                p.Add("@IdCajaMayorCierre", request.IdCajaMayorCierre);
-                p.Add("@IdTipoCaja", request.IdTipoCaja);
-                p.Add("@TipoMovimiento", request.TipoMovimiento);
-                // Nuevos campos
-                if (request.IdFormaPago.HasValue) p.Add("@IdFormaPago", request.IdFormaPago);
-                p.Add("@ConceptoMovimiento", request.ConceptoMovimiento);
-                p.Add("@Subtotal", request.Subtotal);
-                p.Add("@IGV", request.IGV);
-                p.Add("@Origen", string.IsNullOrWhiteSpace(request.Origen) ? "manual" : request.Origen);
-                p.Add("@Total", request.Total);
-                p.Add("@FechaRegistro", request.FechaRegistro);
-                p.Add("@Observaciones", request.Observaciones);
-                p.Add("@CodigoDocumento", request.CodigoDocumento);
-                p.Add("@SerieDocumento", request.SerieDocumento);
-                p.Add("@NumeroDocumento", request.NumeroDocumento);
-                p.Add("@IdVenta", request.IdVenta);
-                p.Add("@InsertaIdUsuario", request.InsertaIdUsuario);
-                using var cn = new SqlConnection(_connectionString);
-                return cn.Query<CajaMayorMovimientoDbResponse>("[dbo].[sp_CajaMayor_InsertMovimientoManual]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();
-            }
-            catch (Exception ex)
-            {
-
-                throw ex;
-            }
-            
+                i_IdMovimiento = newId,
+                i_IdCajaMayorCierre = request.IdCajaMayorCierre,
+                i_IdTipoCaja = request.IdTipoCaja,
+                v_TipoMovimiento = request.TipoMovimiento,
+                d_Total = request.Total,
+                t_FechaMovimiento = request.FechaRegistro,
+                v_Observaciones = request.Observaciones,
+                v_Origen = string.IsNullOrWhiteSpace(request.Origen) ? "manual" : request.Origen,
+                v_CodigoDocumento = request.CodigoDocumento,
+                v_SerieDocumento = request.SerieDocumento,
+                v_NumeroDocumento = request.NumeroDocumento,
+                v_IdVenta = request.IdVenta,
+                i_InsertaIdUsuario = request.InsertaIdUsuario,
+                t_InsertaFecha = DateTime.Now
+            };
         }
 
         public IEnumerable<TipoCajaResponse> GetTiposCaja(bool includeInactive = false)
@@ -280,11 +289,11 @@ namespace Data.Access.ImplementationsRepo.caja
             p.Add("@CodigoMoneda", request.CodigoMoneda);
             p.Add("@TipoCambio", request.TipoCambio);
             p.Add("@AplicaDetraccion", request.AplicaDetraccion);
-            p.Add("@PorcentajeDetraccion", request.PorcentajeDetraccion);
-            p.Add("@MontoDetraccion", request.MontoDetraccion);
-            p.Add("@NumeroConstanciaDetraccion", request.NumeroConstanciaDetraccion);
+            p.Add("@PorcentajeDetraccion", (request.AplicaDetraccion && request.PorcentajeDetraccion.HasValue) ? request.PorcentajeDetraccion : null);
+            p.Add("@MontoDetraccion", (request.AplicaDetraccion && request.MontoDetraccion.HasValue) ? request.MontoDetraccion : null);
+            p.Add("@NumeroConstanciaDetraccion", request.AplicaDetraccion ? request.NumeroConstanciaDetraccion : null);
             p.Add("@AplicaRetencion", request.AplicaRetencion);
-            p.Add("@MontoRetencion", request.MontoRetencion);
+            p.Add("@MontoRetencion", (request.AplicaRetencion && request.MontoRetencion.HasValue) ? request.MontoRetencion : null);
             p.Add("@Observaciones", request.Observaciones);
             p.Add("@IdFamiliaEgreso", request.IdFamiliaEgreso);
             p.Add("@IdTipoEgreso", request.IdTipoEgreso);
@@ -306,9 +315,27 @@ namespace Data.Access.ImplementationsRepo.caja
             var p = new DynamicParameters();
             p.Add("@IdRegistroCompra", request.IdRegistroCompra);
             p.Add("@FechaPago", request.FechaPago);
+            if (!string.IsNullOrWhiteSpace(request.Estado)) p.Add("@Estado", request.Estado);
+            if (!string.IsNullOrWhiteSpace(request.Serie)) p.Add("@Serie", request.Serie);
+            if (!string.IsNullOrWhiteSpace(request.Numero)) p.Add("@Numero", request.Numero);
             if (request.ActualizaIdUsuario.HasValue) p.Add("@ActualizaIdUsuario", request.ActualizaIdUsuario);
             using var cn = new SqlConnection(_connectionString);
             return cn.Query<RegistroComprasResponse>("[dbo].[sp_RegistroCompras_Pagar]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();
+        }
+
+        public RegistroComprasResponse DeleteRegistroCompras(DeleteRegistroComprasRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("@IdRegistroCompra", request.IdRegistroCompra);
+            p.Add("@EliminaIdUsuario", request.EliminaIdUsuario);
+            using var cn = new SqlConnection(_connectionString);
+            var resp = cn.Query<RegistroComprasResponse>("[dbo].[sp_RegistroCompras_Delete]", p, commandType: CommandType.StoredProcedure).FirstOrDefault();
+            // Recalcular totales del cierre
+            var r = new DynamicParameters();
+            r.Add("@IdCajaMayorCierre", request.IdCajaMayorCierre);
+            r.Add("@ActualizaIdUsuario", request.EliminaIdUsuario);
+            cn.Execute("[dbo].[sp_CajaMayor_RecalcularTotales]", r, commandType: CommandType.StoredProcedure);
+            return resp;
         }
 
         public IEnumerable<CategoriaEgresoResponse> GetCategoriaEgresos(int groupId)
@@ -379,6 +406,26 @@ namespace Data.Access.ImplementationsRepo.caja
             }
 
             return (data, totalRows);
+        }
+
+        public object RecalcularIncremental(RecalcularIncrementalRequest request)
+        {
+            using var cn = new SqlConnection(_connectionString);
+            var periodo = cn.QuerySingle<int>("SELECT i_Periodo FROM dbo.cajamayor_cierre WHERE i_IdCajaMayorCierre=@id", new { id = request.IdCajaMayorCierre });
+            var anio = periodo / 100; var mes = periodo % 100;
+            var fechaDesde = new DateTime(anio, mes, 1);
+            var ultimoDiaMes = DateTime.DaysInMonth(anio, mes);
+            var finPeriodo = new DateTime(anio, mes, ultimoDiaMes);
+            var hoy = DateTime.Today;
+            var fechaHasta = (hoy > finPeriodo) ? finPeriodo : hoy;
+            var p = new DynamicParameters();
+            p.Add("@IdCajaMayorCierre", request.IdCajaMayorCierre);
+            p.Add("@DefaultIdTipoCaja", request.DefaultIdTipoCaja ?? 1);
+            p.Add("@FechaDesde", fechaDesde);
+            p.Add("@FechaHasta", fechaHasta);
+            p.Add("@Preview", request.Preview ? 1 : 0);
+            var res = cn.Query("[dbo].[sp_CajaMayor_RecalcularIncremental]", p, commandType: CommandType.StoredProcedure).ToList();
+            return new { result = res, fechaDesde, fechaHasta };
         }
     }
 }

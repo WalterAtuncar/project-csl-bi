@@ -93,7 +93,8 @@ const ProveedorQuickModal: React.FC<ProveedorQuickModalProps> = ({
         ruc: rucClean,
         razonSocial: razonSocialClean,
         direccion: direccionClean,
-        email: emailClean || undefined,
+        // Si email es vacío o null, enviar '---' por defecto
+        email: emailClean || '---',
       });
       ToastAlerts.success({
         title: 'Proveedor creado',

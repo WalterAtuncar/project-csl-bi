@@ -332,10 +332,9 @@ class CajaService extends BaseApiService {
     return this.get<any>(`${this.baseUrl}/caja-mayor/registro-compras/${id}`);
   }
   // POST: /api/Caja/caja-mayor/registro-compras/{id}/pagar
-  async pagarRegistroCompras(id: number, fechaPago: string, actualizaIdUsuario?: number): Promise<CajaApiResponse<any>> {
-    const payload: { fechaPago: string; actualizaIdUsuario?: number } = { fechaPago };
-    if (actualizaIdUsuario !== undefined) payload.actualizaIdUsuario = actualizaIdUsuario;
-    return this.post<any, typeof payload>(`${this.baseUrl}/caja-mayor/registro-compras/${id}/pagar`, payload);
+  async pagarRegistroCompras(id: number, payload: { fechaPago?: string; estado?: string; serie?: string; numero?: string; actualizaIdUsuario?: number }): Promise<CajaApiResponse<any>> {
+    const body: { fechaPago?: string; estado?: string; serie?: string; numero?: string; actualizaIdUsuario?: number } = { ...payload };
+    return this.post<any, typeof body>(`${this.baseUrl}/caja-mayor/registro-compras/${id}/pagar`, body);
   }
   // POST: /api/Caja/caja-mayor-cierre/{id}/registro-compras
   async insertRegistroCompras(idCajaMayorCierre: number, body: any): Promise<CajaApiResponse<any>> {
@@ -344,6 +343,19 @@ class CajaService extends BaseApiService {
       insertaIdUsuario: ensureInsertaIdUsuario(),
     };
     return this.post<any, typeof payload>(`${this.baseUrl}/caja-mayor-cierre/${idCajaMayorCierre}/registro-compras`, payload);
+  }
+
+  async deleteRegistroCompras(id: number, body: { idCajaMayorCierre: number; eliminaIdUsuario?: number }): Promise<CajaApiResponse<any>> {
+    const payload = {
+      idCajaMayorCierre: body.idCajaMayorCierre,
+      eliminaIdUsuario: body.eliminaIdUsuario ?? ensureInsertaIdUsuario(),
+    };
+    return this.deleteWithBody<any, typeof payload>(`${this.baseUrl}/caja-mayor/registro-compras/${id}`, payload);
+  }
+
+  async recalcularIncremental(idCajaMayorCierre: number, body: { defaultIdTipoCaja?: number; preview?: boolean }): Promise<CajaApiResponse<any>> {
+    const payload = { defaultIdTipoCaja: body.defaultIdTipoCaja ?? 1, preview: body.preview ?? false };
+    return this.post<any, typeof payload>(`${this.baseUrl}/caja-mayor-cierre/${idCajaMayorCierre}/recalcular-incremental`, payload);
   }
 }
 

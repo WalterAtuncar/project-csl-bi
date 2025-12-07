@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -19,8 +19,8 @@ namespace Data.Model.Request.pagomedico
     public class ServicesPaidDetailRequest
     {
         public string v_ServiceId { get; set; }
-        public float r_Price { get; set; }
-        public float r_Porcentaje { get; set; }
-        public float r_Pagado { get; set; }
+        public float? r_Price { get; set; }
+        public float? r_Porcentaje { get; set; }
+        public float? r_Pagado { get; set; }
     }
 }

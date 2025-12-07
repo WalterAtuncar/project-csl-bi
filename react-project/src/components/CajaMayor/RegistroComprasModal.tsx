@@ -7,6 +7,32 @@ import ToastAlerts from '../UI/ToastAlerts';
 import ProveedorQuickModal, { type CrearProveedorData, type ProveedorCreado } from './ProveedorQuickModal';
 import type { CajaMayorMovimientoDbResponse } from '../../@types/caja';
 
+export interface RegistroComprasFormData {
+  fechaEmision?: string;
+  fechaVencimiento?: string;
+  tipoComprobante?: string;
+  serie?: string;
+  numero?: string;
+  baseImponible?: number;
+  igv?: number;
+  isc?: number;
+  otrosTributos?: number;
+  valorNoGravado?: number;
+  importeTotal?: number;
+  codigoMoneda?: string;
+  tipoCambio?: number;
+  aplicaDetraccion?: boolean;
+  porcentajeDetraccion?: number;
+  montoDetraccion?: number;
+  numeroConstanciaDetraccion?: string;
+  aplicaRetencion?: boolean;
+  montoRetencion?: number;
+  observaciones?: string;
+  proveedor?: ProveedorOption | null;
+  idFamiliaEgreso?: number | null;
+  idTipoEgreso?: number | null;
+}
+
 interface RegistroComprasModalProps {
   isOpen: boolean;
   idCajaMayorCierre: number;
@@ -15,6 +41,9 @@ interface RegistroComprasModalProps {
   fechaMax?: string;
   onClose: () => void;
   onSaved?: () => void;
+  mode?: 'create' | 'edit';
+  initialData?: RegistroComprasFormData;
+  onCompraRegistrada?: (info: { idProveedor: number; razonSocialProveedor: string; rucProveedor: string; idMovimientoEgreso: number; fechaEmision: string }) => void;
 }
 
 interface ProveedorOption {
@@ -49,6 +78,9 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
   fechaMax,
   onClose,
   onSaved,
+  mode = 'create',
+  initialData,
+  onCompraRegistrada,
 }) => {
   const cajaService = useMemo(() => CajaService.getInstance(), []);
 
@@ -90,39 +122,45 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
   const [categoriasCatalogo, setCategoriasCatalogo] = useState<CategoriaItem[]>([]);
   const [tipoComprobanteOpts, setTipoComprobanteOpts] = useState<TipoComprobanteItem[]>([]);
   const [monedaOpts, setMonedaOpts] = useState<TipoMonedaItem[]>([]);
+  const [skipNextTotalRecalc, setSkipNextTotalRecalc] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
       const today = new Date().toISOString().split('T')[0];
-      setFechaEmision(fechaMin || today);
-      setFechaVencimiento('');
-      setTipoComprobante('01');
-      setSerie('');
-      setNumero('');
-      setBaseImponible(0);
-      setBaseImponibleInput('0');
-      setIgv(0);
-      setIgvInput('0');
-      setIsc(0);
-      setOtrosTributos(0);
-      setValorNoGravado(0);
-      setImporteTotal(0);
-      setImporteTotalInput('0');
-      setCodigoMoneda('PEN');
-      setTipoCambio(1);
-      setAplicaDetraccion(false);
-      setPorcentajeDetraccion(0);
-      setMontoDetraccion(0);
-      setNumeroConstanciaDetraccion('');
-      setAplicaRetencion(false);
-      setMontoRetencion(0);
-      setObservaciones('');
+      const useInitial = !!initialData;
+      const data = initialData ?? {};
+      setFechaEmision(useInitial ? (data.fechaEmision ?? (fechaMin || today)) : (fechaMin || today));
+      setFechaVencimiento(useInitial ? (data.fechaVencimiento ?? '') : '');
+      setTipoComprobante(useInitial ? (data.tipoComprobante ?? '01') : '01');
+      setSerie(useInitial ? (data.serie ?? '') : '');
+      setNumero(useInitial ? (data.numero ?? '') : '');
+      const bi = useInitial ? (data.baseImponible ?? 0) : 0;
+      setBaseImponible(bi);
+      setBaseImponibleInput(String(bi));
+      const igvInit = useInitial ? (data.igv ?? 0) : 0;
+      setIgv(igvInit);
+      setIgvInput(String(igvInit));
+      setIsc(useInitial ? (data.isc ?? 0) : 0);
+      setOtrosTributos(useInitial ? (data.otrosTributos ?? 0) : 0);
+      setValorNoGravado(useInitial ? (data.valorNoGravado ?? 0) : 0);
+      const imp = useInitial ? (data.importeTotal ?? 0) : 0;
+      setImporteTotal(imp);
+      setImporteTotalInput(String(imp));
+      setCodigoMoneda(useInitial ? (data.codigoMoneda ?? 'PEN') : 'PEN');
+      setTipoCambio(useInitial ? (data.tipoCambio ?? 1) : 1);
+      setAplicaDetraccion(useInitial ? (data.aplicaDetraccion ?? false) : false);
+      setPorcentajeDetraccion(useInitial ? (data.porcentajeDetraccion ?? 0) : 0);
+      setMontoDetraccion(useInitial ? (data.montoDetraccion ?? 0) : 0);
+      setNumeroConstanciaDetraccion(useInitial ? (data.numeroConstanciaDetraccion ?? '') : '');
+      setAplicaRetencion(useInitial ? (data.aplicaRetencion ?? false) : false);
+      setMontoRetencion(useInitial ? (data.montoRetencion ?? 0) : 0);
+      setObservaciones(useInitial ? (data.observaciones ?? '') : '');
       setProveedorSearch('');
       setProveedorOptions([]);
-      setProveedorSelected(null);
-      setCalcuarDesdeTotal(true);
-      setIdFamiliaEgreso(null);
-      setIdTipoEgreso(null);
+      setProveedorSelected(useInitial ? (data.proveedor ?? null) : null);
+      setCalcularDesdeTotal(true);
+      setIdFamiliaEgreso(useInitial ? (data.idFamiliaEgreso ?? null) : null);
+      setIdTipoEgreso(useInitial ? (data.idTipoEgreso ?? null) : null);
       // Cargar catálogo completo (groupId = 152); familias tienen ParentKeyId = -1
       (async () => {
         try {
@@ -188,28 +226,44 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
         }
       })();
     }
-  }, [isOpen, fechaMin]);
+  }, [isOpen, fechaMin, mode, initialData]);
 
   const setCalcuarDesdeTotal = (val: boolean) => setCalcularDesdeTotal(val);
 
   useEffect(() => {
-    if (calcularDesdeTotal && importeTotal > 0) {
-      const base = importeTotal / 1.18;
-      const igvCalc = importeTotal - base;
-      setBaseImponible(round2(base));
-      setBaseImponibleInput(formatMoney(round2(base)));
-      setIgv(round2(igvCalc));
-      setIgvInput(formatMoney(round2(igvCalc)));
+    if (calcularDesdeTotal) {
+      if (importeTotal > 0) {
+        const base = importeTotal / 1.18;
+        const igvCalc = importeTotal - base;
+        setBaseImponible(round2(base));
+        setBaseImponibleInput(formatMoney(round2(base)));
+        setIgv(round2(igvCalc));
+        setIgvInput(formatMoney(round2(igvCalc)));
+      } else {
+        setBaseImponible(0);
+        setBaseImponibleInput('0');
+        setIgv(0);
+        setIgvInput('0');
+      }
+    } else {
+      setBaseImponible(0);
+      setBaseImponibleInput('0');
+      setIgv(0);
+      setIgvInput('0');
     }
   }, [importeTotal, calcularDesdeTotal]);
 
   useEffect(() => {
     if (!calcularDesdeTotal) {
+      if (skipNextTotalRecalc) {
+        setSkipNextTotalRecalc(false);
+        return;
+      }
       const total = baseImponible + igv + isc + otrosTributos + valorNoGravado;
       setImporteTotal(round2(total));
       setImporteTotalInput(formatMoney(round2(total)));
     }
-  }, [baseImponible, igv, isc, otrosTributos, valorNoGravado, calcularDesdeTotal]);
+  }, [baseImponible, igv, isc, otrosTributos, valorNoGravado]);
 
   useEffect(() => {
     if (aplicaDetraccion && porcentajeDetraccion > 0 && importeTotal > 0) {
@@ -365,6 +419,7 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
       email: prov.email,
     });
     setProveedorSearch(`${prov.ruc} - ${prov.razonSocial}`);
+    setShowDropdown(false);
     setShowProveedorModal(false);
   };
 
@@ -377,10 +432,7 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
       ToastAlerts.warning({ title: 'Fecha requerida', message: 'Ingrese la fecha de emisión.' });
       return;
     }
-    if (!serie?.trim() || !numero?.trim()) {
-      ToastAlerts.warning({ title: 'Comprobante requerido', message: 'Ingrese la serie y número del comprobante.' });
-      return;
-    }
+    // Serie y número ahora pueden ser opcionales; se permiten en blanco
     if (importeTotal <= 0) {
       ToastAlerts.warning({ title: 'Importe inválido', message: 'El importe total debe ser mayor a 0.' });
       return;
@@ -394,14 +446,14 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
         tipoMovimiento: 'E',
         total: round2(importeTotal),
         fechaRegistro: `${fechaEmision}T00:00:00`,
-        observaciones: observaciones || `Compra ${serie}-${numero}`,
+        observaciones: observaciones || (serie?.trim() || numero?.trim() ? `Compra ${serie?.trim() || ''}${(serie?.trim() && numero?.trim()) ? '-' : ''}${numero?.trim() || ''}` : 'Compra'),
         conceptoMovimiento: proveedorSelected.razonSocial,
         subtotal: baseImponible > 0 ? baseImponible : null,
         igv: igv > 0 ? igv : null,
-        origen: 'registro_compras',
+        origen: initialData?.origen ?? 'registro_compras',
         codigoDocumento: tipoComprobante,
-        serieDocumento: serie.trim(),
-        numeroDocumento: numero.trim(),
+        serieDocumento: (serie?.trim() || undefined),
+        numeroDocumento: (numero?.trim() || undefined),
         idVenta: '---',
       };
 
@@ -423,8 +475,8 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
         fechaEmision: fechaEmision,
         fechaVencimiento: fechaVencimiento || null,
         tipoComprobante: tipoComprobante,
-        serie: serie.trim(),
-        numero: numero.trim(),
+        serie: (serie?.trim() || null),
+        numero: (numero?.trim() || null),
         baseImponible: baseImponible,
         igv: igv,
         isc: isc,
@@ -453,6 +505,15 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
       console.debug('[RegistroComprasModal] Registro de compras insertado', { idMovimientoEgreso: idMovimiento });
 
       ToastAlerts.success({ title: 'Registro exitoso', message: 'Egreso y registro de compras guardados correctamente.' });
+      if (onCompraRegistrada) {
+        onCompraRegistrada({
+          idProveedor: proveedorSelected.idProveedor,
+          razonSocialProveedor: proveedorSelected.razonSocial,
+          rucProveedor: proveedorSelected.ruc,
+          idMovimientoEgreso: idMovimiento,
+          fechaEmision: fechaEmision,
+        });
+      }
       onSaved && onSaved();
       onClose();
     } catch (e: any) {
@@ -593,7 +654,7 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Serie <span className="text-red-500">*</span>
+                      Serie
                     </label>
                     <input
                       type="text"
@@ -606,7 +667,7 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Número <span className="text-red-500">*</span>
+                      Número
                     </label>
                     <input
                       type="text"
@@ -653,7 +714,11 @@ const RegistroComprasModal: React.FC<RegistroComprasModalProps> = ({
                       id="calcDesdeTotal"
                       type="checkbox"
                       checked={calcularDesdeTotal}
-                      onChange={(e) => setCalcularDesdeTotal(e.target.checked)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setCalcularDesdeTotal(checked);
+                        if (!checked) setSkipNextTotalRecalc(true);
+                      }}
                     />
                     <label htmlFor="calcDesdeTotal" className="text-sm text-gray-700 dark:text-gray-300">
                       Calcular Base e IGV desde Total (18%)
