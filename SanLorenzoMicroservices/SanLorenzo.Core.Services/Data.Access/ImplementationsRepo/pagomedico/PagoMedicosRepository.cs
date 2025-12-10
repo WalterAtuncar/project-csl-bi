@@ -207,8 +207,10 @@ namespace Data.Access.ImplementationsRepo.pagomedico
 
                 using (var connection = new SqlConnection(_connectionString))
                 {
-                    using (var multi = connection.QueryMultiple("[dbo].[sp_PagoMedicoPorConsultorioCompleto]", 
-                        parameters, commandType: CommandType.StoredProcedure))
+                    connection.Open();
+                    connection.Execute("SET ARITHABORT ON;");
+                    using (var multi = connection.QueryMultiple("dbo.sp_PagoMedicoPorConsultorioCompleto", 
+                        parameters, commandTimeout: 180, commandType: CommandType.StoredProcedure))
                     {
                         var cabecera = multi.Read<PagoMedicoCabecera>().ToList();
                         var detalles = multi.Read<PagoMedicoDetalle>().ToList();
