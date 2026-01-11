@@ -146,7 +146,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
       '/Especialidades',
       request
     );
-    
+
     return response.objModel;
   }
 
@@ -155,7 +155,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
    */
   async getEspecialidades(request?: GetEspecialidadesRequest): Promise<EspecialidadResponse[]> {
     const params: Record<string, unknown> = {};
-    
+
     if (request?.includeDeleted !== undefined) {
       params.includeDeleted = request.includeDeleted;
     }
@@ -164,7 +164,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
       '/Especialidades',
       Object.keys(params).length > 0 ? params : undefined
     );
-    
+
     return response.objModel;
   }
 
@@ -175,7 +175,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
     const response = await this.get<GetEspecialidadByIdResponse>(
       `/Especialidades/${id}`
     );
-    
+
     return response.objModel;
   }
 
@@ -187,7 +187,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
       `/Especialidades/${id}`,
       request
     );
-    
+
     return response.objModel;
   }
 
@@ -196,7 +196,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
    */
   async deleteEspecialidad(id: number, request?: DeleteEspecialidadRequest): Promise<DeleteEspecialidadResponse> {
     const params: Record<string, unknown> = {};
-    
+
     if (request?.userId !== undefined) {
       params.userId = request.userId;
     }
@@ -205,7 +205,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
       `/Especialidades/${id}`,
       Object.keys(params).length > 0 ? params : undefined
     );
-    
+
     return response.objModel;
   }
 
@@ -217,7 +217,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
       `/Especialidades/${id}/porcentaje`,
       request
     );
-    
+
     return response.objModel;
   }
 
@@ -226,7 +226,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
    */
   async searchEspecialidades(request?: SearchEspecialidadesRequest): Promise<EspecialidadResponse[]> {
     const params: Record<string, unknown> = {};
-    
+
     if (request?.Filtro !== undefined && request.Filtro.trim() !== '') {
       params.Filtro = request.Filtro;
     }
@@ -244,7 +244,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
       '/Especialidades/search',
       Object.keys(params).length > 0 ? params : undefined
     );
-    
+
     return response.objModel;
   }
 
@@ -253,7 +253,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
    */
   async searchProfesionales(request?: SearchProfesionalesRequest): Promise<ProfesionalResponse[]> {
     const params: Record<string, unknown> = {};
-    
+
     if (request?.TextSearch !== undefined && request.TextSearch.trim() !== '') {
       params.TextSearch = request.TextSearch;
     }
@@ -262,7 +262,7 @@ export class EspecialidadesMedicasService extends BaseApiService {
       '/Especialidades/profesionales/search',
       Object.keys(params).length > 0 ? params : undefined
     );
-    
+
     return response.objModel;
   }
 }

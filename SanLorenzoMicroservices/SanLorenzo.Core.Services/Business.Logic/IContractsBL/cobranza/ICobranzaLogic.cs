@@ -56,5 +56,6 @@ namespace Business.Logic.IContractsBL.cobranza
         IEnumerable<IndicadoresLaboratorioResponse5> LaboratorioIndicadores_ServicioDisgregado5(FiltroBusquedaFechasMSRequest obj);
         IEnumerable<IndicadoresLaboratorioResponse6> LaboratorioIndicadores_OrdenesMedicos6(FiltroBusquedaFechasMSRequest obj);
         IEnumerable<mdlExternoVentasSanLorenzoGlobResponse> GerenciaVentasAsistencialMSGLOBAL_ListaService_Filtros(FiltroBusquedaMSVentas2 obj);
+
     }
 }

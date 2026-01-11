@@ -14,6 +14,12 @@ export interface GenerarPagoMedicoRequest {
   servicesDetails?: ServicesPaidDetailRequest[];
 }
 
+export interface PagoMedicoPorConsultorioRequest {
+  ConsultorioId: number;
+  FechaInicio: string; // format: yyyy-MM-dd
+  FechaFin: string;    // format: yyyy-MM-dd
+}
+
 export interface ServicesPaidDetailRequest {
   v_ServiceId?: string;
   r_Price: number;
@@ -132,6 +138,91 @@ export interface PagoMedicoCabecera {
   pagoTotalGeneradoFormateado?: string;
 }
 
+export interface PagoMedicoConsultorioHeader {
+  medicoId: number;
+  nombreMedico?: string;
+  especialidadMedico?: string;
+  totalServiciosGenerados: number;
+  primerServicio: string;
+  ultimoServicio: string;
+  fechaInicio: string;
+  fechaFin: string;
+  fechaCalculo: string;
+  detalles: PagoMedicoConsultorioDetalle[];
+}
+
+export interface PagoMedicoConsultorioDetalle {
+  idVenta: string;
+  docTypeCliente: string;
+  docNumberCliente: string;
+  cliente: string;
+  ubigeoCliente: string;
+  direccionCliente: string;
+  formaPagoName: string;
+  serie: string;
+  numero: string;
+  fechaPago: string;
+  monto?: number;
+  usuarioVenta: string;
+  precioServicio?: number;
+  cantidad?: number;
+  montoPagadoReal?: number;
+  codigo_td: string;
+  nombreServicio: string;
+  tieneatencion?: number;
+  v_ComprobantePago: string;
+  d_ServiceDate?: string;
+  total?: number;
+  estado?: number;
+  motivo: string;
+  idVentaDetalle: string;
+  TipCaj: string;
+  v_ServiceId: string;
+  docTypePaciente: string;
+  docNumberPaciente: string;
+  apPaternoPaciente: string;
+  apMaternoPaciente: string;
+  nombresPaciente: string;
+  fechaNacimientoPaciente: string;
+  generoPaciente: string;
+  ubigeoPaciente: string;
+  direccionPaciente: string;
+  telefonoPaciente: string;
+  correoPaciente: string;
+  seguroPaciente: string;
+  estadoCivilPaciente: string;
+  nombreApoderado: string;
+  contactoApoderado: string;
+  fechaServicioFormateada: string;
+  ComprobanteAt: string;
+  usuarioVenta2: string;
+  medicoId?: number;
+  nombreMedico: string;
+  nombreProtocolo: string;
+  especialidadMedico: string;
+  consultorio: string;
+  tipoServicio: string;
+  edadPaciente?: number;
+  idMedicoSolicita?: number;
+  nombreMedicoSolicita: string;
+  especialidadSolicita: string;
+  marketing: string;
+  marketingOtros: string;
+  v_NroDocMed: string;
+  dxNombre: string;
+  dxCie10: string;
+  dxEst: string;
+  tipoProtocolo: string;
+  examenesRec?: number;
+  farmRec?: number;
+  personId: string;
+  consultorioId?: number;
+  tipoProtocoloId?: number;
+  tipoProtocoloName: string;
+  tipoProtocoloCode: string;
+  esPagado?: number;
+}
+
 export interface PagoMedicoDetalle {
   v_ServiceComponentId?: string;
   v_ServiceId?: string;
@@ -229,7 +320,7 @@ class PagoMedicosService extends BaseApiService {
   async listarPagosMedicos(request?: ListarPagosMedicosRequest): Promise<ListarPagosMedicosResponse[]> {
     try {
       const params = new URLSearchParams();
-      
+
       if (request?.i_MedicoTratanteId !== undefined) {
         params.append('i_MedicoTratanteId', request.i_MedicoTratanteId.toString());
       }
@@ -245,7 +336,7 @@ class PagoMedicosService extends BaseApiService {
 
       const queryString = params.toString();
       const url = `/PagoMedicos${queryString ? `?${queryString}` : ''}`;
-      
+
       const response = await this.get<ListarPagosMedicosResponse[]>(url);
       return response.objModel as ListarPagosMedicosResponse[];
     } catch (error) {
@@ -289,7 +380,7 @@ class PagoMedicosService extends BaseApiService {
   async getPagoMedicoAnalisis(request?: PagoMedicoAnalisisRequest): Promise<PagoMedicoCompletoResponse> {
     try {
       const params = new URLSearchParams();
-      
+
       // Preferir i_Consultorio si está presente; mantener compatibilidad con i_MedicoTratanteId si no
       if (request?.i_Consultorio !== undefined) {
         params.append('i_Consultorio', request.i_Consultorio.toString());
@@ -305,11 +396,26 @@ class PagoMedicosService extends BaseApiService {
 
       const queryString = params.toString();
       const url = `/PagoMedicos/analisis${queryString ? `?${queryString}` : ''}`;
-      
+
       const response = await this.get<PagoMedicoCompletoResponse>(url);
       return response.objModel as PagoMedicoCompletoResponse;
     } catch (error) {
       console.error('Error al obtener análisis de pago médico:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * POST /Caja/PagoMedicoPorConsultorio
+   * Nuevo endpoint para análisis agrupado
+   */
+  async pagoMedicoPorConsultorio(request: PagoMedicoPorConsultorioRequest): Promise<PagoMedicoConsultorioHeader[]> {
+    try {
+      // Endpoint movido a CajaController
+      const response = await this.post<PagoMedicoConsultorioHeader[]>('/Caja/PagoMedicoPorConsultorio', request);
+      return response.objModel as PagoMedicoConsultorioHeader[];
+    } catch (error) {
+      console.error('Error al obtener pago médico por consultorio:', error);
       throw error;
     }
   }

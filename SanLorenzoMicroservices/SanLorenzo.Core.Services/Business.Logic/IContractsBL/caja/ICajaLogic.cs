@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Data.Model.Request.caja;
 using Data.Model.Response.caja;
 
+
 namespace Business.Logic.IContractsBL.caja
 {
     public interface ICajaLogic
@@ -35,5 +36,6 @@ namespace Business.Logic.IContractsBL.caja
     IEnumerable<FlujoCajaDetalladoResponse> FlujoCajaDetallado(FlujoCajaDetalladoRequest request);
         (IEnumerable<RegistroComprasListItemResponse> data, int totalRows) ListRegistroCompras(RegistroComprasListRequest request);
         object RecalcularIncremental(RecalcularIncrementalRequest request);
+        IEnumerable<Data.Model.Response.gerencia.PagoMedicoCabecera> PagoMedicoPorConsultorio(Data.Model.Request.gerencia.PagoMedicoPorConsultorioRequest obj);
     }
 }

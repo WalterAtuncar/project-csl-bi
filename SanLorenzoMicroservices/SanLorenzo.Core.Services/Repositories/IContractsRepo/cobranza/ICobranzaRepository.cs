@@ -50,5 +50,6 @@ namespace Repositories.IContractsRepo.cobranza
         IEnumerable<LiquidacionResponse> ListaLiquidacion_Liq_Fac_1(LiquidacionFiltrosRequest obj);
         IEnumerable<LiquidacionResponse> ListaLiquidacion_Liq_Fac_2(LiquidacionFiltrosRequest obj);
         IEnumerable<LiquidacionResponse> ListaLiquidacion_Liq_Fac_3(LiquidacionFiltrosRequest obj);
+
     }
 }

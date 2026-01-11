@@ -58,7 +58,7 @@ export abstract class BaseApiService {
 
   constructor(baseURL: string = '', config: AxiosRequestConfig = {}) {
     this.baseURL = baseURL || this.getBaseURL();
-    
+
     // Crear instancia de axios con configuración personalizada
     this.axiosInstance = axios.create({
       ...DEFAULT_CONFIG,
@@ -73,7 +73,7 @@ export abstract class BaseApiService {
    * Obtiene la URL base desde variables de entorno o configuración
    */
   private getBaseURL(): string {
-    return 'http://190.116.90.35:8183/api'; //import.meta.env.VITE_API_BASE_URL || 'https://localhost:7036/api'; //
+    return 'https://localhost:7036/api'; //'http://190.116.90.35:8183/api'; //import.meta.env.VITE_API_BASE_URL ||
   }
 
   /**
@@ -84,13 +84,13 @@ export abstract class BaseApiService {
     this.axiosInstance.interceptors.request.use(
       (config) => {
         const extendedConfig = config as ExtendedAxiosRequestConfig;
-        
+
         // Mostrar loader si no está deshabilitado
         if (!extendedConfig.skipLoader) {
           // Determinar mensaje según el endpoint
           let message = 'Procesando solicitud...';
           const url = config.url?.toLowerCase() || '';
-          
+
           if (url.includes('/auth/login')) {
             message = 'Iniciando sesión...';
           } else if (url.includes('/dashboard')) {
@@ -106,10 +106,10 @@ export abstract class BaseApiService {
           } else if (config.method?.toLowerCase() === 'get') {
             message = 'Cargando información...';
           }
-          
+
           loaderService.show(message);
         }
-        
+
         // Agregar token de autenticación si existe
         const token = this.getAuthToken();
         if (token && !extendedConfig.skipAuth) {
@@ -147,7 +147,7 @@ export abstract class BaseApiService {
         if (!config.skipLoader) {
           loaderService.hide();
         }
-        
+
         // Log de response en desarrollo
         if (import.meta.env.DEV) {
           console.log(`✅ ${response.config.method?.toUpperCase()} ${response.config.url}`, response.data);
@@ -178,7 +178,7 @@ export abstract class BaseApiService {
         // Manejo de token expirado (401)
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
-          
+
           try {
             await this.refreshToken();
             return this.axiosInstance(originalRequest);
@@ -248,10 +248,10 @@ export abstract class BaseApiService {
   protected handleAuthError(): void {
     localStorage.removeItem('authToken');
     localStorage.removeItem('refreshToken');
-    
+
     // Disparar evento personalizado para que la app maneje el logout
     window.dispatchEvent(new CustomEvent('auth:logout'));
-    
+
     // Opcional: redirect a login
     if (typeof window !== 'undefined') {
       window.location.href = '/login';
@@ -289,7 +289,7 @@ export abstract class BaseApiService {
       // Error de respuesta del servidor
       const responseData = error.response.data as ApiResponse;
       apiError.status = error.response.status;
-      
+
       // Si es una respuesta del API con formato ResponseDTO
       if (responseData && typeof responseData === 'object' && 'description' in responseData) {
         apiError.message = responseData.description || error.message;

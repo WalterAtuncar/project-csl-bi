@@ -649,5 +649,7 @@ namespace Data.Access.ImplementationsRepo.cobranza
                 return connection.Query<LiquidacionResponse>("[dbo].[ListaLiquidacion_Liq_Fac_3_SP]", parameters, commandType: System.Data.CommandType.StoredProcedure);
             }
         }
+
+
     }
 }

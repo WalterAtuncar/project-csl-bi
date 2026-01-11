@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnitOfWork;
 using Data.Model.Request.caja;
 using Data.Model.Response.caja;
+using System.Linq;
 
 namespace Business.Logic.ImplementationsBL.caja
 {
@@ -106,5 +107,27 @@ namespace Business.Logic.ImplementationsBL.caja
 
         public object RecalcularIncremental(RecalcularIncrementalRequest request)
             => _unitOfWork.ICaja.RecalcularIncremental(request);
+
+        public IEnumerable<Data.Model.Response.gerencia.PagoMedicoCabecera> PagoMedicoPorConsultorio(Data.Model.Request.gerencia.PagoMedicoPorConsultorioRequest obj)
+        {
+            var rawData = _unitOfWork.ICaja.PagoMedicoPorConsultorio(obj);
+
+            var groupedData = rawData.GroupBy(x => x.medicoId)
+                                     .Select(g => new Data.Model.Response.gerencia.PagoMedicoCabecera
+                                     {
+                                         medicoId = g.Key,
+                                         nombreMedico = g.FirstOrDefault()?.nombreMedico,
+                                         especialidadMedico = g.FirstOrDefault()?.especialidadMedico,
+                                         totalServiciosGenerados = g.Count(),
+                                         primerServicio = g.Min(x => x.d_ServiceDate)?.ToString("yyyy-MM-dd HH:mm:ss"), 
+                                         ultimoServicio = g.Max(x => x.d_ServiceDate)?.ToString("yyyy-MM-dd HH:mm:ss"),
+                                         fechaInicio = obj.FechaInicio,
+                                         fechaFin = obj.FechaFin,
+                                         fechaCalculo = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                                         detalles = g.ToList()
+                                     });
+
+            return groupedData;
+        }
     }
 }

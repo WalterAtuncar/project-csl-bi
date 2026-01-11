@@ -1,7 +1,9 @@
 using Business.Logic.IContractsBL.caja;
 using Data.Model;
 using Data.Model.Request.caja;
+
 using Data.Model.Response.caja;
+
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agenda.Microservice.Controllers.caja
@@ -525,6 +527,19 @@ namespace Agenda.Microservice.Controllers.caja
             {
                 var response = _cajaLogic.InsertRegistroCompras(body);
                 return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+        [HttpPost("PagoMedicoPorConsultorio")]
+        public IActionResult PagoMedicoPorConsultorio([FromBody] Data.Model.Request.gerencia.PagoMedicoPorConsultorioRequest obj)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                return Ok(_ResponseDTO.Success(_ResponseDTO, _cajaLogic.PagoMedicoPorConsultorio(obj)));
             }
             catch (Exception e)
             {

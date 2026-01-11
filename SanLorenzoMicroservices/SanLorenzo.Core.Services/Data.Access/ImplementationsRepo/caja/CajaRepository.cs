@@ -9,16 +9,18 @@ using Data.Model.Request.caja;
 using Data.Model.Response.caja;
 using Data.Access.Utils;
 
+
 namespace Data.Access.ImplementationsRepo.caja
 {
     public class CajaRepository : ICajaRepository
     {
         private readonly string _connectionString;
-
+        private readonly string _connectionString2;
         public CajaRepository(string connectionString) 
         {
             // Ajuste de timeout de conexión para evitar timeouts intermitentes en redes lentas
-            _connectionString = "Data Source=192.168.1.2\\CSL_2025; Initial Catalog=20505310072; User Id=sa; Password=Alph@2536; Connection Timeout=60000";
+            _connectionString = "Data Source=190.116.90.35\\CSL_2025; Initial Catalog=20505310072; User Id=sa; Password=Alph@2536; Connection Timeout=60000";
+            _connectionString2 = "Data Source=190.116.90.35\\CSL_2025; Initial Catalog=SigesoftDesarrollo_2; User Id=sa; Password=Alph@2536; Connection Timeout=60000";
         }
 
         public IEnumerable<CajaMayorCabeceraResponse> GetListCabecera(GetListCabeceraRequest request)
@@ -426,6 +428,34 @@ namespace Data.Access.ImplementationsRepo.caja
             p.Add("@Preview", request.Preview ? 1 : 0);
             var res = cn.Query("[dbo].[sp_CajaMayor_RecalcularIncremental]", p, commandType: CommandType.StoredProcedure).ToList();
             return new { result = res, fechaDesde, fechaHasta };
+        }
+        public IEnumerable<Data.Model.Response.gerencia.PagoMedicoPorConsultorioResponse> PagoMedicoPorConsultorio(Data.Model.Request.gerencia.PagoMedicoPorConsultorioRequest obj)
+        {
+            using (var connection = new SqlConnection(_connectionString2))
+            {
+                var parameters = new DynamicParameters();
+                
+                string fechaInicioFull = obj.FechaInicio;
+                string fechaFinFull = obj.FechaFin;
+
+                try {
+                     DateTime dateInicio = DateTime.Parse(obj.FechaInicio);
+                     DateTime dateFin = DateTime.Parse(obj.FechaFin);
+                     
+                     fechaInicioFull = dateInicio.ToString("yyyy-MM-dd") + "T00:00:01";
+                     fechaFinFull = dateFin.ToString("yyyy-MM-dd") + "T23:59:59";
+                } catch {
+                }
+
+                parameters.Add("@FechaInicio", fechaInicioFull);
+                parameters.Add("@FechaFin", fechaFinFull);
+                parameters.Add("@ConsultorioId", obj.ConsultorioId);
+
+                return connection.Query<Data.Model.Response.gerencia.PagoMedicoPorConsultorioResponse>("[dbo].[PagoMedicoPorConsultorio_SP]", 
+                    parameters, 
+                    commandType: System.Data.CommandType.StoredProcedure,
+                    commandTimeout: 60000000);
+            }
         }
     }
 }

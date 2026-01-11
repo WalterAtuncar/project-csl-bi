@@ -444,7 +444,7 @@ export class DashboardService extends BaseApiService {
       '/Dashboard/GeneralDashboard',
       request
     );
-    
+
     return response.objModel;
   }
 
@@ -456,7 +456,7 @@ export class DashboardService extends BaseApiService {
       '/Dashboard/SalesDashboard',
       request
     );
-    
+
     return response.objModel;
   }
 
@@ -468,7 +468,7 @@ export class DashboardService extends BaseApiService {
       '/Dashboard/DashboardFinanciero',
       request
     );
-    
+
     return response.objModel;
   }
 
@@ -480,7 +480,7 @@ export class DashboardService extends BaseApiService {
       '/Dashboard/DashboardServicios',
       request
     );
-    
+
     return response.objModel;
   }
 
@@ -492,7 +492,7 @@ export class DashboardService extends BaseApiService {
       '/Dashboard/EjecutarScript',
       request
     );
-    
+
     return response.objModel; // Retornamos el objModel que contiene el JSON string
   }
 
@@ -504,7 +504,7 @@ export class DashboardService extends BaseApiService {
   async executeScriptParsed<T = unknown>(scriptText: string): Promise<ParsedScriptResult<T>> {
     const request: ScriptExecutionRequest = { scriptText };
     const jsonResult = await this.executeScript(request);
-    
+
     try {
       const parsedData = JSON.parse(jsonResult) as T[];
       return {
@@ -558,7 +558,7 @@ export class DashboardService extends BaseApiService {
   createDefaultRequest(overrides: Partial<GeneralDashboardRequest> = {}): GeneralDashboardRequest {
     const now = new Date();
     const startOfYear = new Date(now.getFullYear(), 0, 1);
-    
+
     return {
       startDate: this.formatDateForAPI(startOfYear),
       endDate: this.formatDateForAPI(now),
@@ -577,7 +577,7 @@ export class DashboardService extends BaseApiService {
   createDefaultSalesRequest(overrides: Partial<SalesDashboardRequest> = {}): SalesDashboardRequest {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
+
     return {
       startDate: this.formatDateForAPI(startOfMonth),
       endDate: this.formatDateForAPI(now),
@@ -594,7 +594,7 @@ export class DashboardService extends BaseApiService {
   createDefaultFinancialRequest(overrides: Partial<FinancialDashboardRequest> = {}): FinancialDashboardRequest {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
+
     return {
       startDate: startOfMonth.toISOString(),
       endDate: now.toISOString(),
@@ -611,7 +611,7 @@ export class DashboardService extends BaseApiService {
   createDefaultServicesRequest(overrides: Partial<ServicesDashboardRequest> = {}): ServicesDashboardRequest {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 días atrás
-    
+
     return {
       fechaInicio: weekAgo.toISOString(),
       fechaFin: now.toISOString(),
@@ -646,11 +646,11 @@ export class DashboardService extends BaseApiService {
     if (apiDateString.length !== 8) {
       throw new Error('Formato de fecha API inválido. Debe ser YYYYMMDD');
     }
-    
+
     const year = apiDateString.substring(0, 4);
     const month = apiDateString.substring(4, 6);
     const day = apiDateString.substring(6, 8);
-    
+
     return `${year}-${month}-${day}`;
   }
 
@@ -731,7 +731,7 @@ export class DashboardService extends BaseApiService {
       page,
       pageSize,
     });
-    
+
     return {
       data: response.objModel,
       pagination: response.objPaginated,

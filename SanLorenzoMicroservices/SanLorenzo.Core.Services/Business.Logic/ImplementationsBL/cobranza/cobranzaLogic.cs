@@ -241,5 +241,7 @@ namespace Business.Logic.ImplementationsBL.cobranza
         {
             return _unitOfWork.ICobranza.GerenciaVentasAsistencialMSGLOBAL_ListaService_Filtros(obj);
         }
+
+
     }
 }

@@ -58,7 +58,7 @@ export class AuthService extends BaseApiService {
     const response = await this.post<LoginResponse, LoginRequest>('/Auth/Login', loginRequest, {
       skipLoader: false // Asegurar que se muestre el loader
     });
-    
+
     // Crear objeto de datos del usuario
     const userData: UserData = {
       systemUserId: response.objModel.i_SystemUserId,

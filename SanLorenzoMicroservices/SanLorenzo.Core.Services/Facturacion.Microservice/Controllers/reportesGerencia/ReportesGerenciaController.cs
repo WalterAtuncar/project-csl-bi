@@ -582,5 +582,7 @@ namespace Facturacion.Microservice.Controllers.reportesGerencia
             }
         }
 
+
+
     }
 }
