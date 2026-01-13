@@ -48,5 +48,15 @@ namespace Business.Logic.ImplementationsBL.pagomedico
         {
             return _unitOfWork.IPagoMedicos.GetOrganizationInfo();
         }
+
+        public List<MedicoByConsultorioResponse> GetMedicosByConsultorio(int? consultorioId)
+        {
+            return _unitOfWork.IPagoMedicos.GetMedicosByConsultorio(consultorioId);
+        }
+
+        public UpdateMedicoTratanteResponse UpdateMedicoTratante(UpdateMedicoTratanteRequest request)
+        {
+            return _unitOfWork.IPagoMedicos.UpdateMedicoTratante(request);
+        }
     }
 } 

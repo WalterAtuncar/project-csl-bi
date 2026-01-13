@@ -198,6 +198,7 @@ export interface PagoMedicoConsultorioDetalle {
   usuarioVenta2: string;
   medicoId?: number;
   nombreMedico: string;
+  v_ServiceComponentId?: string;  // ID del componente de servicio
   nombreProtocolo: string;
   especialidadMedico: string;
   consultorio: string;
@@ -257,6 +258,24 @@ export interface OrganizationInfoResponse {
   v_Address: string;
   v_PhoneNumber: string;
   v_Mail: string;
+}
+
+export interface MedicoByConsultorioResponse {
+  medicoTratanteId: number;
+  userName: string;
+  name: string;
+  consultorioId: number;
+  consultorio: string;
+}
+
+export interface UpdateMedicoTratanteRequest {
+  v_ServiceComponentId: string;
+  i_MedicoTratanteId: number;
+  i_UpdateUserId: number;
+}
+
+export interface UpdateMedicoTratanteResponse {
+  success: boolean;
 }
 
 export interface ResponseDTO {
@@ -430,6 +449,35 @@ class PagoMedicosService extends BaseApiService {
       return response.objModel as OrganizationInfoResponse;
     } catch (error) {
       console.error('Error al obtener información de la organización:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * GET /PagoMedicos/medicos?consultorioId={id}
+   * Obtener lista de médicos por consultorio
+   */
+  async getMedicosByConsultorio(consultorioId?: number): Promise<MedicoByConsultorioResponse[]> {
+    try {
+      const params = consultorioId !== undefined ? `?consultorioId=${consultorioId}` : '';
+      const response = await this.get<MedicoByConsultorioResponse[]>(`/PagoMedicos/medicos${params}`);
+      return response.objModel as MedicoByConsultorioResponse[];
+    } catch (error) {
+      console.error('Error al obtener médicos por consultorio:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * PUT /PagoMedicos/medico-tratante
+   * Actualizar médico tratante de un componente de servicio
+   */
+  async updateMedicoTratante(request: UpdateMedicoTratanteRequest): Promise<UpdateMedicoTratanteResponse> {
+    try {
+      const response = await this.put<UpdateMedicoTratanteResponse>('/PagoMedicos/medico-tratante', request);
+      return response.objModel as UpdateMedicoTratanteResponse;
+    } catch (error) {
+      console.error('Error al actualizar médico tratante:', error);
       throw error;
     }
   }

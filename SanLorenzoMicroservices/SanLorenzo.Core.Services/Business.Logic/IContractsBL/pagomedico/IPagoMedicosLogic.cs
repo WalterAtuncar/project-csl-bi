@@ -16,5 +16,7 @@ namespace Business.Logic.IContractsBL.pagomedico
         List<ListarPagosMedicosResponse> ListarPagosMedicos(ListarPagosMedicosRequest request);
         PagoMedicoCompletoResponse PagoMedicoCompleto(PagoMedicoCompletoRequest request);
         OrganizationInfoResponse GetOrganizationInfo();
+        List<MedicoByConsultorioResponse> GetMedicosByConsultorio(int? consultorioId);
+        UpdateMedicoTratanteResponse UpdateMedicoTratante(UpdateMedicoTratanteRequest request);
     }
 } 

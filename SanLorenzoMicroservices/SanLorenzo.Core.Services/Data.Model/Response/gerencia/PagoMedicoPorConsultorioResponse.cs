@@ -57,6 +57,7 @@ namespace Data.Model.Response.gerencia
         public string usuarioVenta2 { get; set; }
         public int? medicoId { get; set; }
         public string nombreMedico { get; set; }
+        public string v_ServiceComponentId { get; set; }  // ID del componente de servicio
         public string nombreProtocolo { get; set; }
         public string especialidadMedico { get; set; }
         public string consultorio { get; set; }

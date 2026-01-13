@@ -17,7 +17,9 @@ import {
   Upload,
   Check,
   XCircle,
-  Printer
+  Printer,
+  Coins,
+  Edit
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -33,6 +35,7 @@ import CajaService from '../../services/CajaService';
 import RegistroComprasModal, { type RegistroComprasFormData } from '../CajaMayor/RegistroComprasModal';
 import { systemParametersService, KeyValueDtoResponse } from '../../services/SystemParametersService';
 import ToastAlerts from './ToastAlerts';
+import EditMedicoModal from './EditMedicoModal';
 import { usePDFBuilder } from './';
 import type { PDFData, PDFHeaderData, PDFDetailItem, PDFColumn } from './PDFBuilder';
 
@@ -153,6 +156,13 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
   };
   const [loadingConsultorios, setLoadingConsultorios] = useState(false);
 
+  const [editMedicoModal, setEditMedicoModal] = useState({
+    isOpen: false,
+    serviceComponentId: '',
+    currentMedicoId: 0,
+    currentMedicoName: ''
+  });
+
   // Estados para el análisis
   const [analisisData, setAnalisisData] = useState<PagoMedicoCompletoResponse | null>(null);
   const [loadingAnalisis, setLoadingAnalisis] = useState(false);
@@ -193,6 +203,15 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
 
   // Ref para el input de archivo
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Estados para filtros del grid de servicios
+  const [filtros, setFiltros] = useState({
+    paciente: '',
+    comprobante: '',
+    precioServicio: '',
+    formaPago: 'Todos',
+    estado: 'Todos'
+  });
 
   // Hook para construir PDFs
   const { generatePDF } = usePDFBuilder();
@@ -633,6 +652,15 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
 
   // Realizar análisis
   const handleAnalizar = async () => {
+    // Resetear filtros al realizar nuevo análisis
+    setFiltros({
+      paciente: '',
+      comprobante: '',
+      precioServicio: '',
+      formaPago: 'Todos',
+      estado: 'Todos'
+    });
+
     if (!formData.consultorioId) {
       ToastAlerts.warning({
         title: "Campo requerido",
@@ -690,7 +718,7 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
         if (header.detalles) {
           header.detalles.forEach(d => {
             detallesFlat.push({
-              v_ServiceComponentId: d.idVentaDetalle, // Mapping idVentaDetalle to ComponentId
+              v_ServiceComponentId: d.v_ServiceComponentId,  // ✅ CORRECTO: ID del componente de servicio
               v_ServiceId: d.v_ServiceId,
               d_ServiceDate: d.d_ServiceDate ?? '',
               paciente: d.cliente || (d.nombresPaciente ? `${d.nombresPaciente} ${d.apPaternoPaciente}` : ''),
@@ -746,6 +774,125 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
       ToastAlerts.error({
         title: "Error en análisis",
         message: "No se pudo realizar el análisis. Verifique los datos e intente nuevamente"
+      });
+    } finally {
+      setLoadingAnalisis(false);
+    }
+  };
+
+  // Handler para marcar servicios seleccionados como pagados manualmente (Caja Chica)
+  const handleMarcarSeleccionadosComoPagados = async () => {
+    if (selectedServicios.size === 0) {
+      ToastAlerts.warning({
+        title: "Sin selección",
+        message: "Debe seleccionar al menos un servicio para marcar como pagado"
+      });
+      return;
+    }
+
+    // Obtener los detalles completos de los servicios seleccionados (solo pendientes)
+    const serviciosSeleccionados = detallesFiltrados.filter(d => {
+      const serviceId = d.v_ServiceComponentId || `${d.numeroLinea}`;
+      return selectedServicios.has(serviceId) && d.esPagado !== 1;
+    });
+
+    if (serviciosSeleccionados.length === 0) {
+      ToastAlerts.warning({
+        title: "Sin servicios válidos",
+        message: "No hay servicios pendientes seleccionados para marcar como pagados"
+      });
+      return;
+    }
+
+    // Validar que todos los servicios sean del mismo médico
+    const medicoIds = new Set(serviciosSeleccionados.map(s => (s as any).medicoId));
+    if (medicoIds.size > 1) {
+      ToastAlerts.error({
+        title: "Múltiples médicos",
+        message: "Los servicios seleccionados pertenecen a diferentes médicos. Seleccione servicios de un solo médico para marcar como pagados."
+      });
+      return;
+    }
+
+    // Obtener datos del médico
+    const medicoId = (serviciosSeleccionados[0] as any).medicoId;
+    const medicoData = analisisData?.cabecera?.find(c => c.medicoId === medicoId);
+    const nombreMedico = medicoData?.nombreMedico || 'Médico';
+
+    // Calcular el total
+    const totalPagar = serviciosSeleccionados.reduce((sum, s) => sum + (s.precioServicio || 0), 0);
+
+    const confirmed = window.confirm(
+      `¿Confirmar PAGO MANUAL de ${serviciosSeleccionados.length} servicio(s) del ${nombreMedico} por un total de S/ ${totalPagar.toFixed(2)}?\n\n` +
+      `Este pago fue realizado por CAJA CHICA y se registrará sin comprobante PDF.\n\n` +
+      `Esta acción NO se puede revertir fácilmente.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setLoadingAnalisis(true);
+
+      // Obtener el ID del usuario actual del contexto/sesión
+      const currentUserId = 1; // TODO: Obtener del contexto de usuario
+
+      // Construir el request reutilizando la estructura existente
+      const pagoRequest: GenerarPagoMedicoRequest = {
+        i_MedicoTratanteId: medicoId,
+        d_FechaInicio: `${formData.fechaInicio}T00:00:00.000Z`,
+        d_FechaFin: `${formData.fechaFin}T23:59:59.999Z`,
+        r_PagadoTotal: totalPagar,
+        v_Comprobante: '',  // ← VACÍO para indicar pago manual (caja chica)
+        i_InsertUserId: currentUserId,
+        servicesDetails: serviciosSeleccionados.map(s => ({
+          v_ServiceId: s.v_ServiceComponentId || s.v_ServiceId,
+          r_Price: s.precioServicio || 0,
+          r_Porcentaje: 0.0,    // Pago directo sin porcentaje
+          r_Pagado: s.precioServicio || 0
+        }))
+      };
+
+      // Llamar al endpoint existente GenerarPagoMedicoCompleto
+      const response = await pagoMedicosService.generarPagoMedico(pagoRequest);
+
+      if (response.status === 'SUCCESS' || response.paidId) {
+        ToastAlerts.success({
+          title: 'Servicios marcados como pagados',
+          message: `${serviciosSeleccionados.length} servicio(s) marcado(s) como pagado(s) - Pago ID: ${response.paidId} por S/ ${totalPagar.toFixed(2)}`,
+          duration: 4000
+        });
+
+        // Limpiar selección
+        setSelectedServicios(new Set());
+
+        // Refrescar el análisis para actualizar la grid
+        await handleAnalizar();
+      } else {
+        ToastAlerts.error({
+          title: 'Error',
+          message: response.message || 'No se pudo completar el registro'
+        });
+      }
+    } catch (error: any) {
+      console.error('Error al marcar servicios:', error);
+
+      // Manejar errores específicos
+      let errorMsg = 'No se pudo marcar los servicios como pagados.';
+
+      const errorMessage = error?.message || error?.response?.data?.message || '';
+
+      if (errorMessage.includes('ya han sido pagados') || errorMessage.includes('ya ha sido pagado')) {
+        errorMsg = 'Uno o más servicios ya fueron pagados anteriormente.';
+      } else if (errorMessage.includes('período especificado')) {
+        errorMsg = 'Ya existe un pago registrado para este médico en el período actual. Use fechas diferentes o contacte al administrador.';
+      } else if (errorMessage) {
+        errorMsg = errorMessage;
+      }
+
+      ToastAlerts.error({
+        title: 'Error al marcar servicios',
+        message: errorMsg,
+        duration: 5000
       });
     } finally {
       setLoadingAnalisis(false);
@@ -1101,8 +1248,9 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
       fechaFin: ''
     });
 
-    // Limpiar autocomplete completamente
-    setConsultorios([]);
+
+    // Limpiar autocomplete - solo la selección, NO la lista
+    // setConsultorios([]);  ← REMOVIDO: No limpiar la lista, solo la selección
     setLoadingConsultorios(false);
 
     // Limpiar datos del análisis
@@ -1454,8 +1602,14 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
                       totalSinIgv={totalSinIgv}
                       manualFactor={manualFactor}
                       appliedTotalMedicoCurrent={appliedTotalMedicoCurrent}
+                      filtros={filtros}
+                      setFiltros={setFiltros}
+                      editMedicoModal={editMedicoModal}
+                      setEditMedicoModal={setEditMedicoModal}
+                      formData={formData}
+                      handleAnalizar={handleAnalizar}
                       onSelectionChange={(nuevasSelecciones) => {
-                        const nuevoPagoRequest = construirPagoRequest(nuevasSelecciones, (detallesFiltrados || []) as PagoMedicoDetalle[]);
+                        const nuevoPagoRequest = construirPagoRequest(nuevasSelecciones, (analisisData?.detalles || []) as PagoMedicoDetalle[]);
                         setPagoRequest(nuevoPagoRequest);
                       }}
                     />
@@ -1503,11 +1657,41 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
                 </motion.button>
               )}
 
-              {/* Botón de Generar Pago */}
-              {showAnalisis && analisisData && (
+              {/* Botón para Marcar como Pagados (Caja Chica) - Solo sin Excel */}
+              {showAnalisis && analisisData && selectedServicios.size > 0 && !isValidationActive && (
+                <motion.button
+                  onClick={handleMarcarSeleccionadosComoPagados}
+                  disabled={loadingAnalisis || isValidationActive}
+                  className={`inline-flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-colors ${!loadingAnalisis && !isValidationActive
+                    ? 'bg-amber-600 text-white hover:bg-amber-700'
+                    : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                    }`}
+                  whileHover={!loadingAnalisis && !isValidationActive ? { scale: 1.02 } : {}}
+                  whileTap={!loadingAnalisis && !isValidationActive ? { scale: 0.98 } : {}}
+                  title="Marcar servicios seleccionados como pagados por caja chica (sin generar PDF)"
+                >
+                  {loadingAnalisis ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <Coins className="w-4 h-4" />
+                      <span>
+                        Marcar como Pagados
+                        <span className="ml-1 text-xs opacity-90">(Caja Chica)</span>
+                      </span>
+                    </>
+                  )}
+                </motion.button>
+              )}
+
+              {/* Botón de Generar Pago - Solo con Excel cargado */}
+              {showAnalisis && analisisData && isValidationActive && (
                 <motion.button
                   onClick={handleGenerarPagoCompleto}
-                  disabled={!pagoRequest || !pagoRequest.servicesDetails || pagoRequest.servicesDetails.length === 0 || generatingPDF}
+                  disabled={!pagoRequest || !pagoRequest.servicesDetails || pagoRequest.servicesDetails.length === 0 || generatingPDF || !isValidationActive}
                   className={`px-6 py-2 rounded-lg font-medium transition-colors ${pagoRequest && pagoRequest.servicesDetails && pagoRequest.servicesDetails.length > 0 && !generatingPDF
                     ? 'bg-green-600 text-white hover:bg-green-700'
                     : 'bg-gray-400 text-gray-200 cursor-not-allowed'
@@ -2004,7 +2188,95 @@ const DetallesGrid: React.FC<{
   totalSinIgv: number;
   manualFactor: number;
   appliedTotalMedicoCurrent: number;
-}> = ({ detalles, selectedServicios, setSelectedServicios, onSelectionChange, isValidationActive = false, isAnalysisLoaded = false, cabeceras = [], excelValidatedOk = false, manualPercents, manualInput, setManualPercents, setManualInput, includeIgv, setIncludeIgv, visaDiscountPercent, setVisaDiscountPercent, totalVisa, totalEfectivo, descuentoVisa, totalGeneral, totalSinIgv, manualFactor, appliedTotalMedicoCurrent }) => {
+  filtros: {
+    paciente: string;
+    comprobante: string;
+    precioServicio: string;
+    formaPago: string;
+    estado: string;
+  };
+  setFiltros: React.Dispatch<React.SetStateAction<{
+    paciente: string;
+    comprobante: string;
+    precioServicio: string;
+    formaPago: string;
+    estado: string;
+  }>>;
+  editMedicoModal: { isOpen: boolean; serviceComponentId: string; currentMedicoId: number; currentMedicoName: string };
+  setEditMedicoModal: React.Dispatch<React.SetStateAction<{ isOpen: boolean; serviceComponentId: string; currentMedicoId: number; currentMedicoName: string }>>;
+  formData: FormState;
+  handleAnalizar: () => void;
+}> = ({ detalles, selectedServicios, setSelectedServicios, onSelectionChange, isValidationActive = false, isAnalysisLoaded = false, cabeceras = [], excelValidatedOk = false, manualPercents, manualInput, setManualPercents, setManualInput, includeIgv, setIncludeIgv, visaDiscountPercent, setVisaDiscountPercent, totalVisa, totalEfectivo, descuentoVisa, totalGeneral, totalSinIgv, manualFactor, appliedTotalMedicoCurrent, filtros, setFiltros, editMedicoModal, setEditMedicoModal, formData, handleAnalizar }) => {
+
+  // Construir opciones únicas para Forma Pago y Estado dinámicamente
+  const formasPagoOptions = useMemo(() => {
+    const formasPago = new Set<string>();
+    detalles.forEach(d => {
+      const forma = (d as any).formaPagoName;
+      if (forma && forma.trim() !== '' && forma !== '-') {
+        formasPago.add(forma);
+      }
+    });
+    return ['Todos', ...Array.from(formasPago).sort()];
+  }, [detalles]);
+
+  const estadosOptions = useMemo(() => {
+    const estados = new Set<string>();
+    detalles.forEach(d => {
+      const estado = (d as any).estadoPago || ((d as any).esPagado === 1 ? 'Pagado' : 'Pendiente');
+      if (estado && estado.trim() !== '') {
+        estados.add(estado);
+      }
+    });
+    return ['Todos', ...Array.from(estados).sort()];
+  }, [detalles]);
+
+  // Aplicar filtros adicionales a la lista de detalles (ya filtrada por médicos seleccionados)
+  const detallesConFiltrosAdicionales = useMemo(() => {
+    return detalles.filter(d => {
+      // Filtro de Paciente (contains)
+      if (filtros.paciente.trim() !== '') {
+        const paciente = ((d as any).paciente || '').toLowerCase();
+        if (!paciente.includes(filtros.paciente.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Filtro de Comprobante (contains)
+      if (filtros.comprobante.trim() !== '') {
+        const comprobante = ((d as any).v_ComprobantePago || '').toLowerCase();
+        if (!comprobante.includes(filtros.comprobante.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Filtro de Precio Servicio (contains - permite búsqueda parcial de números)
+      if (filtros.precioServicio.trim() !== '') {
+        const precio = String((d as any).precioServicio || 0);
+        if (!precio.includes(filtros.precioServicio)) {
+          return false;
+        }
+      }
+
+      // Filtro de Forma Pago (exact match, except "Todos")
+      if (filtros.formaPago !== 'Todos') {
+        const formaPago = (d as any).formaPagoName || '-';
+        if (formaPago !== filtros.formaPago) {
+          return false;
+        }
+      }
+
+      // Filtro de Estado (exact match, except "Todos")
+      if (filtros.estado !== 'Todos') {
+        const estado = (d as any).estadoPago || ((d as any).esPagado === 1 ? 'Pagado' : 'Pendiente');
+        if (estado !== filtros.estado) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [detalles, filtros]);
 
   const areCheckboxesDisabled = false;
 
@@ -2025,7 +2297,7 @@ const DetallesGrid: React.FC<{
     let nuevosSeleccionados: Set<string>;
     if (isChecked) {
       nuevosSeleccionados = new Set<string>();
-      detalles.forEach(detalle => {
+      detallesConFiltrosAdicionales.forEach(detalle => {
         if (detalle.esPagado !== 1) {
           nuevosSeleccionados.add(detalle.v_ServiceComponentId || `${detalle.numeroLinea}`);
         }
@@ -2053,8 +2325,8 @@ const DetallesGrid: React.FC<{
 
   // Resumen de selección (global y por médico)
   const selectedDetails = useMemo(() => {
-    return detalles.filter(d => selectedServicios.has(d.v_ServiceComponentId || `${d.numeroLinea}`));
-  }, [detalles, selectedServicios]);
+    return detallesConFiltrosAdicionales.filter(d => selectedServicios.has(d.v_ServiceComponentId || `${d.numeroLinea}`));
+  }, [detallesConFiltrosAdicionales, selectedServicios]);
 
   const globalServiciosSeleccionados = selectedDetails.length;
   const globalTotalComprobantes = selectedDetails.reduce((sum, d) => sum + (d.precioServicio || 0), 0);
@@ -2078,7 +2350,7 @@ const DetallesGrid: React.FC<{
 
   const detalleYResumenRows = useMemo(() => (
     <>
-      {detalles.map((detalle, index) => (
+      {detallesConFiltrosAdicionales.map((detalle, index) => (
         <motion.tr
           key={generateUniqueKey(detalle as any, index)}
           initial={{ opacity: 0 }}
@@ -2122,6 +2394,32 @@ const DetallesGrid: React.FC<{
               }`}>
               {(detalle as any).estadoPago || ((detalle as any).esPagado === 1 ? 'Pagado' : 'Pendiente')}
             </span>
+          </td>
+          <td className="px-4 py-3 text-center">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const d = detalle as any;
+                if (!d.v_ServiceComponentId) {
+                  ToastAlerts.warning({ title: 'Advertencia', message: 'No se puede editar: falta ID del componente' });
+                  return;
+                }
+                if (!formData.consultorioId) {
+                  ToastAlerts.warning({ title: 'Advertencia', message: 'Debe seleccionar un consultorio primero' });
+                  return;
+                }
+                setEditMedicoModal({
+                  isOpen: true,
+                  serviceComponentId: d.v_ServiceComponentId,
+                  currentMedicoId: d.medicoId || 0,
+                  currentMedicoName: d.nombreMedico || 'Sin médico asignado'
+                });
+              }}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+              title="Editar médico tratante"
+            >
+              <Edit className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            </button>
           </td>
         </motion.tr>
       ))}
@@ -2191,7 +2489,7 @@ const DetallesGrid: React.FC<{
         </tr>
       )}
     </>
-  ), [detalles, selectedServicios, areCheckboxesDisabled, isValidationActive, totalVisa, descuentoVisa, totalEfectivo, totalGeneral, totalSinIgv, excelValidatedOk]);
+  ), [detallesConFiltrosAdicionales, selectedServicios, areCheckboxesDisabled, isValidationActive, totalVisa, descuentoVisa, totalEfectivo, totalGeneral, totalSinIgv, excelValidatedOk]);
 
   // Agrupar por médico y calcular totales y porcentajes
   const resumenPorMedico = useMemo(() => {
@@ -2226,8 +2524,87 @@ const DetallesGrid: React.FC<{
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Detalle de Servicios ({detalles.length})
+              Detalle de Servicios ({detallesConFiltrosAdicionales.length})
             </h3>
+          </div>
+        </div>
+      </div>
+
+      {/* Sección de Filtros */}
+      <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/30 border-b border-gray-200 dark:border-gray-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Filtro Paciente */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Paciente
+            </label>
+            <input
+              type="text"
+              placeholder="Buscar paciente..."
+              value={filtros.paciente}
+              onChange={(e) => setFiltros(prev => ({ ...prev, paciente: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
+
+          {/* Filtro Comprobante */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Comprobante
+            </label>
+            <input
+              type="text"
+              placeholder="Buscar comprobante..."
+              value={filtros.comprobante}
+              onChange={(e) => setFiltros(prev => ({ ...prev, comprobante: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
+
+          {/* Filtro Precio Servicio */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Precio Servicio
+            </label>
+            <input
+              type="text"
+              placeholder="Ej: 30.00"
+              value={filtros.precioServicio}
+              onChange={(e) => setFiltros(prev => ({ ...prev, precioServicio: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
+
+          {/* Filtro Forma Pago */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Forma Pago
+            </label>
+            <select
+              value={filtros.formaPago}
+              onChange={(e) => setFiltros(prev => ({ ...prev, formaPago: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              {formasPagoOptions.map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro Estado */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Estado
+            </label>
+            <select
+              value={filtros.estado}
+              onChange={(e) => setFiltros(prev => ({ ...prev, estado: e.target.value }))}
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+            >
+              {estadosOptions.map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -2269,6 +2646,9 @@ const DetallesGrid: React.FC<{
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 Estado
+              </th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                Editar Médico
               </th>
             </tr>
           </thead>
@@ -2418,6 +2798,20 @@ const DetallesGrid: React.FC<{
 
         </div>
       )}
+
+      {/* Modal para editar médico tratante */}
+      <EditMedicoModal
+        isOpen={editMedicoModal.isOpen}
+        onClose={() => setEditMedicoModal({ ...editMedicoModal, isOpen: false })}
+        serviceComponentId={editMedicoModal.serviceComponentId}
+        currentMedicoId={editMedicoModal.currentMedicoId}
+        currentMedicoName={editMedicoModal.currentMedicoName}
+        consultorioId={formData.consultorioId!}
+        onSuccess={() => {
+          setEditMedicoModal({ ...editMedicoModal, isOpen: false });
+          handleAnalizar();
+        }}
+      />
     </div>
   );
 };

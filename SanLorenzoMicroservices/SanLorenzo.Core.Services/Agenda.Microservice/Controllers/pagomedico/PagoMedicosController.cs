@@ -156,5 +156,53 @@ namespace Agenda.Microservice.Controllers.pagomedico
                 return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
             }
         }
+
+        /// <summary>
+        /// Obtener lista de médicos/usuarios por consultorio
+        /// </summary>
+        /// <param name="consultorioId">ID del consultorio (null para obtener todos)</param>
+        /// <returns>Lista de médicos filtrados por consultorio</returns>
+        /// <response code="200">Lista de médicos obtenida exitosamente. El objModel contiene una lista de MedicoByConsultorioResponse</response>
+        /// <response code="400">Error en la solicitud</response>
+        [HttpGet("medicos")]
+        [ProducesResponseType(typeof(List<MedicoByConsultorioResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
+        public IActionResult GetMedicosByConsultorio([FromQuery] int? consultorioId = null)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var response = _pagoMedicosLogic.GetMedicosByConsultorio(consultorioId);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
+
+        /// <summary>
+        /// Actualizar médico tratante de un componente de servicio
+        /// </summary>
+        /// <param name="request">Datos para actualizar el médico tratante</param>
+        /// <returns>Respuesta indicando si la actualización fue exitosa</returns>
+        /// <response code="200">Médico tratante actualizado exitosamente. El objModel contiene UpdateMedicoTratanteResponse</response>
+        /// <response code="400">Error en la solicitud</response>
+        [HttpPut("medico-tratante")]
+        [ProducesResponseType(typeof(UpdateMedicoTratanteResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ResponseDTO), StatusCodes.Status400BadRequest)]
+        public IActionResult UpdateMedicoTratante([FromBody] UpdateMedicoTratanteRequest request)
+        {
+            _ResponseDTO = new ResponseDTO();
+            try
+            {
+                var response = _pagoMedicosLogic.UpdateMedicoTratante(request);
+                return Ok(_ResponseDTO.Success(_ResponseDTO, response));
+            }
+            catch (Exception e)
+            {
+                return BadRequest(_ResponseDTO.Failed(_ResponseDTO, e.Message));
+            }
+        }
     }
 } 

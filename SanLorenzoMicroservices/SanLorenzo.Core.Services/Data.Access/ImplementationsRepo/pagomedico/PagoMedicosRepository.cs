@@ -265,6 +265,65 @@ namespace Data.Access.ImplementationsRepo.pagomedico
             catch (Exception e)
             {
                 throw new Exception(e.Message);
+            }            
+        }
+
+        public List<MedicoByConsultorioResponse> GetMedicosByConsultorio(int? consultorioId)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+
+                    var result = connection.Query<MedicoByConsultorioResponse>(
+                        "[dbo].[GetMedicosByConsultorio_SP]",
+                        new { ConsultorioId = consultorioId },
+                        commandType: CommandType.StoredProcedure
+                    ).ToList();
+
+                    return result;
+                }
+            }
+            catch (SqlException e)
+            {
+                throw new Exception(e.Message);
+            }
+            catch (Exception e)
+            {
+                throw new Exception(e.Message);
+            }
+        }
+
+        public UpdateMedicoTratanteResponse UpdateMedicoTratante(UpdateMedicoTratanteRequest request)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    connection.Open();
+
+                    var result = connection.QueryFirstOrDefault<UpdateMedicoTratanteResponse>(
+                        "[dbo].[UpdateMedicoTratante_SP]",
+                        new
+                        {
+                            v_ServiceComponentId = request.v_ServiceComponentId,
+                            i_MedicoTratanteId = request.i_MedicoTratanteId,
+                            i_UpdateUserId = request.i_UpdateUserId
+                        },
+                        commandType: CommandType.StoredProcedure
+                    );
+
+                    return result ?? new UpdateMedicoTratanteResponse { success = false };
+                }
+            }
+            catch (SqlException e)
+            {
+                throw new Exception(e.Message);
+            }
+            catch (Exception e)
+            {
+                throw new Exception(e.Message);
             }
         }
     }
