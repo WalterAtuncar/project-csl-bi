@@ -12,7 +12,7 @@
   - Compatible con SQL Server 2012.
 */
 
-CREATE OR ALTER PROCEDURE [dbo].[sp_CajaMayor_FlujoDetallado]
+ALTER PROCEDURE [dbo].[sp_CajaMayor_FlujoDetallado]
     @Anio INT,
     @IdsTipoCajaCsv NVARCHAR(MAX) = NULL, -- CSV opcional (ej: '2,3,5')
     @TipoMovimiento CHAR(1) = NULL        -- 'I' ingresos, 'E' egresos, NULL ambos
@@ -58,9 +58,30 @@ BEGIN
                    cm.v_TipoMovimiento                      AS TipoMovimiento,
                    c.n_Mes                                  AS Mes,
                    CASE WHEN cm.v_TipoMovimiento = 'I' THEN 'FORMA_PAGO' ELSE 'ORIGEN' END AS DetalleTipo,
-                   CASE WHEN cm.v_TipoMovimiento = 'I' THEN ISNULL(cm.i_IdFormaPago, -1)
+                   -- INGRESOS: resolver la forma de pago. Si no hay forma de pago (grupo 46),
+                   -- caer a la condicion de pago (grupo 41) que el SP generador dejo en v_Observaciones:
+                   -- CREDITO no tiene equivalente en grupo 46 (id sintetico -2); DEPOSITO->9 y CHEQUE->6
+                   -- se fusionan con su forma de pago del grupo 46; CONTADO sin detalle -> EFECTIVO SOLES (1).
+                   CASE WHEN cm.v_TipoMovimiento = 'I' THEN
+                            CASE
+                              WHEN fp.i_ItemId IS NOT NULL THEN fp.i_ItemId
+                              WHEN cm.v_Observaciones = 'Credito' THEN -2
+                              WHEN cm.v_Observaciones = 'No Efectivo - DEPOSITO' THEN 9
+                              WHEN cm.v_Observaciones = 'No Efectivo - CHEQUE' THEN 6
+                              WHEN cm.v_Observaciones IN ('No Efectivo - CONTADO','Contado Efectivo') THEN 1
+                              ELSE -1
+                            END
                         ELSE ABS(CHECKSUM(ISNULL(cm.v_Origen,'DESCONOCIDO'))) END AS IdDetalle,
-                   CASE WHEN cm.v_TipoMovimiento = 'I' THEN ISNULL(fp.v_Value1, 'SIN FORMA PAGO')
+                   CASE WHEN cm.v_TipoMovimiento = 'I' THEN
+                            CASE
+                              WHEN fp.i_ItemId IS NOT NULL THEN fp.v_Value1
+                              WHEN cm.v_Observaciones = 'Credito' THEN 'CREDITO'
+                              WHEN cm.v_Observaciones = 'No Efectivo - DEPOSITO' THEN 'DEPOSITO'
+                              WHEN cm.v_Observaciones = 'No Efectivo - CHEQUE' THEN 'CHEQUE'
+                              WHEN cm.v_Observaciones IN ('No Efectivo - CONTADO','Contado Efectivo') THEN 'EFECTIVO SOLES'
+                              WHEN cm.v_Observaciones LIKE 'No Efectivo - %' THEN LTRIM(SUBSTRING(cm.v_Observaciones, CHARINDEX(' - ', cm.v_Observaciones) + 3, 100))
+                              ELSE 'SIN FORMA PAGO'
+                            END
                         ELSE ISNULL(cm.v_Origen, 'DESCONOCIDO') END AS NombreDetalle,
                    ISNULL(cm.d_Total,0)                     AS Monto
               FROM dbo.cajamayor_movimiento cm WITH (NOLOCK)
@@ -104,5 +125,3 @@ BEGIN
         RAISERROR(@ErrMsg, @ErrSev, @ErrSta);
     END CATCH
 END
-
-GO

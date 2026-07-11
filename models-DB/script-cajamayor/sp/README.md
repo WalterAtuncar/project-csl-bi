@@ -17,6 +17,8 @@ Este directorio contiene los Stored Procedures para la gestión de Caja Mayor me
 - `sp_CajaMayor_UpdateSaldoInicialTipoCaja.sql`: actualiza saldos iniciales por tipo de caja y recalcula.
 - `sp_TipoCaja_Documento_Upsert.sql`: upsert del mapeo `tipocaja_documento`.
 - `sp_TipoCaja_ClienteTipo_Upsert.sql`: upsert del mapeo `tipocaja_clientetipo` (venta.i_ClienteEsAgente → tipo caja).
+- `sp_CajaMayor_FlujoDetallado.sql`: alimenta el "Flujo de Caja Detallado" del BI (ingresos por forma de pago, egresos por origen). *(Actualizado 2026-07-11: resuelve la fuga "SIN FORMA PAGO". Los ingresos sin forma de pago del grupo 46 —crédito, depósito y cheque, que viven en el grupo 41 de condición— se derivan de la clasificación guardada en `cajamayor_movimiento.v_Observaciones`: `Credito`→CREDITO (id −2), `No Efectivo - DEPOSITO`→DEPOSITO (id 9), `No Efectivo - CHEQUE`→CHEQUE (id 6), contado sin detalle→EFECTIVO SOLES (id 1). Solo cambia etiquetas; los totales por caja no varían.)*
+- `sp_CajaMayor_FlujoConsolidado.sql`: versión consolidada por unidad de negocio (sin desglose de forma de pago).
 
 ## Orden sugerido de uso
 
