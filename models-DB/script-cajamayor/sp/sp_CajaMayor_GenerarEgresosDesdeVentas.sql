@@ -64,10 +64,9 @@ BEGIN
               AND v.t_InsertaFecha < DATEADD(DAY, 1, CAST(@FechaFin AS DATE))
               -- Series de egreso exactas (como .NET)
               AND v.v_SerieDocumento IN ('ECO', 'ECA', 'ECF', 'ECT', 'ECG', 'ECR')
-              -- Exclusiones del .NET
+              -- Exclusiones del .NET, ajustadas para incluir FARMACIA (3,4) y SISOL (10).
               AND v.i_ClienteEsAgente IS NOT NULL
-              AND v.i_ClienteEsAgente NOT IN (3, 10)
-              AND v.i_InsertaIdUsuario != 2036
+              AND (v.i_InsertaIdUsuario <> 2036 OR v.i_ClienteEsAgente IN (3, 4))
             GROUP BY
                 v.v_IdVenta,
                 v.v_SerieDocumento,

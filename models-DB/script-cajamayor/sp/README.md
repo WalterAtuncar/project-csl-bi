@@ -8,8 +8,8 @@ Este directorio contiene los Stored Procedures para la gestión de Caja Mayor me
 - `sp_CajaMayor_GetListCabecera.sql`: lista cabeceras con filtros y paginación.
 - `sp_CajaMayor_GetCabecera.sql`: obtiene una cabecera específica.
 - `sp_CajaMayor_GetMovimientos.sql`: lista movimientos con filtros y paginación.
-- `sp_CajaMayor_GenerarDesdeCobranzas.sql`: genera **ingresos** desde `venta`/`ventadetalle` replicando el cierre de caja diario de Facturacion_New (query `cadenaSA` de `frmCierreCajaDiario.cs`): suma `ventadetalle.d_PrecioVenta`, filtra por `venta.t_InsertaFecha`, clasifica por `datahierarchy` grupos 41/46 y excluye series de egreso, `TFM`/`THM`, áreas 3 y 10 y usuario 2036. *(Versión en producción desde 2026-05-31.)*
-- `sp_CajaMayor_GenerarEgresosDesdeVentas.sql`: genera **egresos** desde `venta` con las series exactas `ECO/ECA/ECF/ECT/ECG/ECR` (igual que el .NET), sumando `ventadetalle.d_PrecioVenta` por venta y filtrando por `venta.t_InsertaFecha`. *(Versión en producción desde 2026-05-31.)*
+- `sp_CajaMayor_GenerarDesdeCobranzas.sql`: genera **ingresos** desde `venta`/`ventadetalle` replicando el cierre de caja diario de Facturacion_New (query `cadenaSA` de `frmCierreCajaDiario.cs`): suma `ventadetalle.d_PrecioVenta`, filtra por `venta.t_InsertaFecha`, clasifica por `datahierarchy` grupos 41/46 y excluye series de egreso y `TFM`/`THM`. *(Versión base en producción desde 2026-05-31; **actualizada el 2026-07-11 para INCLUIR FARMACIA (áreas 3,4 → caja 6) y SISOL (área 10 → caja 3)**: se quitó `NOT IN (3,10)` y la exclusión del usuario 2036 solo aplica fuera de farmacia — `(user <> 2036 OR área IN (3,4))`.)*
+- `sp_CajaMayor_GenerarEgresosDesdeVentas.sql`: genera **egresos** desde `venta` con las series exactas `ECO/ECA/ECF/ECT/ECG/ECR` (igual que el .NET), sumando `ventadetalle.d_PrecioVenta` por venta y filtrando por `venta.t_InsertaFecha`. *(Versión base en producción desde 2026-05-31; **actualizada el 2026-07-11 con el mismo ajuste de FARMACIA/SISOL** que el SP de ingresos.)*
 - `sp_CajaMayor_ResumenTipos.sql`: recalcula resumen por tipo de caja y actualiza totales de cabecera.
 - `sp_CajaMayor_RecalcularTotales.sql`: recalcula totales globales de cabecera desde el resumen.
 - `sp_CajaMayor_InsertMovimientoManual.sql`: inserta un movimiento manual (I/E) y recalcula.
@@ -47,11 +47,15 @@ Operaciones auxiliares:
   - Fuente: `venta` + `ventadetalle`, con `LEFT JOIN cobranzadetalle` **sin** filtro `i_Eliminado` (el .NET tampoco lo filtra) y `datahierarchy` grupos 41 (condición de pago) y 46 (forma de pago).
   - Importe: `ventadetalle.d_PrecioVenta` por línea (lo facturado, no lo cobrado); subtotal/IGV desde `d_Valor`/`d_Igv`.
   - Solo se incluyen filas que el .NET clasifica como ingreso: Contado Efectivo, Crédito o No Efectivo (contado no-efectivo, cheque, depósito); la categoría se guarda en `v_Observaciones`.
+  - **Cobertura de cajas (desde 2026-07-11):** incluye TODAS las cajas — ASISTENCIAL (áreas 2,8,9), OCUPACIONAL (área 1), SEGUROS (áreas 5,6), **FARMACIA (áreas 3,4 → caja 6)** y **SISOL (área 10 → caja 3)**. El usuario 2036 (POS de farmacia) solo se excluye fuera de farmacia.
 
 - Egresos desde ventas (desde 2026-05-31):
   - Fuente: `venta` + `ventadetalle`, agrupado por venta.
   - Criterio: series exactas `ECO/ECA/ECF/ECT/ECG/ECR` (las notas de crédito `NC-`/`NCR` ya no se tratan como egreso, igual que el cierre diario del .NET).
   - Mapeo de tipo de caja: uso explícito de `dbo.tipocaja_clientetipo` (por `i_ClienteEsAgente`). Si no existe mapeo, se cae a `@DefaultIdTipoCaja`.
+  - **Cobertura de cajas (desde 2026-07-11):** igual que ingresos, incluye FARMACIA y SISOL (en la práctica solo farmacia tiene egresos, serie `ECF`).
+
+- Reconciliación histórica: los cierres ya generados de ene–jun 2026 (ids 22,23,24,25,32,33) se completaron con las cajas FARMACIA y SISOL vía `../recon/recon_farmacia_sisol_2026.sql` (INSERT quirúrgico que no altera las demás cajas). Ver `../../docs/PLAN_INCLUIR_FARMACIA_SISOL_CIERRE_CAJA.md`.
 
 ## Próximos ajustes recomendados
 

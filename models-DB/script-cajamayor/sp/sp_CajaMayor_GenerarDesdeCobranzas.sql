@@ -75,10 +75,11 @@ BEGIN
               -- Fecha: usar t_InsertaFecha como .NET, normalizar ignorando hora
               AND V.t_InsertaFecha >= CAST(@FechaInicio AS DATE)
               AND V.t_InsertaFecha < DATEADD(DAY, 1, CAST(@FechaFin AS DATE))
-              -- Exclusiones del .NET
+              -- Exclusiones del .NET, ajustadas para incluir FARMACIA (3,4) y SISOL (10).
+              -- El usuario 2036 es el POS de farmacia: solo se excluye fuera de farmacia
+              -- para mantener la paridad con cadenaSA en las demas cajas.
               AND V.i_ClienteEsAgente IS NOT NULL
-              AND V.i_ClienteEsAgente NOT IN (3, 10)
-              AND V.i_InsertaIdUsuario != 2036
+              AND (V.i_InsertaIdUsuario <> 2036 OR V.i_ClienteEsAgente IN (3, 4))
               -- Excluir series de egreso y series especiales (como .NET)
               AND ISNULL(V.v_SerieDocumento, '') NOT IN ('ECO', 'ECA', 'ECF', 'ECT', 'ECG', 'ECR')
               AND ISNULL(V.v_SerieDocumento, '') NOT IN ('TFM', 'THM')
