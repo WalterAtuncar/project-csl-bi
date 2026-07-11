@@ -28,11 +28,9 @@ builder.Services.AddTransient<IServiceLogic, serviceLogic>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-//if (app.Environment.IsDevelopment())
-//{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-//}
+// Swagger UI habilitado en TODOS los ambientes (Development y Production)
+app.UseSwagger();
+app.UseSwaggerUI();
 // Habilitar CORS primero (antes de cualquier otro middleware)
 app.UseCors("AllowAll");
 

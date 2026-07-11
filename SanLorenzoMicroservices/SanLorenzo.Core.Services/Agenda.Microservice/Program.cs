@@ -43,11 +43,9 @@ builder.Services.AddTransient<IPagoMedicosLogic, PagoMedicosLogic>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// Swagger UI habilitado en TODOS los ambientes (Development y Production)
+app.UseSwagger();
+app.UseSwaggerUI();
 
 // Habilitar CORS
 app.UseCors("AllowAll");

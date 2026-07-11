@@ -49,7 +49,7 @@ class CobranzaService extends BaseApiService {
    * Sobrescribe la URL base específicamente para cobranzas
    */
   protected getCobranzaBaseURL(): string {
-    return import.meta.env.VITE_COBRANZA_API_BASE_URL || 'https://localhost:7043/api' ; //'http://190.116.90.35:8184/api'; //
+    return import.meta.env.VITE_COBRANZA_API_BASE_URL || 'http://190.116.90.35:8184/api'; //'https://localhost:7043/api' ; //
   }
 
   /**
@@ -427,30 +427,30 @@ class CobranzaService extends BaseApiService {
       // Asistencial
       this.getGerenciaVentasAsistencialMS({ fechaInicio, fechaFin, fechaInicioRet2Meses: fechaInicio }),
       this.getGerenciaVentasAsistencialMSSISOL({ fechaInicio, fechaFin, fechaInicioRet2Meses: fechaInicio }),
-      
+
       // Ocupacional
       this.getGerenciaVentasOcupacionalMS({ fechaInicio, fechaFin, fechaInicioRet2Meses: fechaInicio }),
-      
+
       // MTC
       this.getGerenciaVentasMTCMS({ fechaInicio, fechaFin, fechaInicioRet2Meses: fechaInicio }),
-      
+
       // Farmacia
       this.getGerenciaVentasFarmaciaMS({ fechaInicio, fechaFin, fechaInicioRet2Meses: fechaInicio }),
-      
+
       // San Lorenzo Global
-      this.getGerenciaVentasAsistencialMSGLOBAL_ListaVentas({ 
-        fechaInicio, 
-        fechaFin, 
-        fechaInicioRetard: fechaInicio, 
-        pacienteDni: '', 
-        tipoVenta: undefined, 
-        comprobante: '' 
+      this.getGerenciaVentasAsistencialMSGLOBAL_ListaVentas({
+        fechaInicio,
+        fechaFin,
+        fechaInicioRetard: fechaInicio,
+        pacienteDni: '',
+        tipoVenta: undefined,
+        comprobante: ''
       })
     ];
 
     try {
       const results = await Promise.all(requests);
-      
+
       return {
         asistencial: results[0]?.objModel || [],
         asistencialSISOL: results[1]?.objModel || [],
@@ -475,15 +475,15 @@ class CobranzaService extends BaseApiService {
   private validateDates(fechaInicio: string, fechaFin: string): boolean {
     const startDate = new Date(fechaInicio);
     const endDate = new Date(fechaFin);
-    
+
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       throw new Error('Formato de fecha inválido');
     }
-    
+
     if (startDate > endDate) {
       throw new Error('La fecha de inicio no puede ser mayor a la fecha de fin');
     }
-    
+
     return true;
   }
 
@@ -501,7 +501,7 @@ class CobranzaService extends BaseApiService {
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    
+
     return {
       fechaInicio: this.formatDateForAPI(firstDay),
       fechaFin: this.formatDateForAPI(lastDay)
@@ -515,7 +515,7 @@ class CobranzaService extends BaseApiService {
     const now = new Date();
     const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
-    
+
     return {
       fechaInicio: this.formatDateForAPI(firstDay),
       fechaFin: this.formatDateForAPI(lastDay)
@@ -535,7 +535,7 @@ class CobranzaService extends BaseApiService {
     agruparPor?: 'dia' | 'semana' | 'mes';
   }): Promise<ApiResponse<GerenciaVentasDetalleResponse[]>> {
     const { tipoReporte, incluirAnuladas = false, agruparPor = 'dia', ...baseRequest } = request;
-    
+
     let endpoint = '';
     switch (tipoReporte) {
       case 'asistencial':
@@ -578,7 +578,7 @@ class CobranzaService extends BaseApiService {
   }> {
     try {
       this.validateDates(fechaInicio, fechaFin);
-      
+
       const [asistencial, ocupacional, mtc, farmacia] = await Promise.all([
         this.getGerenciaVentasAsistencialMS({ fechaInicio, fechaFin, fechaInicioRet2Meses: fechaInicio }),
         this.getGerenciaVentasOcupacionalMS({ fechaInicio, fechaFin, fechaInicioRet2Meses: fechaInicio }),
@@ -592,7 +592,7 @@ class CobranzaService extends BaseApiService {
       const farmaciaData = farmacia?.objModel || [];
 
       const totalVentas = asistencialData.length + ocupacionalData.length + mtcData.length + farmaciaData.length;
-      
+
       const totalIngresos = [
         ...asistencialData,
         ...ocupacionalData,
@@ -643,16 +643,16 @@ class CobranzaService extends BaseApiService {
       if (responseError.response?.status === 401) {
         throw new Error('No autorizado para acceder a la información de cobranza');
       }
-      
+
       if (responseError.response?.status === 404) {
         throw new Error(`Recurso de cobranza no encontrado: ${operation}`);
       }
-      
+
       if (responseError.response?.status === 500) {
         throw new Error('Error interno del servidor de cobranza');
       }
     }
-    
+
     // Type guard para errores de red
     if (error && typeof error === 'object' && 'code' in error) {
       const networkError = error as { code?: string };
@@ -660,13 +660,13 @@ class CobranzaService extends BaseApiService {
         throw new Error('Error de conexión con el servidor de cobranza');
       }
     }
-    
+
     // Type guard para errores con mensaje
     if (error && typeof error === 'object' && 'message' in error) {
       const messageError = error as { message?: string };
       throw new Error(`Error en operación de cobranza (${operation}): ${messageError.message || 'Error desconocido'}`);
     }
-    
+
     throw new Error(`Error en operación de cobranza (${operation}): Error desconocido`);
   }
 
@@ -679,20 +679,20 @@ class CobranzaService extends BaseApiService {
     delay: number = 1000
   ): Promise<T> {
     let lastError: unknown;
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await operation();
       } catch (error) {
         lastError = error;
-        
+
         if (attempt === maxRetries) {
           break;
         }
-        
+
         // Solo reintentar para errores de red o temporales
         let shouldRetry = false;
-        
+
         // Type guard para errores de red
         if (error && typeof error === 'object' && 'code' in error) {
           const networkError = error as { code?: string };
@@ -700,7 +700,7 @@ class CobranzaService extends BaseApiService {
             shouldRetry = true;
           }
         }
-        
+
         // Type guard para errores de servidor
         if (error && typeof error === 'object' && 'response' in error) {
           const serverError = error as { response?: { status?: number } };
@@ -708,16 +708,16 @@ class CobranzaService extends BaseApiService {
             shouldRetry = true;
           }
         }
-        
+
         if (shouldRetry) {
           await new Promise(resolve => setTimeout(resolve, delay * attempt));
           continue;
         }
-        
+
         break;
       }
     }
-    
+
     throw lastError;
   }
 
@@ -737,11 +737,11 @@ class CobranzaService extends BaseApiService {
       const headers = Object.keys(data[0]);
       const csvContent = [
         headers.join(','),
-        ...data.map(row => 
+        ...data.map(row =>
           headers.map(header => {
             const value = row[header];
-            return typeof value === 'string' && value.includes(',') 
-              ? `"${value}"` 
+            return typeof value === 'string' && value.includes(',')
+              ? `"${value}"`
               : value;
           }).join(',')
         )
@@ -749,7 +749,7 @@ class CobranzaService extends BaseApiService {
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
-      
+
       if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
@@ -761,14 +761,14 @@ class CobranzaService extends BaseApiService {
       }
     } catch (error) {
       console.error('Error exportando a CSV:', error);
-      
+
       // Type guard para errores con mensaje
       let errorMessage = 'Error desconocido en exportación';
       if (error && typeof error === 'object' && 'message' in error) {
         const messageError = error as { message?: string };
         errorMessage = messageError.message || errorMessage;
       }
-      
+
       throw new Error(`Error en exportación: ${errorMessage}`);
     }
   }
@@ -788,7 +788,7 @@ class CobranzaService extends BaseApiService {
           'Estado': item.estado || '',
           'Tipo': item.tipoVenta || ''
         }));
-      
+
       case 'liquidaciones':
         return data.map(item => ({
           'ID Liquidación': item.idLiquidacion || '',
@@ -798,7 +798,7 @@ class CobranzaService extends BaseApiService {
           'Estado': item.estado || '',
           'Observaciones': item.observaciones || ''
         }));
-      
+
       case 'indicadores':
         return data.map(item => ({
           'Período': item.periodo || '',
@@ -807,7 +807,7 @@ class CobranzaService extends BaseApiService {
           'Unidad': item.unidad || '',
           'Tendencia': item.tendencia || ''
         }));
-      
+
       default:
         return data;
     }

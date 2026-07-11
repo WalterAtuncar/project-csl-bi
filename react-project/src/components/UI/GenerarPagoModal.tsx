@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -1278,7 +1279,7 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return ReactDOM.createPortal(
     <AnimatePresence>
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4 overflow-y-auto">
         <motion.div
@@ -1929,7 +1930,8 @@ const GenerarPagoModal: React.FC<GenerarPagoModalProps> = ({
         </AnimatePresence>
       </div>
 
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 };
 

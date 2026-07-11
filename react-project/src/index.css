@@ -1,3 +1,15 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Asegurar que los modales puedan cubrir toda la pantalla */
+@layer base {
+  html, body, #root {
+    @apply h-full;
+  }
+  
+  /* Permitir scroll en el root pero no en otros contenedores */
+  #root {
+    @apply overflow-auto;
+  }
+}

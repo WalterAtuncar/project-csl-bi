@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { X, Search } from 'lucide-react';
 import { pagoMedicosService } from '../../services/PagoMedicosService';
 import type { MedicoByConsultorioResponse, UpdateMedicoTratanteRequest } from '../../services/PagoMedicosService';
@@ -117,7 +118,7 @@ const EditMedicoModal: React.FC<EditMedicoModalProps> = ({
 
     if (!isOpen) return null;
 
-    return (
+    return ReactDOM.createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
                 {/* Header */}
@@ -234,7 +235,8 @@ const EditMedicoModal: React.FC<EditMedicoModalProps> = ({
                     </div>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

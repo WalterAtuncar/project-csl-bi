@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, Filter, Eye, Trash2, Printer, Search, ChevronLeft, ChevronRight, Calculator, FileSpreadsheet } from 'lucide-react';
 import { EspecialidadesModal, GenerarPagoModal, PDFViewer } from '../../components/UI';
-import { 
-  especialidadesMedicasService, 
+import {
+  especialidadesMedicasService,
   ProfesionalResponse,
-  SearchProfesionalesRequest 
+  SearchProfesionalesRequest
 } from '../../services/EspecialidadesMedicasService';
 import {
   pagoMedicosService,
@@ -38,18 +38,18 @@ const HonorariosMedicos: React.FC = () => {
   // Estados para controlar los modales
   const [showEspecialidadesModal, setShowEspecialidadesModal] = useState(false);
   const [showGenerarPagoModal, setShowGenerarPagoModal] = useState(false);
-  
+
   // Función helper para obtener fechas por defecto
   const getDefaultDates = () => {
     const today = new Date();
     // Fecha fin: hoy
     const fechaFin = today.toISOString().split('T')[0]; // YYYY-MM-DD
-    
+
     // Fecha inicio: hace un mes
     const fechaInicio = new Date(today);
     fechaInicio.setMonth(fechaInicio.getMonth() - 1);
     const fechaInicioStr = fechaInicio.toISOString().split('T')[0]; // YYYY-MM-DD
-    
+
     return { fechaInicio: fechaInicioStr, fechaFin };
   };
 
@@ -66,7 +66,7 @@ const HonorariosMedicos: React.FC = () => {
     const date = new Date(year, month - 1, day); // month es 0-indexed
     return date.toLocaleDateString('es-ES', {
       day: '2-digit',
-      month: '2-digit', 
+      month: '2-digit',
       year: 'numeric'
     });
   };
@@ -117,13 +117,13 @@ const HonorariosMedicos: React.FC = () => {
       incluirEliminados: false
     };
   });
-  
+
   // Estados para el autocomplete de profesionales
   const [searchProfesional, setSearchProfesional] = useState('');
   const [profesionales, setProfesionales] = useState<ProfesionalResponse[]>([]);
   const [showProfesionales, setShowProfesionales] = useState(false);
   const [loadingProfesionales, setLoadingProfesionales] = useState(false);
-  
+
   // Estados para el grid (datos reales)
   const [honorarios, setHonorarios] = useState<HonorarioMedicoItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -172,31 +172,31 @@ const HonorariosMedicos: React.FC = () => {
   const loadHonorarios = async (customFilters?: FilterState) => {
     try {
       setLoading(true);
-      
+
       // Usar filtros personalizados o los del estado
       const currentFilters = customFilters || filters;
-      
+
       // Construir el request basado en los filtros
       const request: ListarPagosMedicosRequest = {};
-      
+
       if (currentFilters.profesionalSystemUserId) {
         request.i_MedicoTratanteId = currentFilters.profesionalSystemUserId;
       }
-      
+
       if (currentFilters.fechaInicio) {
         // Convertir fecha YYYY-MM-DD a formato ISO con hora de inicio del día
         request.d_FechaInicio = `${currentFilters.fechaInicio}T00:00:00.000Z`;
       }
-      
+
       if (currentFilters.fechaFin) {
         // Convertir fecha YYYY-MM-DD a formato ISO con hora de fin del día
         request.d_FechaFin = `${currentFilters.fechaFin}T23:59:59.999Z`;
       }
-      
+
       request.i_IncludeDeleted = currentFilters.incluirEliminados;
-      
+
       const response = await pagoMedicosService.listarPagosMedicos(request);
-      
+
       setHonorarios(response || []);
       setPagination(prev => ({
         ...prev,
@@ -213,11 +213,11 @@ const HonorariosMedicos: React.FC = () => {
           duration: 3000
         });
       }
-      
+
     } catch {
       setHonorarios([]);
       setPagination(prev => ({ ...prev, totalRecords: 0, totalPages: 0 }));
-      
+
       ToastAlerts.error({
         title: "Error de conexión",
         message: "No se pudieron cargar los honorarios médicos. Verifique su conexión a internet.",
@@ -270,7 +270,7 @@ const HonorariosMedicos: React.FC = () => {
     setFilters(newFilters);
     setPagination(prev => ({ ...prev, page: 1 }));
     setShowFilters(false);
-    
+
     // Cargar datos con los nuevos filtros
     await loadHonorarios(newFilters);
   };
@@ -283,20 +283,20 @@ const HonorariosMedicos: React.FC = () => {
       fechaFin,
       incluirEliminados: false
     };
-    
+
     setFilters(defaultFilters);
     setSearchProfesional('');
     setPagination(prev => ({ ...prev, page: 1 }));
     setShowFilters(false);
-    
+
     // Recargar con filtros por defecto
     await loadHonorarios(defaultFilters);
   };
 
   // Seleccionar profesional del autocomplete
   const selectProfesional = (profesional: ProfesionalResponse) => {
-    setFilters(prev => ({ 
-      ...prev, 
+    setFilters(prev => ({
+      ...prev,
       profesionalSystemUserId: profesional.systemUserId,
       profesionalNombre: profesional.name
     }));
@@ -329,10 +329,10 @@ const HonorariosMedicos: React.FC = () => {
     }
 
     const confirm = window.confirm(`¿Está seguro de eliminar el pago médico ID: ${item.i_PaidId} de ${item.nombreMedico}?`);
-    
+
     if (confirm) {
       ToastAlerts.info({
-        title: "Funcionalidad en desarrollo", 
+        title: "Funcionalidad en desarrollo",
         message: `Eliminación del pago médico ID: ${item.i_PaidId} pendiente de implementar`,
         duration: 4000
       });
@@ -363,7 +363,7 @@ const HonorariosMedicos: React.FC = () => {
     try {
       // Preparar el base64 SIN prefijo para react-pdf (type: 'base64')
       let cleanBase64 = item.v_Comprobante;
-      
+
       // Si tiene el prefijo, quitarlo
       if (cleanBase64.startsWith('data:application/pdf;base64,')) {
         cleanBase64 = cleanBase64.replace('data:application/pdf;base64,', '');
@@ -378,7 +378,7 @@ const HonorariosMedicos: React.FC = () => {
         message: `Mostrando comprobante del pago médico ID: ${item.i_PaidId} - ${item.nombreMedico}`,
         duration: 3000
       });
-      
+
     } catch {
       ToastAlerts.error({
         title: "Error al abrir comprobante",
@@ -406,7 +406,7 @@ const HonorariosMedicos: React.FC = () => {
 
       // Crear libro de trabajo
       const workbook = XLSX.utils.book_new();
-      
+
       // Crear datos para la hoja de instrucciones
       const instructionsData = [
         ['INSTRUCCIONES PARA LLENAR LA PLANTILLA DE ATENCIONES'],
@@ -446,22 +446,22 @@ const HonorariosMedicos: React.FC = () => {
         [''],
         ['❓ En caso de dudas, comuníquese con el administrador.']
       ];
-      
+
       // Crear hoja de instrucciones
       const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionsData);
-      
+
       // Configurar ancho de columnas para instrucciones
       const instructionsColWidths = [
         { wch: 80 } // Columna única más ancha para las instrucciones
       ];
       instructionsSheet['!cols'] = instructionsColWidths;
-      
+
       // Agregar hoja de instrucciones al libro
       XLSX.utils.book_append_sheet(workbook, instructionsSheet, 'Instrucciones');
-      
+
       // Crear hoja de trabajo desde array de arrays
       const worksheet = XLSX.utils.aoa_to_sheet(templateData);
-      
+
       // Configurar ancho de columnas
       const colWidths = [
         { wch: 15 }, // Fecha Servicio
@@ -469,14 +469,14 @@ const HonorariosMedicos: React.FC = () => {
         { wch: 20 }  // Comprobante
       ];
       worksheet['!cols'] = colWidths;
-      
+
       // Agregar hoja al libro
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Plantilla Atenciones');
 
       // Generar nombre de archivo con timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const filename = `plantilla-atenciones-${timestamp}.xlsx`;
-      
+
       // Escribir archivo Excel
       XLSX.writeFile(workbook, filename);
 
@@ -515,7 +515,7 @@ const HonorariosMedicos: React.FC = () => {
             </div>
           )}
         </div>
-        
+
         <div className="flex gap-2">
           <motion.button
             onClick={handleDescargarPlantilla}
@@ -526,7 +526,7 @@ const HonorariosMedicos: React.FC = () => {
             <FileSpreadsheet className="w-4 h-4 mr-2 inline text-green-600" />
             Descargar plantilla de atenciones
           </motion.button>
-          
+
           <motion.button
             onClick={handleGenerarPago}
             className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
@@ -536,8 +536,9 @@ const HonorariosMedicos: React.FC = () => {
             <Calculator className="w-4 h-4 mr-2 inline text-white" />
             Generar Nuevo Pago
           </motion.button>
-          
-          <motion.button
+
+          {/* TODO: Habilitar cuando se implemente la funcionalidad de gestión de especialidades */}
+          {/* <motion.button
             onClick={handleGestionEspecialidades}
             className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors"
             whileHover={{ scale: 1.02 }}
@@ -545,15 +546,14 @@ const HonorariosMedicos: React.FC = () => {
           >
             <Settings className="w-4 h-4 mr-2 inline text-white" />
             Gestión de especialidades
-          </motion.button>
-          
+          </motion.button> */}
+
           <motion.button
             onClick={() => setShowFilters(!showFilters)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              showFilters 
-                ? 'bg-primary text-white' 
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${showFilters
+                ? 'bg-primary text-white'
                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-            }`}
+              }`}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
@@ -682,17 +682,16 @@ const HonorariosMedicos: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        honorario.i_IsDeleted === 1 
-                          ? 'bg-red-100 text-red-800' 
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${honorario.i_IsDeleted === 1
+                          ? 'bg-red-100 text-red-800'
                           : 'bg-green-100 text-green-800'
-                      }`}>
+                        }`}>
                         {honorario.estado || (honorario.i_IsDeleted === 1 ? 'Eliminado' : 'Activo')}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
-                        
+
                         <motion.button
                           onClick={() => handleImprimir(honorario)}
                           className="text-gray-600 hover:text-gray-800"
@@ -768,15 +767,15 @@ interface FilterPanelProps {
   getCurrentDate: () => string;
 }
 
-const FilterPanel: React.FC<FilterPanelProps> = ({ 
-  filters, 
+const FilterPanel: React.FC<FilterPanelProps> = ({
+  filters,
   searchProfesional,
   profesionales,
   showProfesionales,
   loadingProfesionales,
   onSearchProfesionalChange,
   onSelectProfesional,
-  onApply, 
+  onApply,
   onClear,
   getCurrentDate
 }) => {
@@ -810,7 +809,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               </div>
             )}
           </div>
-          
+
           {/* Dropdown de profesionales */}
           {showProfesionales && profesionales.length > 0 && (
             <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
@@ -942,7 +941,7 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPage
       <div className="text-sm text-gray-500 dark:text-gray-400">
         Página {currentPage} de {totalPages}
       </div>
-      
+
       <div className="flex items-center space-x-1">
         <button
           onClick={() => onPageChange(currentPage - 1)}
@@ -951,22 +950,21 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPage
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        
+
         {getVisiblePages().map((page, index) => (
           <button
             key={`page-${page}-${index}`}
             onClick={() => typeof page === 'number' ? onPageChange(page) : undefined}
             disabled={typeof page !== 'number'}
-            className={`px-3 py-1 rounded-lg text-sm ${
-              page === currentPage
+            className={`px-3 py-1 rounded-lg text-sm ${page === currentPage
                 ? 'bg-primary text-white'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
-            } ${typeof page !== 'number' ? 'cursor-default' : ''}`}
+              } ${typeof page !== 'number' ? 'cursor-default' : ''}`}
           >
             {page}
           </button>
         ))}
-        
+
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
