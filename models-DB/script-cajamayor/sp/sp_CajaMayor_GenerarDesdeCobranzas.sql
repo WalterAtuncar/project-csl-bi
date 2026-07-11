@@ -1,7 +1,14 @@
+-- =====================================================================
+-- Version en PRODUCCION desde 2026-05-31 (extraida del servidor el 2026-07-11).
+-- Reescrito para replicar la logica del cierre de caja diario de
+-- Facturacion_New (query "cadenaSA" de frmCierreCajaDiario.cs):
+-- suma ventadetalle.d_PrecioVenta, filtra por venta.t_InsertaFecha y
+-- clasifica por datahierarchy grupos 41 (condicion) y 46 (forma de pago).
+-- =====================================================================
 ALTER PROCEDURE [dbo].[sp_CajaMayor_GenerarDesdeCobranzas]
     @IdCajaMayorCierre INT,
     @InsertaIdUsuario  INT,
-    @DefaultIdTipoCaja INT = NULL -- opcional, se usa si no se encuentra mapeo
+    @DefaultIdTipoCaja INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -20,49 +27,61 @@ BEGIN
             RAISERROR('El cierre no existe o no tiene rango de fechas definido.', 16, 1);
         END
 
-        ;WITH Cobros AS (
-            SELECT cd.v_IdCobranzaDetalle,
-                   cd.v_IdCobranza,
-                   cd.v_IdVenta,
-                   v.i_IdTipoDocumento,
-                   cd.i_IdFormaPago,
-                   cd.i_IdMoneda,
-                   cd.d_ImporteSoles,
-                   cd.d_ImporteDolares,
-                   cd.t_InsertaFecha,
-                   cd.v_Observacion,
-                   v.v_SerieDocumento,
-                   v.v_CorrelativoDocumento,
-                   -- NumeroDocumento no existe en venta; se construye desde serie+correlativo
-                   CAST(ISNULL(v.v_SerieDocumento,'') + '-' + ISNULL(v.v_CorrelativoDocumento,'') AS NVARCHAR(50)) AS v_NumeroDocumento,
-                   v.i_ClienteEsAgente,
-                   v.t_FechaRegistro AS FechaVenta,
-                   -- Concepto concatenado desde ventadetalle
-                   vdAgg.v_ConceptosDetalle AS v_ConceptosDetalle,
-                   ISNULL(v.i_EsAfectoIgv, 0) AS i_EsAfectoIgv,
-                   ISNULL(v.d_Total, 0) AS d_TotalVenta,
-                   ISNULL(v.d_IGV, 0) AS d_IGVVenta
-              FROM [20505310072].[dbo].[cobranzadetalle] cd
-         LEFT JOIN [20505310072].[dbo].[venta] v
-                ON v.v_IdVenta = cd.v_IdVenta
-               AND ISNULL(v.i_Eliminado,0) = 0
-         OUTER APPLY (
-                SELECT STUFF(
-                           (
-                               SELECT ' | ' + ISNULL(d.v_DescripcionProducto, '')
-                                 FROM [20505310072].[dbo].[ventadetalle] d
-                                WHERE d.v_IdVenta = v.v_IdVenta
-                                  AND ISNULL(d.i_Eliminado,0) = 0
-                                ORDER BY d.t_InsertaFecha
-                                  FOR XML PATH(''), TYPE
-                           ).value('.', 'NVARCHAR(MAX)'), 1, 3, ''
-                       ) AS v_ConceptosDetalle
-         ) vdAgg
-             WHERE cd.i_Eliminado = 0
-               AND cd.t_InsertaFecha >= @FechaInicio
-               AND cd.t_InsertaFecha < DATEADD(DAY, 1, @FechaFin)
-                AND (v.v_SerieDocumento LIKE 'F%' OR v.v_SerieDocumento LIKE 'B%' OR v.v_SerieDocumento LIKE 'I%')
-                AND (v.v_SerieDocumento NOT LIKE 'THM%' AND v.v_SerieDocumento NOT LIKE 'TFM%')
+        -- ============================================================
+        -- INGRESOS: Replica exacta de la query cadenaSA del .NET
+        --
+        -- .NET hace: venta -> ventadetalle -> cliente -> cobranzadetalle -> datahierarchy
+        -- Suma: ventadetalle.d_PrecioVenta
+        -- Clasifica por:
+        --   datahierarchy(GroupId=41) = CONDICION (CONTADO, CREDITO, CHEQUE, DEPOSITO...)
+        --   datahierarchy(GroupId=46) = TIPO (EFECTIVO SOLES, VISA, MASTERCARD...)
+        --
+        -- Excluye: series EC*, TFM, THM + user 2036 + tipo 3,10
+        --
+        -- Categorias de ingreso .NET:
+        --   CONTADO EFECTIVO: CONDICION='CONTADO' AND TIPO='EFECTIVO SOLES'
+        --   CREDITO:          CONDICION='CREDITO'
+        --   NO EFECTIVO:      (CONDICION='CONTADO' AND TIPO<>'EFECTIVO SOLES')
+        --                     OR CONDICION IN ('CHEQUE','DEPOSITO')
+        -- ============================================================
+        ;WITH VentasIngreso AS (
+            SELECT
+                V.v_IdVenta,
+                V.v_SerieDocumento,
+                V.v_CorrelativoDocumento,
+                V.t_InsertaFecha,
+                V.i_ClienteEsAgente,
+                VD.d_PrecioVenta AS d_Total,
+                VD.d_Valor AS d_Subtotal,
+                VD.d_Igv AS d_IGV,
+                VD.v_DescripcionProducto,
+                DH.v_Value1 AS CONDICION,     -- datahierarchy GroupId=41 (condicion pago)
+                DH2.v_Value1 AS TIPO,         -- datahierarchy GroupId=46 (forma pago)
+                CD.i_IdFormaPago
+            FROM [dbo].[venta] V
+            INNER JOIN [dbo].[ventadetalle] VD
+                ON V.v_IdVenta = VD.v_IdVenta
+                AND ISNULL(VD.i_Eliminado, 0) = 0
+            -- .NET NO filtra i_Eliminado en cobranzadetalle (LEFT JOIN sin filtro)
+            LEFT JOIN [dbo].[cobranzadetalle] CD
+                ON CD.v_IdVenta = V.v_IdVenta
+            LEFT JOIN [dbo].[datahierarchy] DH
+                ON DH.i_GroupId = 41
+                AND DH.i_ItemId = V.i_IdCondicionPago
+            LEFT JOIN [dbo].[datahierarchy] DH2
+                ON DH2.i_GroupId = 46
+                AND DH2.i_ItemId = CD.i_IdFormaPago
+            WHERE V.i_Eliminado = 0
+              -- Fecha: usar t_InsertaFecha como .NET, normalizar ignorando hora
+              AND V.t_InsertaFecha >= CAST(@FechaInicio AS DATE)
+              AND V.t_InsertaFecha < DATEADD(DAY, 1, CAST(@FechaFin AS DATE))
+              -- Exclusiones del .NET
+              AND V.i_ClienteEsAgente IS NOT NULL
+              AND V.i_ClienteEsAgente NOT IN (3, 10)
+              AND V.i_InsertaIdUsuario != 2036
+              -- Excluir series de egreso y series especiales (como .NET)
+              AND ISNULL(V.v_SerieDocumento, '') NOT IN ('ECO', 'ECA', 'ECF', 'ECT', 'ECG', 'ECR')
+              AND ISNULL(V.v_SerieDocumento, '') NOT IN ('TFM', 'THM')
         )
         INSERT INTO dbo.cajamayor_movimiento (
             i_IdCajaMayorCierre,
@@ -83,38 +102,51 @@ BEGIN
             i_InsertaIdUsuario,
             t_InsertaFecha
         )
-        SELECT @IdCajaMayorCierre AS i_IdCajaMayorCierre,
-               COALESCE(tcct.i_IdTipoCaja, @DefaultIdTipoCaja) AS i_IdTipoCaja,
-               'I' AS v_TipoMovimiento,
-               LEFT(COALESCE(c.v_ConceptosDetalle, CONCAT('Cobranza ', ISNULL(c.v_IdCobranza,''))), 350) AS v_ConceptoMovimiento,
-               CASE 
-                   WHEN c.i_EsAfectoIgv = 1 AND c.d_TotalVenta > 0 AND c.d_IGVVenta > 0 
-                       THEN ROUND(ISNULL(c.d_ImporteSoles,0) - ROUND(ISNULL(c.d_ImporteSoles,0) * (c.d_IGVVenta / c.d_TotalVenta), 2), 2)
-                   ELSE ISNULL(c.d_ImporteSoles,0)
-               END AS d_Subtotal,
-               CASE 
-                   WHEN c.i_EsAfectoIgv = 1 AND c.d_TotalVenta > 0 AND c.d_IGVVenta > 0 
-                       THEN ROUND(ISNULL(c.d_ImporteSoles,0) * (c.d_IGVVenta / c.d_TotalVenta), 2)
-                   ELSE 0
-               END AS d_IGV,
-               ISNULL(c.d_ImporteSoles,0) AS d_Total,
-               c.i_IdFormaPago AS i_IdFormaPago,
-               c.t_InsertaFecha AS t_FechaMovimiento,
-               CONCAT('Cobranza ', ISNULL(c.v_IdCobranza,'')) AS v_Observaciones,
-               'cobranzas' AS v_Origen,
-               CAST(COALESCE(doc.v_Siglas, c.v_SerieDocumento) AS NVARCHAR(30)) AS v_CodigoDocumento,
-               ISNULL(c.v_SerieDocumento,'') AS v_SerieDocumento,
-               ISNULL(c.v_NumeroDocumento,'') AS v_NumeroDocumento,
-               ISNULL(c.v_IdVenta,'') AS v_IdVenta,
-               @InsertaIdUsuario AS i_InsertaIdUsuario,
-               GETDATE() AS t_InsertaFecha
-          FROM Cobros c
-     LEFT JOIN dbo.tipocaja_clientetipo tcct
-            ON tcct.i_ClienteEsAgente = c.i_ClienteEsAgente AND tcct.b_Activo = 1
-     LEFT JOIN [20505310072].[dbo].[documento] doc
-            ON doc.i_CodigoDocumento = c.i_IdTipoDocumento;
+        SELECT
+            @IdCajaMayorCierre,
+            COALESCE(tcct.i_IdTipoCaja, @DefaultIdTipoCaja),
+            'I',  -- Ingreso
+            LEFT(ISNULL(vi.v_DescripcionProducto, 'Ingreso venta'), 350),
+            ISNULL(vi.d_Subtotal, 0),
+            ISNULL(vi.d_IGV, 0),
+            ISNULL(vi.d_Total, 0),
+            vi.i_IdFormaPago,
+            vi.t_InsertaFecha,
+            -- Observacion indica la clasificacion .NET
+            CASE
+                WHEN vi.CONDICION = 'CONTADO' AND vi.TIPO = 'EFECTIVO SOLES'
+                    THEN 'Contado Efectivo'
+                WHEN vi.CONDICION = 'CREDITO'
+                    THEN 'Credito'
+                WHEN (vi.CONDICION = 'CONTADO' AND ISNULL(vi.TIPO,'') <> 'EFECTIVO SOLES')
+                  OR vi.CONDICION IN ('CHEQUE', 'DEPOSITO')
+                    THEN 'No Efectivo - ' + ISNULL(vi.TIPO, vi.CONDICION)
+                ELSE 'Otro - ' + ISNULL(vi.CONDICION, 'Sin condicion')
+            END,
+            'cobranzas',  -- mantener mismo origen para compatibilidad
+            ISNULL(vi.v_SerieDocumento, ''),
+            ISNULL(vi.v_SerieDocumento, ''),
+            ISNULL(vi.v_SerieDocumento, '') + '-' + ISNULL(vi.v_CorrelativoDocumento, ''),
+            ISNULL(vi.v_IdVenta, ''),
+            @InsertaIdUsuario,
+            GETDATE()
+        FROM VentasIngreso vi
+        LEFT JOIN dbo.tipocaja_clientetipo tcct
+            ON tcct.i_ClienteEsAgente = vi.i_ClienteEsAgente
+            AND tcct.b_Activo = 1
+        -- Solo incluir registros que el .NET incluiria como ingreso:
+        -- CONTADO EFECTIVO, CREDITO, o NO EFECTIVO
+        WHERE (
+            -- Contado Efectivo
+            (vi.CONDICION = 'CONTADO' AND vi.TIPO = 'EFECTIVO SOLES')
+            -- Credito
+            OR (vi.CONDICION = 'CREDITO')
+            -- No Efectivo (contado con otra forma de pago, o cheque/deposito)
+            OR (vi.CONDICION = 'CONTADO' AND ISNULL(vi.TIPO, '') <> 'EFECTIVO SOLES')
+            OR (vi.CONDICION IN ('CHEQUE', 'DEPOSITO'))
+        );
 
-        -- Recalcular resumen por tipo (consumir resultset para no interferir con el cliente)
+        -- Recalcular resumen por tipo (consumir resultset para no interferir)
         DECLARE @ResumenTipos TABLE (
             IdCajaMayorCierre INT,
             IdTipoCaja INT,
@@ -124,9 +156,11 @@ BEGIN
             SaldoFinal DECIMAL(18,4)
         );
         INSERT INTO @ResumenTipos
-        EXEC dbo.sp_CajaMayor_ResumenTipos @IdCajaMayorCierre = @IdCajaMayorCierre, @ActualizaIdUsuario = @InsertaIdUsuario;
+        EXEC dbo.sp_CajaMayor_ResumenTipos
+            @IdCajaMayorCierre = @IdCajaMayorCierre,
+            @ActualizaIdUsuario = @InsertaIdUsuario;
 
-        -- Resultado parcial para verificación: últimos insertados
+        -- Resultado para verificacion
         SELECT TOP (50) *
           FROM dbo.cajamayor_movimiento
          WHERE i_IdCajaMayorCierre = @IdCajaMayorCierre

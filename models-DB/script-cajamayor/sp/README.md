@@ -8,8 +8,8 @@ Este directorio contiene los Stored Procedures para la gestión de Caja Mayor me
 - `sp_CajaMayor_GetListCabecera.sql`: lista cabeceras con filtros y paginación.
 - `sp_CajaMayor_GetCabecera.sql`: obtiene una cabecera específica.
 - `sp_CajaMayor_GetMovimientos.sql`: lista movimientos con filtros y paginación.
-- `sp_CajaMayor_GenerarDesdeCobranzas.sql`: genera **ingresos** desde `cobranzadetalle` (mapeo forma pago → documento → tipo caja).
-- `sp_CajaMayor_GenerarEgresosDesdeVentas.sql`: genera **egresos** desde `venta` (series `EC*` y NC/Devolución).
+- `sp_CajaMayor_GenerarDesdeCobranzas.sql`: genera **ingresos** desde `venta`/`ventadetalle` replicando el cierre de caja diario de Facturacion_New (query `cadenaSA` de `frmCierreCajaDiario.cs`): suma `ventadetalle.d_PrecioVenta`, filtra por `venta.t_InsertaFecha`, clasifica por `datahierarchy` grupos 41/46 y excluye series de egreso, `TFM`/`THM`, áreas 3 y 10 y usuario 2036. *(Versión en producción desde 2026-05-31.)*
+- `sp_CajaMayor_GenerarEgresosDesdeVentas.sql`: genera **egresos** desde `venta` con las series exactas `ECO/ECA/ECF/ECT/ECG/ECR` (igual que el .NET), sumando `ventadetalle.d_PrecioVenta` por venta y filtrando por `venta.t_InsertaFecha`. *(Versión en producción desde 2026-05-31.)*
 - `sp_CajaMayor_ResumenTipos.sql`: recalcula resumen por tipo de caja y actualiza totales de cabecera.
 - `sp_CajaMayor_RecalcularTotales.sql`: recalcula totales globales de cabecera desde el resumen.
 - `sp_CajaMayor_InsertMovimientoManual.sql`: inserta un movimiento manual (I/E) y recalcula.
@@ -43,14 +43,14 @@ Operaciones auxiliares:
 
 ## Consideraciones de mapeo y datos fuente
 
-- Ingresos desde cobranzas:
-  - Fuente: `[20505310072].[dbo].[cobranzadetalle]` y join a `[20505310072].[dbo].[venta]`.
-  - Mapeo forma de pago → documento: se intenta `dbo.relacionformapagodocumento`; si no existe, se usa un fallback genérico (`CajaSoles`/`CajaDolares`). Ajustar según su catálogo.
-  - Importe: `CASE WHEN i_IdMoneda = 1 THEN d_ImporteSoles ELSE d_ImporteDolares END`.
+- Ingresos (desde 2026-05-31 replican el cierre diario del .NET):
+  - Fuente: `venta` + `ventadetalle`, con `LEFT JOIN cobranzadetalle` **sin** filtro `i_Eliminado` (el .NET tampoco lo filtra) y `datahierarchy` grupos 41 (condición de pago) y 46 (forma de pago).
+  - Importe: `ventadetalle.d_PrecioVenta` por línea (lo facturado, no lo cobrado); subtotal/IGV desde `d_Valor`/`d_Igv`.
+  - Solo se incluyen filas que el .NET clasifica como ingreso: Contado Efectivo, Crédito o No Efectivo (contado no-efectivo, cheque, depósito); la categoría se guarda en `v_Observaciones`.
 
-- Egresos desde ventas:
-  - Fuente: `[20505310072].[dbo].[venta]`.
-  - Criterio: series que inician con `EC` (devoluciones) y posibles prefijos de Notas de Crédito (p. ej. `NC-`, `NCR`). Ajustar según nomenclatura real.
+- Egresos desde ventas (desde 2026-05-31):
+  - Fuente: `venta` + `ventadetalle`, agrupado por venta.
+  - Criterio: series exactas `ECO/ECA/ECF/ECT/ECG/ECR` (las notas de crédito `NC-`/`NCR` ya no se tratan como egreso, igual que el cierre diario del .NET).
   - Mapeo de tipo de caja: uso explícito de `dbo.tipocaja_clientetipo` (por `i_ClienteEsAgente`). Si no existe mapeo, se cae a `@DefaultIdTipoCaja`.
 
 ## Próximos ajustes recomendados
