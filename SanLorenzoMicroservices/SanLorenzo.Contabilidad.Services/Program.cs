@@ -85,8 +85,18 @@ app.Use(async (ctx, next) =>
     }
 });
 
-app.UseSwagger();
-app.UseSwaggerUI();
+// Swagger UI solo en Development. En otros entornos la raiz muestra un aviso simple.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "SanLorenzo Contabilidad API v1"));
+}
+else
+{
+    app.MapGet("/", () => Results.Content(
+        "<p>SanLorenzo Contabilidad API - running</p>", "text/html; charset=utf-8"));
+}
+
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
