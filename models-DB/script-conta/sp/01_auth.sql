@@ -60,12 +60,13 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT u.i_IdUsuario, u.v_Username, u.v_NombreCompleto, u.b_Activo, u.t_UltimoLogin,
+           u.v_AuthOrigen, u.v_UsernameLegacy, u.i_SystemUserIdLegacy,
            STUFF((SELECT ',' + r.v_Nombre
                     FROM conta.usuario_rol ur JOIN conta.rol r ON r.i_IdRol = ur.i_IdRol
                    WHERE ur.i_IdUsuario = u.i_IdUsuario
                    FOR XML PATH('')), 1, 1, '') AS Roles
     FROM conta.usuario u
-    ORDER BY u.v_Username;
+    ORDER BY u.v_AuthOrigen, u.v_Username;
 END
 GO
 
