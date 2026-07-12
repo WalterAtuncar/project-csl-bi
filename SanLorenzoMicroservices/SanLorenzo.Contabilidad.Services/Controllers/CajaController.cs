@@ -28,6 +28,10 @@ namespace Contabilidad.Controllers
         public IActionResult Diaria([FromQuery] short anio, [FromQuery] byte mes)
             => Ok(_repo.Diaria(anio, mes));
 
+        [HttpGet("indicadores")]
+        public IActionResult Indicadores([FromQuery] short anio, [FromQuery] byte mes)
+            => Ok(_repo.Indicadores(anio, mes));
+
         [HttpGet("flujo-consolidado")]
         public IActionResult FlujoConsolidado([FromQuery] short anio)
             => Ok(_repo.FlujoConsolidado(anio));

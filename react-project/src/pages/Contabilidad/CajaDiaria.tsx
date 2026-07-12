@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
-import { Wallet, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, RefreshCw, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
-import type { CajaDiaRow, CajaIngresoRow } from '../../services/contabilidad/contaTypes';
+import type { CajaDiaRow, CajaIngresoRow, CajaIndicadores } from '../../services/contabilidad/contaTypes';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -15,6 +15,7 @@ const CajaDiaria: React.FC = () => {
   const [mes, setMes] = useState(now.getMonth() + 1);
   const [dias, setDias] = useState<CajaDiaRow[]>([]);
   const [hoyIngresos, setHoyIngresos] = useState<CajaIngresoRow[]>([]);
+  const [indic, setIndic] = useState<CajaIndicadores | null>(null);
   const [loading, setLoading] = useState(false);
 
   const hoyStr = `${anio}-${pad(mes)}-${pad(Math.min(now.getDate(), 28))}`;
@@ -22,8 +23,12 @@ const CajaDiaria: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const serie = await contabilidadService.cajaDiaria(anio, mes);
+      const [serie, ind] = await Promise.all([
+        contabilidadService.cajaDiaria(anio, mes),
+        contabilidadService.cajaIndicadores(anio, mes),
+      ]);
       setDias(serie);
+      setIndic(ind);
       // tabla del dia: ultimo dia con movimiento (o el dia de hoy si el mes es el actual)
       const esMesActual = anio === now.getFullYear() && mes === now.getMonth() + 1;
       const diaObjetivo = esMesActual ? `${anio}-${pad(mes)}-${pad(now.getDate())}` : serie[serie.length - 1]?.Dia?.slice(0, 10);
@@ -83,10 +88,15 @@ const CajaDiaria: React.FC = () => {
       </div>
 
       {/* tarjetas */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <Card title="Saldo al día" value={saldoHoy} icon={<Wallet className="h-5 w-5" />} tone="emerald" />
         <Card title={`Ingresos ${MESES[mes - 1]} (al día)`} value={totalIngresos} icon={<TrendingUp className="h-5 w-5" />} tone="sky" />
         <Card title={`Egresos ${MESES[mes - 1]} (al día)`} value={totalEgresos} icon={<TrendingDown className="h-5 w-5" />} tone="rose" />
+      </div>
+      {/* indicadores por pagar / por cobrar (checklist E2E) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+        <Card title="Egresos por pagar (deuda)" value={indic?.PorPagar ?? 0} icon={<ArrowDownCircle className="h-5 w-5" />} tone="amber" />
+        <Card title="Ventas al crédito por cobrar" value={indic?.PorCobrar ?? 0} icon={<ArrowUpCircle className="h-5 w-5" />} tone="violet" />
       </div>
 
       {/* grafico saldo diario */}
@@ -168,6 +178,8 @@ const toneMap: Record<string, string> = {
   emerald: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600',
   sky: 'bg-sky-50 dark:bg-sky-900/30 text-sky-600',
   rose: 'bg-rose-50 dark:bg-rose-900/30 text-rose-500',
+  amber: 'bg-amber-50 dark:bg-amber-900/30 text-amber-600',
+  violet: 'bg-violet-50 dark:bg-violet-900/30 text-violet-600',
 };
 
 const Card: React.FC<{ title: string; value: number; icon: React.ReactNode; tone: string }> = ({ title, value, icon, tone }) => (

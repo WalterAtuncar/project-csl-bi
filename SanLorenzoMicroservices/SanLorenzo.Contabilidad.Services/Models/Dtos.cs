@@ -277,6 +277,13 @@ namespace Contabilidad.Models
         public decimal FlujoDia { get; set; }
         public decimal SaldoAcumulado { get; set; }
     }
+    public class CajaIndicadores
+    {
+        public decimal PorPagar { get; set; }
+        public decimal PorCobrar { get; set; }
+        public decimal CreditoFacturado { get; set; }
+        public decimal CreditoCobrado { get; set; }
+    }
     public class FlujoMesRow
     {
         public byte Mes { get; set; }

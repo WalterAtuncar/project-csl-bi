@@ -135,6 +135,10 @@ class ContabilidadService {
     const { data } = await this.http.get<CajaDiaRow[]>('/caja/diaria', { params: { anio, mes } });
     return data;
   }
+  async cajaIndicadores(anio: number, mes: number): Promise<import('./contaTypes').CajaIndicadores> {
+    const { data } = await this.http.get('/caja/indicadores', { params: { anio, mes } });
+    return data;
+  }
   async flujoConsolidado(anio: number): Promise<FlujoConsolidado> {
     const { data } = await this.http.get<FlujoConsolidado>('/caja/flujo-consolidado', { params: { anio } });
     return data;

@@ -191,6 +191,12 @@ export interface CajaDiaRow {
   FlujoDia: number;
   SaldoAcumulado: number;
 }
+export interface CajaIndicadores {
+  PorPagar: number;
+  PorCobrar: number;
+  CreditoFacturado: number;
+  CreditoCobrado: number;
+}
 
 export interface FlujoMesRow {
   Mes: number;

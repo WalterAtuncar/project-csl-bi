@@ -31,6 +31,13 @@ namespace Contabilidad.Repositories
                 new { Anio = anio, Mes = mes }, commandType: CommandType.StoredProcedure);
         }
 
+        public CajaIndicadores Indicadores(short anio, byte mes)
+        {
+            using var cn = _db.Open();
+            return cn.QueryFirstOrDefault<CajaIndicadores>("conta.sp_Caja_Indicadores",
+                new { Anio = anio, Mes = mes }, commandType: CommandType.StoredProcedure);
+        }
+
         public FlujoConsolidadoResponse FlujoConsolidado(short anio)
         {
             using var cn = _db.Open();
