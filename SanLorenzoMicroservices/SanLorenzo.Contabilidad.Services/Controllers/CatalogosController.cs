@@ -72,6 +72,10 @@ namespace Contabilidad.Controllers
         [Authorize(Roles = ESCRITURA)]
         public IActionResult SisolParticipacionCrear([FromBody] SisolParticipacionCreateRequest r) => Ok(new { i_IdParticipacion = _repo.SisolInsert(r, User.UserId()) });
 
+        [HttpPut("sisol/participacion")]
+        [Authorize(Roles = ESCRITURA)]
+        public IActionResult SisolActualizar([FromBody] SisolParticipacionUpdateRequest r) => Ok(new { i_IdParticipacion = _repo.SisolUpdate(r, User.UserId()) });
+
         // ---- Config ----
         [HttpGet("config")]
         public IActionResult Config() => Ok(_repo.ConfigList());

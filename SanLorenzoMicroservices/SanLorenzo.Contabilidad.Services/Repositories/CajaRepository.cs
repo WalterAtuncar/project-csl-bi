@@ -24,11 +24,24 @@ namespace Contabilidad.Repositories
                 new { Desde = desde, Hasta = hasta }, commandType: CommandType.StoredProcedure);
         }
 
-        public IEnumerable<CajaDiaRow> Diaria(short anio, byte mes)
+        public IEnumerable<CajaDiaRow> Diaria(short anio, byte mes, string formasPago, bool incluirCredito)
         {
             using var cn = _db.Open();
             return cn.Query<CajaDiaRow>("conta.sp_Caja_Diaria",
-                new { Anio = anio, Mes = mes }, commandType: CommandType.StoredProcedure);
+                new
+                {
+                    Anio = anio,
+                    Mes = mes,
+                    FormasPago = string.IsNullOrWhiteSpace(formasPago) ? null : formasPago,
+                    IncluirCredito = incluirCredito
+                }, commandType: CommandType.StoredProcedure);
+        }
+
+        public IEnumerable<FormaPagoRow> FormasPago()
+        {
+            using var cn = _db.Open();
+            return cn.Query<FormaPagoRow>("conta.sp_Caja_FormasPago",
+                commandType: CommandType.StoredProcedure);
         }
 
         public CajaIndicadores Indicadores(short anio, byte mes)
@@ -38,11 +51,16 @@ namespace Contabilidad.Repositories
                 new { Anio = anio, Mes = mes }, commandType: CommandType.StoredProcedure);
         }
 
-        public FlujoConsolidadoResponse FlujoConsolidado(short anio)
+        public FlujoConsolidadoResponse FlujoConsolidado(short anio, string formasPago, bool incluirCredito)
         {
             using var cn = _db.Open();
             using var multi = cn.QueryMultiple("conta.sp_Caja_FlujoConsolidado",
-                new { Anio = anio }, commandType: CommandType.StoredProcedure);
+                new
+                {
+                    Anio = anio,
+                    FormasPago = string.IsNullOrWhiteSpace(formasPago) ? null : formasPago,
+                    IncluirCredito = incluirCredito
+                }, commandType: CommandType.StoredProcedure);
             return new FlujoConsolidadoResponse
             {
                 Resumen = multi.Read<FlujoMesRow>().AsList(),

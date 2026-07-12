@@ -13,10 +13,10 @@ namespace Contabilidad.Controllers
         public RentabilidadController(RentabilidadRepository repo) => _repo = repo;
 
         [HttpGet("general")]
-        public IActionResult General([FromQuery] short anio, [FromQuery] byte mes) => Ok(_repo.General(anio, mes));
+        public IActionResult General([FromQuery] short anio, [FromQuery] byte mes, [FromQuery] bool incluirCredito = true) => Ok(_repo.General(anio, mes, incluirCredito));
 
         [HttpGet("por-unidad")]
-        public IActionResult PorUnidad([FromQuery] short anio, [FromQuery] byte mes) => Ok(_repo.PorUnidad(anio, mes));
+        public IActionResult PorUnidad([FromQuery] short anio, [FromQuery] byte mes, [FromQuery] bool incluirCredito = true) => Ok(_repo.PorUnidad(anio, mes, incluirCredito));
 
         [HttpGet("gastos")]
         public IActionResult Gastos([FromQuery] short anio, [FromQuery] byte mes) => Ok(_repo.Gastos(anio, mes));
@@ -25,6 +25,6 @@ namespace Contabilidad.Controllers
         public IActionResult Ingresos([FromQuery] short anio, [FromQuery] byte mes) => Ok(_repo.Ingresos(anio, mes));
 
         [HttpGet("comparativa")]
-        public IActionResult Comparativa([FromQuery] short anio) => Ok(_repo.Comparativa(anio));
+        public IActionResult Comparativa([FromQuery] short anio, [FromQuery] bool incluirCredito = true) => Ok(_repo.Comparativa(anio, incluirCredito));
     }
 }

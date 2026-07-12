@@ -184,6 +184,13 @@ namespace Contabilidad.Models
         public decimal PorcHospital { get; set; }
         public DateTime VigenciaDesde { get; set; }
     }
+    public class SisolParticipacionUpdateRequest
+    {
+        public int IdParticipacion { get; set; }
+        public decimal PorcClinica { get; set; }
+        public decimal PorcHospital { get; set; }
+        public DateTime? VigenciaDesde { get; set; }
+    }
 
     public class ConfigRow { public string v_Clave { get; set; } public string v_Valor { get; set; } public string v_Descripcion { get; set; } }
     public class ConfigUpdateRequest { public string Clave { get; set; } public string Valor { get; set; } }
@@ -327,6 +334,11 @@ namespace Contabilidad.Models
         public decimal OtrosIngresos { get; set; }
         public decimal FlujoDia { get; set; }
         public decimal SaldoAcumulado { get; set; }
+    }
+    public class FormaPagoRow
+    {
+        public int i_IdFormaPago { get; set; }
+        public string FormaPago { get; set; }
     }
     public class CajaIndicadores
     {

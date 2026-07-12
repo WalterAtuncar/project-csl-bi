@@ -110,6 +110,13 @@ namespace Contabilidad.Repositories
                 new { r.PorcClinica, r.PorcHospital, r.VigenciaDesde, IdUsuarioAccion = idAccion },
                 commandType: CommandType.StoredProcedure);
         }
+        public int SisolUpdate(SisolParticipacionUpdateRequest r, int idAccion)
+        {
+            using var cn = _db.Open();
+            return cn.QuerySingle<int>("conta.sp_SisolParticipacion_Update",
+                new { r.IdParticipacion, r.PorcClinica, r.PorcHospital, r.VigenciaDesde, IdUsuarioAccion = idAccion },
+                commandType: CommandType.StoredProcedure);
+        }
 
         // ---- Config ----
         public IEnumerable<ConfigRow> ConfigList()

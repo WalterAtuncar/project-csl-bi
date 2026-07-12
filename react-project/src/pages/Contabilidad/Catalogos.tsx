@@ -211,33 +211,40 @@ const CuentasTab: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
 const SisolTab: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
   const [rows, setRows] = useState<SisolParticipacion[]>([]);
   const [open, setOpen] = useState(false);
+  const [edit, setEdit] = useState<SisolParticipacion | null>(null);
   const [form, setForm] = useState({ PorcClinica: 70, VigenciaDesde: new Date().toISOString().slice(0, 10) });
   const load = useCallback(async () => { try { setRows(await contabilidadService.sisolParticipacionList()); } catch (e) { toast.error(String(e)); } }, []);
   useEffect(() => { load(); }, [load]);
+  const openNew = () => { setEdit(null); setForm({ PorcClinica: 70, VigenciaDesde: new Date().toISOString().slice(0, 10) }); setOpen(true); };
+  const openEdit = (r: SisolParticipacion) => { setEdit(r); setForm({ PorcClinica: r.d_PorcClinica, VigenciaDesde: r.t_VigenciaDesde?.slice(0, 10) || '' }); setOpen(true); };
   const save = async () => {
+    const porcHospital = Math.round((100 - form.PorcClinica) * 100) / 100;
+    if (Math.abs(form.PorcClinica + porcHospital - 100) > 0.001) { toast.error('% Clínica + % Hospital debe sumar 100'); return; }
     try {
-      await contabilidadService.sisolParticipacionCrear({ PorcClinica: form.PorcClinica, PorcHospital: 100 - form.PorcClinica, VigenciaDesde: form.VigenciaDesde });
-      toast.success('Vigencia agregada'); setOpen(false); load();
+      if (edit) await contabilidadService.sisolParticipacionActualizar({ IdParticipacion: edit.i_IdParticipacion, PorcClinica: form.PorcClinica, PorcHospital: porcHospital, VigenciaDesde: form.VigenciaDesde });
+      else await contabilidadService.sisolParticipacionCrear({ PorcClinica: form.PorcClinica, PorcHospital: porcHospital, VigenciaDesde: form.VigenciaDesde });
+      toast.success(edit ? 'Vigencia actualizada' : 'Vigencia agregada'); setOpen(false); load();
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error'); }
   };
   return (
-    <Panel title="Participación SISOL (historial de vigencias)" canWrite={canWrite} onNew={() => setOpen(true)}>
-      <Table head={['% Clínica', '% Hospital', 'Vigente desde', 'Vigente hasta']}>
+    <Panel title="Participación SISOL (historial de vigencias)" canWrite={canWrite} onNew={openNew}>
+      <Table head={['% Clínica', '% Hospital', 'Vigente desde', 'Vigente hasta', '']}>
         {rows.map((r) => (
           <tr key={r.i_IdParticipacion} className="border-b border-slate-100 dark:border-slate-700/50">
             <td className="px-3 py-1.5 font-medium">{r.d_PorcClinica}%</td>
             <td className="px-3 py-1.5">{r.d_PorcHospital}%</td>
             <td className="px-3 py-1.5">{r.t_VigenciaDesde?.slice(0, 10)}</td>
             <td className="px-3 py-1.5 text-slate-500">{r.t_VigenciaHasta?.slice(0, 10) || 'Vigente'}</td>
+            <td className="px-3 py-1.5 text-right">{canWrite && <IconBtn onClick={() => openEdit(r)} />}</td>
           </tr>
         ))}
       </Table>
       {open && (
-        <Modal title="Nueva vigencia" onClose={() => setOpen(false)} onSave={save}>
+        <Modal title={edit ? 'Editar vigencia' : 'Nueva vigencia'} onClose={() => setOpen(false)} onSave={save}>
           <Field label="% Clínica"><input type="number" step="0.01" value={form.PorcClinica} onChange={(e) => setForm({ ...form, PorcClinica: Number(e.target.value) })} className={inp} /></Field>
           <Field label="% Hospital (auto)"><input disabled value={100 - form.PorcClinica} className={inp} /></Field>
           <Field label="Vigente desde"><input type="date" value={form.VigenciaDesde} onChange={(e) => setForm({ ...form, VigenciaDesde: e.target.value })} className={inp} /></Field>
-          <p className="text-xs text-slate-400">La vigencia anterior se cierra automáticamente el día previo.</p>
+          <p className="text-xs text-slate-400">{edit ? 'Corrige los datos de esta vigencia.' : 'La vigencia anterior se cierra automáticamente el día previo.'}</p>
         </Modal>
       )}
     </Panel>

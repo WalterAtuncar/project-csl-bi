@@ -24,20 +24,25 @@ const Rentabilidad: React.FC = () => {
   const [comp, setComp] = useState<ComparativaResponse | null>(null);
   const [tab, setTab] = useState<Tab>('mensual');
   const [loading, setLoading] = useState(false);
+  // Toggle "incluir ventas a credito" (PLAN §5.3). Estado local, default ON, sin persistencia (T5).
+  const [incluirCredito, setIncluirCredito] = useState(true);
+  const filtroActivo = !incluirCredito;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Credito ON => param omitido (URL default identica). Aplica a General Y Comparativa (T6).
+      const incluirCreditoParam = incluirCredito ? undefined : false;
       const [g, c] = await Promise.all([
-        contabilidadService.rentabilidadGeneral(anio, mes),
-        contabilidadService.rentabilidadComparativa(anio),
+        contabilidadService.rentabilidadGeneral(anio, mes, incluirCreditoParam),
+        contabilidadService.rentabilidadComparativa(anio, incluirCreditoParam),
       ]);
       setGeneral(g);
       setComp(c);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error cargando rentabilidad');
     } finally { setLoading(false); }
-  }, [anio, mes]);
+  }, [anio, mes, incluirCredito]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -74,29 +79,57 @@ const Rentabilidad: React.FC = () => {
           <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className={selCls}>
             {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
           </select>
+          {/* Toggle credito: aplica directo al cambiar (sin boton Aplicar) — PLAN §5.2 */}
+          <label
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 cursor-pointer select-none"
+            title="OFF = solo facturación al contado y depósito; se excluyen las ventas a crédito (cuentas por cobrar)"
+          >
+            <input
+              type="checkbox"
+              checked={incluirCredito}
+              onChange={(e) => setIncluirCredito(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Incluir ventas a crédito
+          </label>
           <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
             <RefreshCw className="h-4 w-4" /> Actualizar
           </button>
         </div>
       </div>
 
+      {/* banner de vista sin credito (T4) */}
+      {filtroActivo && (
+        <div className="mb-4 text-xs px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+          Vista sin ventas a crédito
+        </div>
+      )}
+
       {/* tarjeta grande resultado */}
       {general && sem && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
           <div className={`lg:col-span-1 rounded-2xl p-5 border ${esGanancia ? 'border-emerald-200 dark:border-emerald-800' : 'border-rose-200 dark:border-rose-800'} bg-white dark:bg-slate-800`}>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500 dark:text-slate-400">Resultado {MESES[mes - 1]} {anio}</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${sem.cls}`}>{sem.label}</span>
+            {/* Con OFF: Resultado/Margen/Semaforo atenuados (T4) — NO se ocultan */}
+            <div className={filtroActivo ? 'opacity-50' : ''}>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Resultado {MESES[mes - 1]} {anio}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${sem.cls}`}>{sem.label}</span>
+              </div>
+              <div className={`mt-2 text-3xl font-bold flex items-center gap-2 ${esGanancia ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {esGanancia ? <TrendingUp className="h-7 w-7" /> : <TrendingDown className="h-7 w-7" />}
+                S/ {money(Math.abs(general.Resultado))}
+              </div>
+              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Margen {general.MargenPorc}% · {esGanancia ? 'Ganancia' : 'Pérdida'}</div>
             </div>
-            <div className={`mt-2 text-3xl font-bold flex items-center gap-2 ${esGanancia ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {esGanancia ? <TrendingUp className="h-7 w-7" /> : <TrendingDown className="h-7 w-7" />}
-              S/ {money(Math.abs(general.Resultado))}
-            </div>
-            <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Margen {general.MargenPorc}% · {esGanancia ? 'Ganancia' : 'Pérdida'}</div>
+            {filtroActivo && (
+              <div className="mt-2 text-[10px] leading-tight text-amber-600 dark:text-amber-400">
+                calculado sobre ingresos sin crédito y gastos totales — vista parcial
+              </div>
+            )}
           </div>
           <div className="lg:col-span-2 grid grid-cols-2 gap-4">
             <Mini title="Ingresos netos" value={general.Ingresos} tone="sky" icon={<TrendingUp className="h-5 w-5" />} />
-            <Mini title="Gastos" value={general.Gastos} tone="rose" icon={<TrendingDown className="h-5 w-5" />} />
+            <Mini title="Gastos" value={general.Gastos} tone="rose" icon={<TrendingDown className="h-5 w-5" />} note={filtroActivo ? 'Gastos totales (no filtrados)' : undefined} />
             <div className="col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
               <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">Composición del mes</div>
               <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
@@ -143,12 +176,13 @@ const toneMap: Record<string, string> = {
   sky: 'bg-sky-50 dark:bg-sky-900/30 text-sky-600',
   rose: 'bg-rose-50 dark:bg-rose-900/30 text-rose-500',
 };
-const Mini: React.FC<{ title: string; value: number; tone: string; icon: React.ReactNode }> = ({ title, value, tone, icon }) => (
+const Mini: React.FC<{ title: string; value: number; tone: string; icon: React.ReactNode; note?: string }> = ({ title, value, tone, icon, note }) => (
   <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex items-center gap-3">
     <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${toneMap[tone]}`}>{icon}</div>
     <div>
       <div className="text-xs text-slate-500 dark:text-slate-400">{title}</div>
       <div className="text-lg font-bold text-slate-800 dark:text-slate-100">S/ {money(value)}</div>
+      {note && <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">{note}</div>}
     </div>
   </div>
 );

@@ -3,7 +3,8 @@ import toast from 'react-hot-toast';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { Wallet, TrendingUp, TrendingDown, RefreshCw, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
-import type { CajaDiaRow, CajaIngresoRow, CajaIndicadores } from '../../services/contabilidad/contaTypes';
+import type { CajaDiaRow, CajaIngresoRow, CajaIndicadores, FormaPagoRow } from '../../services/contabilidad/contaTypes';
+import MediosPagoFilterCard from './components/MediosPagoFilterCard';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -18,13 +19,28 @@ const CajaDiaria: React.FC = () => {
   const [indic, setIndic] = useState<CajaIndicadores | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const hoyStr = `${anio}-${pad(mes)}-${pad(Math.min(now.getDate(), 28))}`;
+  // Filtro por medio de pago (estado local propio de la pantalla, D4: sin persistencia/context).
+  const [medios, setMedios] = useState<FormaPagoRow[]>([]);
+  const [seleccion, setSeleccion] = useState<number[]>([]);
+  const [incluirCredito, setIncluirCredito] = useState(true);
+  const filtroActivo = medios.length > 0 && (seleccion.length < medios.length || !incluirCredito);
+
+  // Catalogo dinamico de medios (una vez). Default = todos marcados + credito ON.
+  useEffect(() => {
+    contabilidadService
+      .cajaFormasPago()
+      .then((m) => { setMedios(m); setSeleccion(m.map((x) => x.i_IdFormaPago)); })
+      .catch((e) => toast.error(e instanceof Error ? e.message : 'Error cargando medios de pago'));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Convencion de eficiencia (§5.2): todos marcados => sin formasPago; credito ON => sin incluirCredito.
+      const formasPagoParam = medios.length > 0 && seleccion.length < medios.length ? seleccion.join(',') : undefined;
+      const incluirCreditoParam = incluirCredito ? undefined : false;
       const [serie, ind] = await Promise.all([
-        contabilidadService.cajaDiaria(anio, mes),
+        contabilidadService.cajaDiaria(anio, mes, formasPagoParam, incluirCreditoParam),
         contabilidadService.cajaIndicadores(anio, mes),
       ]);
       setDias(serie);
@@ -43,7 +59,7 @@ const CajaDiaria: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [anio, mes]);
+  }, [anio, mes, seleccion, incluirCredito, medios]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -58,14 +74,25 @@ const CajaDiaria: React.FC = () => {
     Egresos: Number(d.Egresos),
   })), [dias]);
 
+  // Detalle del dia: se filtra CLIENT-SIDE (las filas ya traen i_IdFormaPago/EsCobranzaCredito),
+  // sin cambiar el endpoint /caja/ingresos.
+  const hoyIngresosFiltrados = useMemo(() => {
+    if (!filtroActivo) return hoyIngresos;
+    const todosMedios = seleccion.length === medios.length;
+    return hoyIngresos.filter((i) =>
+      (todosMedios || (i.i_IdFormaPago != null && seleccion.includes(i.i_IdFormaPago))) &&
+      (incluirCredito || !i.EsCobranzaCredito),
+    );
+  }, [hoyIngresos, filtroActivo, seleccion, medios, incluirCredito]);
+
   const porFormaPago = useMemo(() => {
     const map = new Map<string, number>();
-    hoyIngresos.forEach((i) => {
+    hoyIngresosFiltrados.forEach((i) => {
       const k = i.FormaPago || 'Sin forma de pago';
       map.set(k, (map.get(k) || 0) + i.Monto);
     });
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
-  }, [hoyIngresos]);
+  }, [hoyIngresosFiltrados]);
 
   return (
     <div className="p-6">
@@ -87,11 +114,28 @@ const CajaDiaria: React.FC = () => {
         </div>
       </div>
 
+      {/* filtro por medio de pago (liquidez) */}
+      <MediosPagoFilterCard
+        medios={medios}
+        seleccion={seleccion}
+        incluirCredito={incluirCredito}
+        onAplicar={(sel, credito) => { setSeleccion(sel); setIncluirCredito(credito); }}
+      />
+
+      {/* banner de vista filtrada */}
+      {filtroActivo && (
+        <div className="mb-4 text-xs px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+          Vista filtrada: {seleccion.length} de {medios.length} medios{!incluirCredito ? ' · crédito excluido' : ''}
+        </div>
+      )}
+
       {/* tarjetas */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-        <Card title="Saldo al día" value={saldoHoy} icon={<Wallet className="h-5 w-5" />} tone="emerald" />
+        <Card title="Saldo al día" value={saldoHoy} icon={<Wallet className="h-5 w-5" />} tone="emerald"
+          dimmed={filtroActivo} note={filtroActivo ? 'Saldos de caja TOTAL — no reflejan el filtro' : undefined} />
         <Card title={`Ingresos ${MESES[mes - 1]} (al día)`} value={totalIngresos} icon={<TrendingUp className="h-5 w-5" />} tone="sky" />
-        <Card title={`Egresos ${MESES[mes - 1]} (al día)`} value={totalEgresos} icon={<TrendingDown className="h-5 w-5" />} tone="rose" />
+        <Card title={`Egresos ${MESES[mes - 1]} (al día)`} value={totalEgresos} icon={<TrendingDown className="h-5 w-5" />} tone="rose"
+          note={filtroActivo ? 'Egresos totales (sin filtro por medio de pago)' : undefined} />
       </div>
       {/* indicadores por pagar / por cobrar (checklist E2E) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
@@ -101,8 +145,11 @@ const CajaDiaria: React.FC = () => {
 
       {/* grafico saldo diario */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 mb-5">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Saldo de caja acumulado</h3>
-        <div style={{ width: '100%', height: 260 }}>
+        <div className="flex items-baseline justify-between gap-2 mb-3">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Saldo de caja acumulado</h3>
+          {filtroActivo && <span className="text-[11px] text-slate-400">Saldos de caja TOTAL — no reflejan el filtro</span>}
+        </div>
+        <div style={{ width: '100%', height: 260 }} className={filtroActivo ? 'opacity-50' : ''}>
           <ResponsiveContainer>
             <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 0 }}>
               <defs>
@@ -152,8 +199,10 @@ const CajaDiaria: React.FC = () => {
               <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
                 <th className="px-3 py-2">Día</th>
                 <th className="px-3 py-2 text-right">Ingresos</th>
-                <th className="px-3 py-2 text-right">Egresos</th>
-                <th className="px-3 py-2 text-right">Saldo</th>
+                <th className="px-3 py-2 text-right" title={filtroActivo ? 'Egresos totales (sin filtro por medio de pago)' : undefined}>
+                  Egresos{filtroActivo && <span className="text-[10px] font-normal text-amber-500 ml-1">(totales)</span>}
+                </th>
+                <th className="px-3 py-2 text-right" title={filtroActivo ? 'Saldos de caja TOTAL — no reflejan el filtro' : undefined}>Saldo</th>
               </tr>
             </thead>
             <tbody>
@@ -163,11 +212,16 @@ const CajaDiaria: React.FC = () => {
                   <td className="px-3 py-1.5">{d.Dia.slice(0, 10)}</td>
                   <td className="px-3 py-1.5 text-right text-sky-600">{d.Ingresos ? money(d.Ingresos) : '—'}</td>
                   <td className="px-3 py-1.5 text-right text-rose-500">{d.Egresos ? money(d.Egresos) : '—'}</td>
-                  <td className="px-3 py-1.5 text-right font-medium">{money(d.SaldoAcumulado)}</td>
+                  <td className={`px-3 py-1.5 text-right font-medium ${filtroActivo ? 'opacity-50' : ''}`}>{money(d.SaldoAcumulado)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {filtroActivo && (
+            <p className="text-[11px] text-slate-400 px-3 py-2 border-t border-slate-100 dark:border-slate-700/50">
+              Ingresos reflejan el filtro. Egresos y Saldo son totales — no reflejan el filtro.
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -182,13 +236,16 @@ const toneMap: Record<string, string> = {
   violet: 'bg-violet-50 dark:bg-violet-900/30 text-violet-600',
 };
 
-const Card: React.FC<{ title: string; value: number; icon: React.ReactNode; tone: string }> = ({ title, value, icon, tone }) => (
-  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex items-center gap-4">
-    <div className={`h-11 w-11 rounded-xl flex items-center justify-center ${toneMap[tone]}`}>{icon}</div>
-    <div>
-      <div className="text-xs text-slate-500 dark:text-slate-400">{title}</div>
-      <div className="text-xl font-bold text-slate-800 dark:text-slate-100">S/ {money(value)}</div>
+const Card: React.FC<{ title: string; value: number; icon: React.ReactNode; tone: string; dimmed?: boolean; note?: string }> = ({ title, value, icon, tone, dimmed, note }) => (
+  <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+    <div className="flex items-center gap-4">
+      <div className={`h-11 w-11 rounded-xl flex items-center justify-center ${toneMap[tone]} ${dimmed ? 'opacity-50' : ''}`}>{icon}</div>
+      <div className={dimmed ? 'opacity-50' : ''}>
+        <div className="text-xs text-slate-500 dark:text-slate-400">{title}</div>
+        <div className="text-xl font-bold text-slate-800 dark:text-slate-100">S/ {money(value)}</div>
+      </div>
     </div>
+    {note && <div className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">{note}</div>}
   </div>
 );
 

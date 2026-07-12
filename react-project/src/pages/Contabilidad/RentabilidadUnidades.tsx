@@ -29,12 +29,18 @@ const RentabilidadUnidades: React.FC = () => {
   const [gastos, setGastos] = useState<RentabilidadGastoRow[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  // Toggle "incluir ventas a credito" (PLAN §5.4). Estado local, default ON, sin persistencia (T5).
+  const [incluirCredito, setIncluirCredito] = useState(true);
+  const filtroActivo = !incluirCredito;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // El toggle aplica a PorUnidad (ingresos); rentabilidadGastos se recarga igual pero SIN
+      // el param — los gastos no tienen dimension de condicion de venta (T3/T6).
+      const incluirCreditoParam = incluirCredito ? undefined : false;
       const [u, g] = await Promise.all([
-        contabilidadService.rentabilidadPorUnidad(anio, mes),
+        contabilidadService.rentabilidadPorUnidad(anio, mes, incluirCreditoParam),
         contabilidadService.rentabilidadGastos(anio, mes),
       ]);
       setRows(u);
@@ -42,7 +48,7 @@ const RentabilidadUnidades: React.FC = () => {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error cargando rentabilidad por unidad');
     } finally { setLoading(false); }
-  }, [anio, mes]);
+  }, [anio, mes, incluirCredito]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -76,11 +82,31 @@ const RentabilidadUnidades: React.FC = () => {
           <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className={selCls}>
             {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
           </select>
+          {/* Toggle credito: aplica directo al cambiar (sin boton Aplicar) — PLAN §5.2 */}
+          <label
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 cursor-pointer select-none"
+            title="OFF = solo facturación al contado y depósito; se excluyen las ventas a crédito (cuentas por cobrar)"
+          >
+            <input
+              type="checkbox"
+              checked={incluirCredito}
+              onChange={(e) => setIncluirCredito(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Incluir ventas a crédito
+          </label>
           <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
             <RefreshCw className="h-4 w-4" /> Actualizar
           </button>
         </div>
       </div>
+
+      {/* banner de vista sin credito */}
+      {filtroActivo && (
+        <div className="mb-4 text-xs px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+          Vista sin ventas a crédito
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-x-auto">
         <table className="w-full text-sm">
@@ -89,10 +115,12 @@ const RentabilidadUnidades: React.FC = () => {
               <th className="px-3 py-2 w-8"></th>
               <th className="px-3 py-2">Unidad</th>
               <th className="px-3 py-2 text-right">Ingresos</th>
-              <th className="px-3 py-2 text-right">Gastos</th>
-              <th className="px-3 py-2 text-right">Resultado</th>
-              <th className="px-3 py-2 text-right">Margen</th>
-              <th className="px-3 py-2 text-center">Estado</th>
+              <th className="px-3 py-2 text-right">
+                Gastos{filtroActivo && <span className="block font-normal normal-case text-[10px] text-amber-600 dark:text-amber-400">totales (no filtrados)</span>}
+              </th>
+              <th className={`px-3 py-2 text-right ${filtroActivo ? 'opacity-50' : ''}`}>Resultado</th>
+              <th className={`px-3 py-2 text-right ${filtroActivo ? 'opacity-50' : ''}`}>Margen</th>
+              <th className={`px-3 py-2 text-center ${filtroActivo ? 'opacity-50' : ''}`}>Estado</th>
             </tr>
           </thead>
           <tbody>
@@ -109,9 +137,9 @@ const RentabilidadUnidades: React.FC = () => {
                     <td className="px-3 py-2 font-medium">{unidadLabel(r.Unidad)}</td>
                     <td className="px-3 py-2 text-right">{money(r.Ingresos)}</td>
                     <td className="px-3 py-2 text-right text-rose-500">{money(r.Gastos)}</td>
-                    <td className={`px-3 py-2 text-right font-semibold ${r.Resultado >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{money(r.Resultado)}</td>
-                    <td className="px-3 py-2 text-right">{r.EsAdministracion ? '—' : `${r.MargenPorc}%`}</td>
-                    <td className="px-3 py-2 text-center">
+                    <td className={`px-3 py-2 text-right font-semibold ${r.Resultado >= 0 ? 'text-emerald-600' : 'text-rose-600'} ${filtroActivo ? 'opacity-50' : ''}`}>{money(r.Resultado)}</td>
+                    <td className={`px-3 py-2 text-right ${filtroActivo ? 'opacity-50' : ''}`}>{r.EsAdministracion ? '—' : `${r.MargenPorc}%`}</td>
+                    <td className={`px-3 py-2 text-center ${filtroActivo ? 'opacity-50' : ''}`}>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${semCls[r.Semaforo] || 'bg-slate-100 text-slate-500'}`}>{semLabel[r.Semaforo] || r.Semaforo}</span>
                     </td>
                   </tr>
@@ -130,6 +158,13 @@ const RentabilidadUnidades: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* rotulo T4: Resultado/Margen/Estado son vista parcial con OFF */}
+      {filtroActivo && (
+        <p className="mt-3 text-[11px] leading-tight text-amber-600 dark:text-amber-400">
+          Resultado / Margen / Estado: calculado sobre ingresos sin crédito y gastos totales — vista parcial.
+        </p>
+      )}
     </div>
   );
 };

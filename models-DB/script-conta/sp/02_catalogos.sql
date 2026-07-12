@@ -229,6 +229,30 @@ BEGIN
 END
 GO
 
+-- Actualizar EN SITIO una vigencia existente (corregir el % clinica/hospital).
+IF OBJECT_ID('conta.sp_SisolParticipacion_Update','P') IS NOT NULL DROP PROCEDURE conta.sp_SisolParticipacion_Update;
+GO
+CREATE PROCEDURE conta.sp_SisolParticipacion_Update
+    @IdParticipacion INT, @PorcClinica DECIMAL(5,2), @PorcHospital DECIMAL(5,2),
+    @VigenciaDesde DATE = NULL, @IdUsuarioAccion INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF @PorcClinica + @PorcHospital <> 100
+    BEGIN RAISERROR('Los porcentajes deben sumar 100', 16, 1); RETURN; END
+    IF NOT EXISTS (SELECT 1 FROM conta.sisol_participacion WHERE i_IdParticipacion = @IdParticipacion)
+    BEGIN RAISERROR('Vigencia no encontrada', 16, 1); RETURN; END
+    UPDATE conta.sisol_participacion
+    SET d_PorcClinica = @PorcClinica, d_PorcHospital = @PorcHospital,
+        t_VigenciaDesde = ISNULL(@VigenciaDesde, t_VigenciaDesde)
+    WHERE i_IdParticipacion = @IdParticipacion;
+    DECLARE @vig DATE = (SELECT t_VigenciaDesde FROM conta.sisol_participacion WHERE i_IdParticipacion = @IdParticipacion);
+    DECLARE @det NVARCHAR(200) = CONCAT(@PorcClinica, '/', @PorcHospital, ' desde ', CONVERT(varchar, @vig, 23));
+    EXEC conta.sp_Auditoria_Insert 'conta.sisol_participacion', @IdParticipacion, 'UPDATE', @det, @IdUsuarioAccion;
+    SELECT @IdParticipacion AS i_IdParticipacion;
+END
+GO
+
 -- ---------------- CONFIG ----------------
 IF OBJECT_ID('conta.sp_Config_List','P') IS NOT NULL DROP PROCEDURE conta.sp_Config_List;
 GO

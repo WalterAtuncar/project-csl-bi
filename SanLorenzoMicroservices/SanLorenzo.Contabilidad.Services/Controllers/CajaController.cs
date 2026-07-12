@@ -25,16 +25,22 @@ namespace Contabilidad.Controllers
             => Ok(_repo.Egresos(desde, hasta));
 
         [HttpGet("diaria")]
-        public IActionResult Diaria([FromQuery] short anio, [FromQuery] byte mes)
-            => Ok(_repo.Diaria(anio, mes));
+        public IActionResult Diaria([FromQuery] short anio, [FromQuery] byte mes,
+            [FromQuery] string formasPago = null, [FromQuery] bool incluirCredito = true)
+            => Ok(_repo.Diaria(anio, mes, formasPago, incluirCredito));
 
         [HttpGet("indicadores")]
         public IActionResult Indicadores([FromQuery] short anio, [FromQuery] byte mes)
             => Ok(_repo.Indicadores(anio, mes));
 
+        [HttpGet("formas-pago")]
+        public IActionResult FormasPago()
+            => Ok(_repo.FormasPago());
+
         [HttpGet("flujo-consolidado")]
-        public IActionResult FlujoConsolidado([FromQuery] short anio)
-            => Ok(_repo.FlujoConsolidado(anio));
+        public IActionResult FlujoConsolidado([FromQuery] short anio,
+            [FromQuery] string formasPago = null, [FromQuery] bool incluirCredito = true)
+            => Ok(_repo.FlujoConsolidado(anio, formasPago, incluirCredito));
 
         [HttpPost("cerrar-mes")]
         [Authorize(Roles = ESCRITURA)]

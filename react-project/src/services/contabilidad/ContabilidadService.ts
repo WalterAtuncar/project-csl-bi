@@ -3,7 +3,7 @@ import type {
   ContaLoginResponse, CentroCosto, TipoGasto, Entidad, CuentaBancaria,
   Egreso, EgresoListResponse, EgresoCreate, EgresoUpdate, EgresoPagar,
   EgresoCargaFila, EgresoCargaResultado, CostoPersonal, CostoPersonalUpsert,
-  CajaDiaRow, FlujoConsolidado, CerrarMesResultado,
+  CajaDiaRow, FlujoConsolidado, CerrarMesResultado, FormaPagoRow,
 } from './contaTypes';
 
 // Base URL de la API dedicada de Contabilidad. Configurable por env; dev por defecto.
@@ -140,16 +140,30 @@ class ContabilidadService {
     const { data } = await this.http.get<import('./contaTypes').CajaEgresoRow[]>('/caja/egresos', { params: { desde, hasta } });
     return data;
   }
-  async cajaDiaria(anio: number, mes: number): Promise<CajaDiaRow[]> {
-    const { data } = await this.http.get<CajaDiaRow[]>('/caja/diaria', { params: { anio, mes } });
+  // Catalogo de medios de pago con uso reciente (para el filtro de liquidez).
+  async cajaFormasPago(): Promise<FormaPagoRow[]> {
+    const { data } = await this.http.get<FormaPagoRow[]>('/caja/formas-pago');
+    return data;
+  }
+  // Filtro por medio de pago (D4). Convencion de eficiencia (§5.2): la URL default queda
+  // IDENTICA a la actual -> solo se envia formasPago si viene (todos marcados => undefined),
+  // y solo se envia incluirCredito cuando esta explicitamente en false (credito ON => undefined).
+  async cajaDiaria(anio: number, mes: number, formasPago?: string, incluirCredito?: boolean): Promise<CajaDiaRow[]> {
+    const params: Record<string, unknown> = { anio, mes };
+    if (formasPago) params.formasPago = formasPago;
+    if (incluirCredito === false) params.incluirCredito = false;
+    const { data } = await this.http.get<CajaDiaRow[]>('/caja/diaria', { params });
     return data;
   }
   async cajaIndicadores(anio: number, mes: number): Promise<import('./contaTypes').CajaIndicadores> {
     const { data } = await this.http.get('/caja/indicadores', { params: { anio, mes } });
     return data;
   }
-  async flujoConsolidado(anio: number): Promise<FlujoConsolidado> {
-    const { data } = await this.http.get<FlujoConsolidado>('/caja/flujo-consolidado', { params: { anio } });
+  async flujoConsolidado(anio: number, formasPago?: string, incluirCredito?: boolean): Promise<FlujoConsolidado> {
+    const params: Record<string, unknown> = { anio };
+    if (formasPago) params.formasPago = formasPago;
+    if (incluirCredito === false) params.incluirCredito = false;
+    const { data } = await this.http.get<FlujoConsolidado>('/caja/flujo-consolidado', { params });
     return data;
   }
   async cajaCerrarMes(anio: number, mes: number): Promise<CerrarMesResultado> {
@@ -164,20 +178,30 @@ class ContabilidadService {
   }
 
   // ---- Rentabilidad ----
-  async rentabilidadGeneral(anio: number, mes: number): Promise<import('./contaTypes').RentabilidadGeneral> {
-    const { data } = await this.http.get('/rentabilidad/general', { params: { anio, mes } });
+  // Toggle "incluir ventas a credito" (PLAN_TOGGLE_CREDITO_RENTABILIDAD §5.1). Convencion de
+  // eficiencia (T5): la URL default queda IDENTICA a la actual -> solo se envia incluirCredito
+  // cuando esta explicitamente en false (credito ON => se omite el param). rentabilidadGastos
+  // NO recibe el param (los gastos no tienen dimension de condicion de venta -- T3).
+  async rentabilidadGeneral(anio: number, mes: number, incluirCredito?: boolean): Promise<import('./contaTypes').RentabilidadGeneral> {
+    const params: Record<string, unknown> = { anio, mes };
+    if (incluirCredito === false) params.incluirCredito = false;
+    const { data } = await this.http.get('/rentabilidad/general', { params });
     return data;
   }
-  async rentabilidadPorUnidad(anio: number, mes: number): Promise<import('./contaTypes').RentabilidadUnidadRow[]> {
-    const { data } = await this.http.get('/rentabilidad/por-unidad', { params: { anio, mes } });
+  async rentabilidadPorUnidad(anio: number, mes: number, incluirCredito?: boolean): Promise<import('./contaTypes').RentabilidadUnidadRow[]> {
+    const params: Record<string, unknown> = { anio, mes };
+    if (incluirCredito === false) params.incluirCredito = false;
+    const { data } = await this.http.get('/rentabilidad/por-unidad', { params });
     return data;
   }
   async rentabilidadGastos(anio: number, mes: number): Promise<import('./contaTypes').RentabilidadGastoRow[]> {
     const { data } = await this.http.get('/rentabilidad/gastos', { params: { anio, mes } });
     return data;
   }
-  async rentabilidadComparativa(anio: number): Promise<import('./contaTypes').ComparativaResponse> {
-    const { data } = await this.http.get('/rentabilidad/comparativa', { params: { anio } });
+  async rentabilidadComparativa(anio: number, incluirCredito?: boolean): Promise<import('./contaTypes').ComparativaResponse> {
+    const params: Record<string, unknown> = { anio };
+    if (incluirCredito === false) params.incluirCredito = false;
+    const { data } = await this.http.get('/rentabilidad/comparativa', { params });
     return data;
   }
 
@@ -209,6 +233,7 @@ class ContabilidadService {
   async cuentaActualizar(r: import('./contaTypes').CuentaBancariaUpdate) { await this.http.put('/cuentas-bancarias', r); }
   async sisolParticipacionList(): Promise<import('./contaTypes').SisolParticipacion[]> { return (await this.http.get('/sisol/participacion')).data; }
   async sisolParticipacionCrear(r: import('./contaTypes').SisolParticipacionCreate) { await this.http.post('/sisol/participacion', r); }
+  async sisolParticipacionActualizar(r: import('./contaTypes').SisolParticipacionUpdate) { await this.http.put('/sisol/participacion', r); }
   async configList(): Promise<import('./contaTypes').ConfigRow[]> { return (await this.http.get('/config')).data; }
   async configActualizar(clave: string, valor: string) { await this.http.put('/config', { Clave: clave, Valor: valor }); }
 

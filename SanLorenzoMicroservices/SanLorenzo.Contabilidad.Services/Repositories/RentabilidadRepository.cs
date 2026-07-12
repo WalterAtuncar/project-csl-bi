@@ -10,18 +10,18 @@ namespace Contabilidad.Repositories
         private readonly Db _db;
         public RentabilidadRepository(Db db) => _db = db;
 
-        public RentabilidadGeneralRow General(short anio, byte mes)
+        public RentabilidadGeneralRow General(short anio, byte mes, bool incluirCredito)
         {
             using var cn = _db.Open();
             return cn.QueryFirstOrDefault<RentabilidadGeneralRow>("conta.sp_Rentabilidad_General",
-                new { Anio = anio, Mes = mes }, commandType: CommandType.StoredProcedure);
+                new { Anio = anio, Mes = mes, IncluirCredito = incluirCredito }, commandType: CommandType.StoredProcedure);
         }
 
-        public IEnumerable<RentabilidadUnidadRow> PorUnidad(short anio, byte mes)
+        public IEnumerable<RentabilidadUnidadRow> PorUnidad(short anio, byte mes, bool incluirCredito)
         {
             using var cn = _db.Open();
             return cn.Query<RentabilidadUnidadRow>("conta.sp_Rentabilidad_PorUnidad",
-                new { Anio = anio, Mes = mes }, commandType: CommandType.StoredProcedure);
+                new { Anio = anio, Mes = mes, IncluirCredito = incluirCredito }, commandType: CommandType.StoredProcedure);
         }
 
         public IEnumerable<RentabilidadGastoRow> Gastos(short anio, byte mes)
@@ -38,11 +38,11 @@ namespace Contabilidad.Repositories
                 new { Anio = anio, Mes = mes }, commandType: CommandType.StoredProcedure);
         }
 
-        public ComparativaResponse Comparativa(short anio)
+        public ComparativaResponse Comparativa(short anio, bool incluirCredito)
         {
             using var cn = _db.Open();
             using var multi = cn.QueryMultiple("conta.sp_Rentabilidad_Comparativa",
-                new { Anio = anio }, commandType: CommandType.StoredProcedure);
+                new { Anio = anio, IncluirCredito = incluirCredito }, commandType: CommandType.StoredProcedure);
             return new ComparativaResponse
             {
                 Mensual = multi.Read<ComparativaMesRow>().AsList(),

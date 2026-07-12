@@ -3,7 +3,8 @@ import toast from 'react-hot-toast';
 import { Lock, Unlock, PlayCircle, RefreshCw } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 import { useContaAuth } from '../../context/ContaAuthContext';
-import type { FlujoConsolidado as FlujoData, FlujoMesRow } from '../../services/contabilidad/contaTypes';
+import type { FlujoConsolidado as FlujoData, FlujoMesRow, FormaPagoRow } from '../../services/contabilidad/contaTypes';
+import MediosPagoFilterCard from './components/MediosPagoFilterCard';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 const money = (n: number) => (n === 0 ? '—' : n.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
@@ -19,12 +20,30 @@ const FlujoConsolidado: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [mesCerrar, setMesCerrar] = useState(now.getMonth() + 1);
 
+  // Filtro por medio de pago (estado local propio de la pantalla, D4: sin persistencia/context).
+  const [medios, setMedios] = useState<FormaPagoRow[]>([]);
+  const [seleccion, setSeleccion] = useState<number[]>([]);
+  const [incluirCredito, setIncluirCredito] = useState(true);
+  const filtroActivo = medios.length > 0 && (seleccion.length < medios.length || !incluirCredito);
+
+  useEffect(() => {
+    contabilidadService
+      .cajaFormasPago()
+      .then((m) => { setMedios(m); setSeleccion(m.map((x) => x.i_IdFormaPago)); })
+      .catch((e) => toast.error(e instanceof Error ? e.message : 'Error cargando medios de pago'));
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
-    try { setData(await contabilidadService.flujoConsolidado(anio)); }
+    try {
+      // Convencion de eficiencia (§5.2): todos marcados => sin formasPago; credito ON => sin incluirCredito.
+      const formasPagoParam = medios.length > 0 && seleccion.length < medios.length ? seleccion.join(',') : undefined;
+      const incluirCreditoParam = incluirCredito ? undefined : false;
+      setData(await contabilidadService.flujoConsolidado(anio, formasPagoParam, incluirCreditoParam));
+    }
     catch (e) { toast.error(e instanceof Error ? e.message : 'Error cargando flujo'); }
     finally { setLoading(false); }
-  }, [anio]);
+  }, [anio, seleccion, incluirCredito, medios]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -142,6 +161,20 @@ const FlujoConsolidado: React.FC = () => {
         </div>
       </div>
 
+      {/* filtro por medio de pago (liquidez). Independiente del select de mes (que es para Cerrar Mes). */}
+      <MediosPagoFilterCard
+        medios={medios}
+        seleccion={seleccion}
+        incluirCredito={incluirCredito}
+        onAplicar={(sel, credito) => { setSeleccion(sel); setIncluirCredito(credito); }}
+      />
+
+      {filtroActivo && (
+        <div className="mb-4 text-xs px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+          Vista filtrada: {seleccion.length} de {medios.length} medios{!incluirCredito ? ' · crédito excluido' : ''}. Ingresos reflejan el filtro; egresos y saldos son totales.
+        </div>
+      )}
+
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-x-auto">
         <table className="w-full text-xs border-collapse">
           <thead>
@@ -153,19 +186,31 @@ const FlujoConsolidado: React.FC = () => {
           </thead>
           <tbody>
             {loading && <tr><td colSpan={14} className="px-3 py-8 text-center text-slate-400">Cargando...</td></tr>}
-            {!loading && rows.map((r, idx) => (
-              <tr key={idx} className={rowClass(r.kind)}>
-                <td className={`px-3 py-1.5 text-left sticky left-0 z-10 ${cellBg(r.kind)} ${r.indent ? 'pl-6' : ''}`}>{r.label}</td>
-                {r.values.map((v, i) => (
-                  <td key={i} className="px-2 py-1.5 text-right tabular-nums">{r.kind === 'header' ? '' : money(v)}</td>
-                ))}
-                <td className={`px-3 py-1.5 text-right font-bold tabular-nums ${cellBg(r.kind)}`}>{r.kind === 'header' ? '' : money(r.total)}</td>
-              </tr>
-            ))}
+            {!loading && rows.map((r, idx) => {
+              // D5: saldos/apertura atenuados (no reflejan el filtro). D2: egresos totales rotulados.
+              const dimmed = filtroActivo && r.label.startsWith('SALDO');
+              const esEgresoTotal = filtroActivo && r.label === 'TOTAL EGRESOS OPERATIVOS';
+              return (
+                <tr key={idx} className={`${rowClass(r.kind)} ${dimmed ? 'opacity-50' : ''}`}>
+                  <td className={`px-3 py-1.5 text-left sticky left-0 z-10 ${cellBg(r.kind)} ${r.indent ? 'pl-6' : ''}`}>
+                    {r.label}
+                    {dimmed && <span className="ml-2 text-[10px] font-normal normal-case text-slate-400">no refleja el filtro</span>}
+                    {esEgresoTotal && <span className="ml-2 text-[10px] font-normal text-amber-500">totales (sin filtro)</span>}
+                  </td>
+                  {r.values.map((v, i) => (
+                    <td key={i} className="px-2 py-1.5 text-right tabular-nums">{r.kind === 'header' ? '' : money(v)}</td>
+                  ))}
+                  <td className={`px-3 py-1.5 text-right font-bold tabular-nums ${cellBg(r.kind)}`}>{r.kind === 'header' ? '' : money(r.total)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-400 mt-2">Montos en soles redondeados. SALDO FINAL = SALDO INICIAL + SALDO DE CAJA; el saldo final de cada mes es el inicial del siguiente (encadenado).</p>
+      <p className="text-xs text-slate-400 mt-2">
+        Montos en soles redondeados. SALDO FINAL = SALDO INICIAL + SALDO DE CAJA; el saldo final de cada mes es el inicial del siguiente (encadenado).
+        {filtroActivo && ' Con filtro activo, los egresos y los saldos se muestran totales (no reflejan el filtro por medio de pago).'}
+      </p>
     </div>
   );
 };

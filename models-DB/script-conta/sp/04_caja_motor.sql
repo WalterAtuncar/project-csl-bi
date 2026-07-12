@@ -2,7 +2,9 @@
 -- FASE 3 - Motor de caja (liquidez). Calculos al vuelo sobre las fuentes;
 -- conta.saldo_caja solo materializa al cerrar mes. SQL Server 2012.
 --   Ingresos: cobranzas reales (dbo.cobranzadetalle.d_ImporteSoles).
---   Egresos:  conta.egreso PAGADO (por t_FechaPago) + costos de personal PAGADOS.
+--   Egresos:  conta.egreso PAGADO (por t_FechaPago) + costos de personal PAGADOS
+--             + egresos de la caja mayor legacy (dbo.cajamayor_movimiento, v_TipoMovimiento='E',
+--               efectivo consumado ECA/ECF por t_FechaMovimiento, bruto d_Total, seccion MEDICO).
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -76,16 +78,59 @@ BEGIN
     FROM conta.costo_personal_mensual cpm
     LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = cpm.i_IdCentroCosto
     WHERE cpm.v_Estado = 'PAGADO' AND cpm.t_FechaPago >= @Desde AND cpm.t_FechaPago < @fin
-    GROUP BY cpm.i_IdCentroCosto, cc.v_Nombre, CAST(cpm.t_FechaPago AS DATE);
+    GROUP BY cpm.i_IdCentroCosto, cc.v_Nombre, CAST(cpm.t_FechaPago AS DATE)
+
+    UNION ALL
+
+    -- Egresos de la caja mayor legacy (dbo.cajamayor_movimiento, v_TipoMovimiento='E'):
+    -- efectivo ya consumado (ECA asistencial / ECF farmacia; ~98% pagos a medicos) -> seccion MEDICO.
+    -- Monto = d_Total (bruto). Centro por i_IdTipoCaja del movimiento (fallback ADMINISTRACION).
+    -- No se filtra por estado: la caja mayor no tiene POR_PAGAR (ya es efectivo).
+    SELECT 'MEDICO' AS Seccion,
+           ISNULL(cc.i_IdCentroCosto, 1) AS i_IdCentroCosto,
+           ISNULL(cc.v_Nombre, 'ADMINISTRACION') AS CentroCosto,
+           CAST(cm.t_FechaMovimiento AS DATE) AS Dia,
+           CAST(0 AS BIT) AS EsIngreso,
+           SUM(cm.d_Total) AS Monto
+    FROM dbo.cajamayor_movimiento cm
+    LEFT JOIN conta.centro_costo cc ON cc.i_IdTipoCaja = cm.i_IdTipoCaja AND cc.b_Activo = 1
+    WHERE cm.v_TipoMovimiento = 'E'
+      AND cm.t_FechaMovimiento >= @Desde AND cm.t_FechaMovimiento < @fin
+    GROUP BY ISNULL(cc.i_IdCentroCosto,1), ISNULL(cc.v_Nombre,'ADMINISTRACION'), CAST(cm.t_FechaMovimiento AS DATE);
+END
+GO
+
+-- ---------------------------------------------------------------------
+-- 2b) Catalogo dinamico de formas de pago (para el card de filtro del front).
+--     Sin parametros. Devuelve solo los medios con uso real en los ultimos 24 meses.
+-- ---------------------------------------------------------------------
+IF OBJECT_ID('conta.sp_Caja_FormasPago','P') IS NOT NULL DROP PROCEDURE conta.sp_Caja_FormasPago;
+GO
+CREATE PROCEDURE conta.sp_Caja_FormasPago
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT dh.i_ItemId  AS i_IdFormaPago,
+           dh.v_Value1  AS FormaPago
+    FROM dbo.datahierarchy dh
+    WHERE dh.i_GroupId = 46
+      AND EXISTS (SELECT 1 FROM dbo.cobranzadetalle cd
+                  WHERE cd.i_IdFormaPago = dh.i_ItemId
+                    AND ISNULL(cd.i_Eliminado,0) = 0
+                    AND cd.t_InsertaFecha >= DATEADD(MONTH,-24,GETDATE()))
+    ORDER BY dh.i_ItemId;
 END
 GO
 
 -- ---------------------------------------------------------------------
 -- 3) Caja diaria del mes (serie diaria + saldo acumulado encadenado)
+--    @FormasPago (CSV de ItemIds grupo 46; NULL/'' = todos) y @IncluirCredito
+--    filtran SOLO los ingresos (los egresos y el saldo se mantienen totales; D2/D5).
 -- ---------------------------------------------------------------------
 IF OBJECT_ID('conta.sp_Caja_Diaria','P') IS NOT NULL DROP PROCEDURE conta.sp_Caja_Diaria;
 GO
-CREATE PROCEDURE conta.sp_Caja_Diaria @Anio SMALLINT, @Mes TINYINT
+CREATE PROCEDURE conta.sp_Caja_Diaria @Anio SMALLINT, @Mes TINYINT,
+    @FormasPago NVARCHAR(200) = NULL, @IncluirCredito BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -94,13 +139,25 @@ BEGIN
     DECLARE @saldoIni DECIMAL(18,2) =
         ISNULL((SELECT d_SaldoInicial + d_MontoInicialNeto FROM conta.saldo_caja WHERE n_Anio=@Anio AND n_Mes=@Mes), 0);
 
-    -- ingresos por dia (cobranzas)
+    -- formas de pago seleccionadas (CSV -> filas, contra el catalogo grupo 46, no la tabla de hechos)
+    DECLARE @fp TABLE (i_IdFormaPago INT PRIMARY KEY);
+    IF @FormasPago IS NOT NULL AND LTRIM(RTRIM(@FormasPago)) <> ''
+        INSERT INTO @fp
+        SELECT dh.i_ItemId FROM dbo.datahierarchy dh
+        WHERE dh.i_GroupId = 46
+          AND ',' + @FormasPago + ',' LIKE '%,' + CAST(dh.i_ItemId AS VARCHAR(10)) + ',%';
+
+    -- ingresos por dia (cobranzas) -- filtrados por forma de pago y/o credito
     DECLARE @ing TABLE (Dia DATE PRIMARY KEY, Monto DECIMAL(18,2));
     INSERT INTO @ing
     SELECT CAST(cd.t_InsertaFecha AS DATE), SUM(cd.d_ImporteSoles)
     FROM dbo.cobranzadetalle cd
     INNER JOIN dbo.venta v ON v.v_IdVenta = cd.v_IdVenta AND ISNULL(v.i_Eliminado,0)=0
+    LEFT JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId = 41 AND dh41.i_ItemId = v.i_IdCondicionPago
     WHERE ISNULL(cd.i_Eliminado,0)=0 AND cd.t_InsertaFecha >= @ini AND cd.t_InsertaFecha < @fin
+      AND ( @FormasPago IS NULL OR LTRIM(RTRIM(@FormasPago)) = ''
+            OR cd.i_IdFormaPago IN (SELECT i_IdFormaPago FROM @fp) )
+      AND ( @IncluirCredito = 1 OR ISNULL(dh41.v_Value1,'') <> 'CREDITO' )
     GROUP BY CAST(cd.t_InsertaFecha AS DATE);
 
     -- egresos por dia (egreso pagado + personal pagado), neto de otros ingresos
@@ -122,6 +179,12 @@ BEGIN
         FROM conta.costo_personal_mensual cpm
         WHERE cpm.v_Estado='PAGADO' AND cpm.t_FechaPago >= @ini AND cpm.t_FechaPago < @fin
         GROUP BY CAST(cpm.t_FechaPago AS DATE)
+        UNION ALL
+        -- egresos de la caja mayor legacy (efectivo consumado, ECA/ECF) = Egreso; OtroIng 0
+        SELECT CAST(cm.t_FechaMovimiento AS DATE), SUM(cm.d_Total), 0
+        FROM dbo.cajamayor_movimiento cm
+        WHERE cm.v_TipoMovimiento='E' AND cm.t_FechaMovimiento >= @ini AND cm.t_FechaMovimiento < @fin
+        GROUP BY CAST(cm.t_FechaMovimiento AS DATE)
     )
     INSERT INTO @egr SELECT Dia, SUM(Egreso), SUM(OtroIng) FROM dia_e GROUP BY Dia;
 
@@ -153,7 +216,8 @@ GO
 -- ---------------------------------------------------------------------
 IF OBJECT_ID('conta.sp_Caja_FlujoConsolidado','P') IS NOT NULL DROP PROCEDURE conta.sp_Caja_FlujoConsolidado;
 GO
-CREATE PROCEDURE conta.sp_Caja_FlujoConsolidado @Anio SMALLINT
+CREATE PROCEDURE conta.sp_Caja_FlujoConsolidado @Anio SMALLINT,
+    @FormasPago NVARCHAR(200) = NULL, @IncluirCredito BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -161,7 +225,15 @@ BEGIN
     DECLARE @apertura DECIMAL(18,2) =
         ISNULL((SELECT d_SaldoInicial + d_MontoInicialNeto FROM conta.saldo_caja WHERE n_Anio=@Anio AND n_Mes=1),0);
 
-    -- ingresos por mes y unidad
+    -- formas de pago seleccionadas (CSV -> filas, contra el catalogo grupo 46, no la tabla de hechos)
+    DECLARE @fp TABLE (i_IdFormaPago INT PRIMARY KEY);
+    IF @FormasPago IS NOT NULL AND LTRIM(RTRIM(@FormasPago)) <> ''
+        INSERT INTO @fp
+        SELECT dh.i_ItemId FROM dbo.datahierarchy dh
+        WHERE dh.i_GroupId = 46
+          AND ',' + @FormasPago + ',' LIKE '%,' + CAST(dh.i_ItemId AS VARCHAR(10)) + ',%';
+
+    -- ingresos por mes y unidad -- filtrados por forma de pago y/o credito (solo ingresos; D2)
     DECLARE @ingMes TABLE (Mes TINYINT, i_IdTipoCaja INT, Unidad NVARCHAR(60), EsCredito BIT, Monto DECIMAL(18,2));
     INSERT INTO @ingMes
     SELECT MONTH(cd.t_InsertaFecha), tcct.i_IdTipoCaja, tc.v_NombreTipoCaja,
@@ -172,6 +244,9 @@ BEGIN
     LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja=tcct.i_IdTipoCaja
     LEFT JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId=41 AND dh41.i_ItemId=v.i_IdCondicionPago
     WHERE ISNULL(cd.i_Eliminado,0)=0 AND cd.t_InsertaFecha >= @iniAnio AND cd.t_InsertaFecha < @finAnio
+      AND ( @FormasPago IS NULL OR LTRIM(RTRIM(@FormasPago)) = ''
+            OR cd.i_IdFormaPago IN (SELECT i_IdFormaPago FROM @fp) )
+      AND ( @IncluirCredito = 1 OR dh41.v_Value1 IS NULL OR dh41.v_Value1 <> 'CREDITO' )
     GROUP BY MONTH(cd.t_InsertaFecha), tcct.i_IdTipoCaja, tc.v_NombreTipoCaja, CASE WHEN dh41.v_Value1='CREDITO' THEN 1 ELSE 0 END;
 
     -- egresos por mes y seccion
@@ -191,6 +266,12 @@ BEGIN
     FROM conta.costo_personal_mensual cpm
     WHERE cpm.v_Estado='PAGADO' AND cpm.t_FechaPago >= @iniAnio AND cpm.t_FechaPago < @finAnio
     GROUP BY MONTH(cpm.t_FechaPago);
+    -- egresos de la caja mayor legacy (efectivo consumado; ~98% pagos a medicos ECA) -> seccion MEDICO
+    INSERT INTO @egrMes
+    SELECT MONTH(cm.t_FechaMovimiento), 'MEDICO', SUM(cm.d_Total)
+    FROM dbo.cajamayor_movimiento cm
+    WHERE cm.v_TipoMovimiento='E' AND cm.t_FechaMovimiento >= @iniAnio AND cm.t_FechaMovimiento < @finAnio
+    GROUP BY MONTH(cm.t_FechaMovimiento);
 
     -- resumen mensual ancho con cadena de saldos
     ;WITH meses AS (
@@ -293,7 +374,11 @@ BEGIN
     DECLARE @egrPers DECIMAL(18,2) =
         ISNULL((SELECT SUM(d_Monto) FROM conta.costo_personal_mensual
                 WHERE v_Estado='PAGADO' AND t_FechaPago >= @ini AND t_FechaPago < @fin),0);
-    SET @egresos = @egresos + @egrPers;
+    -- egresos de la caja mayor legacy (efectivo consumado, ECA/ECF) por t_FechaMovimiento (bruto d_Total)
+    DECLARE @egrLegacy DECIMAL(18,2) =
+        ISNULL((SELECT SUM(cm.d_Total) FROM dbo.cajamayor_movimiento cm
+                WHERE cm.v_TipoMovimiento='E' AND cm.t_FechaMovimiento >= @ini AND cm.t_FechaMovimiento < @fin),0);
+    SET @egresos = @egresos + @egrPers + @egrLegacy;
 
     BEGIN TRAN;
         -- asegurar fila del mes

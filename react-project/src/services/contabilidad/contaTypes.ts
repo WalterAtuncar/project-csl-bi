@@ -178,6 +178,12 @@ export const CONCEPTOS_PERSONAL = [
 ] as const;
 
 // ---- Motor de caja ----
+// Catalogo dinamico de medios de pago con uso reciente (conta.sp_Caja_FormasPago).
+export interface FormaPagoRow {
+  i_IdFormaPago: number;
+  FormaPago: string;
+}
+
 export interface CajaIngresoRow {
   i_IdTipoCaja: number | null;
   Unidad: string | null;
@@ -363,6 +369,7 @@ export interface CuentaBancariaCreate { Banco: string; NroCuenta: string; Moneda
 export interface CuentaBancariaUpdate { IdCuentaBancaria: number; Banco: string; NroCuenta: string; Moneda: string; Activo: boolean; }
 export interface SisolParticipacion { i_IdParticipacion: number; d_PorcClinica: number; d_PorcHospital: number; t_VigenciaDesde: string; t_VigenciaHasta: string | null; }
 export interface SisolParticipacionCreate { PorcClinica: number; PorcHospital: number; VigenciaDesde: string; }
+export interface SisolParticipacionUpdate { IdParticipacion: number; PorcClinica: number; PorcHospital: number; VigenciaDesde: string; }
 export interface ConfigRow { v_Clave: string; v_Valor: string; v_Descripcion: string; }
 
 // ---- Usuarios ----
