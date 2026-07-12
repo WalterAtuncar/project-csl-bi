@@ -14,6 +14,15 @@ BEGIN
     SET NOCOUNT ON;
     IF @IdProveedor IS NULL AND @IdEntidad IS NULL
     BEGIN RAISERROR('Debe indicar proveedor o entidad.', 16, 1); RETURN; END
+
+    -- Anti-duplicado (Fase 6): un egreso manual no puede repetir documento+proveedor de una
+    -- compra ya clasificada (que genero su propio egreso espejo). Solo aplica al alta manual.
+    IF @IdCompra IS NULL AND @IdProveedor IS NOT NULL AND NULLIF(@SerieNumero,'') IS NOT NULL
+       AND EXISTS (SELECT 1 FROM conta.egreso e
+                   WHERE e.i_IdCompra IS NOT NULL AND e.v_Estado <> 'ANULADO'
+                     AND e.i_IdProveedor = @IdProveedor AND e.v_SerieNumero = @SerieNumero)
+    BEGIN RAISERROR('Ya existe un egreso de una compra clasificada con el mismo documento y proveedor.', 16, 1); RETURN; END
+
     DECLARE @neto DECIMAL(18,2) = @MontoBruto - @IGV;
     DECLARE @id INT;
     INSERT INTO conta.egreso (i_IdProveedor, i_IdEntidad, t_FechaDocumento, v_TipoDocumento, v_SerieNumero,

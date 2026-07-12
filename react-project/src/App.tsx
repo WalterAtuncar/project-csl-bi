@@ -13,7 +13,7 @@ import ExampleAssets from './components/ExampleAssets';
 import AnalisisV2 from './pages/ConsultasBI/Analisis-v2';
 import { GlobalLoader, ToastProvider } from './components/UI';
 import { ContaAuthProvider } from './context/ContaAuthContext';
-import { ContaLogin, ContaLayout, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, RentabilidadUnidades, Sisol } from './pages/Contabilidad';
+import { ContaLogin, ContaLayout, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, RentabilidadUnidades, Sisol, Compras, Catalogos, Usuarios } from './pages/Contabilidad';
 
 // El provider de auth de contabilidad envuelve las rutas hijas del modulo.
 const ContaOutlet: React.FC = () => <Outlet />;
@@ -36,6 +36,9 @@ const App: React.FC = () => {
             <Route path="sisol" element={<Sisol />} />
             <Route path="egresos" element={<Egresos />} />
             <Route path="personal" element={<CostosPersonal />} />
+            <Route path="compras" element={<Compras />} />
+            <Route path="catalogos" element={<Catalogos />} />
+            <Route path="usuarios" element={<Usuarios />} />
           </Route>
         </Route>
         

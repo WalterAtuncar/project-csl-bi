@@ -184,6 +184,35 @@ class ContabilidadService {
   async sisolPagar(idLiquidacion: number, fechaPago: string): Promise<void> {
     await this.http.post(`/sisol/liquidaciones/${idLiquidacion}/pagar`, { IdLiquidacion: idLiquidacion, FechaPago: fechaPago });
   }
+
+  // ---- Catalogos (write) ----
+  async centroCostoCrear(r: import('./contaTypes').CentroCostoCreate) { await this.http.post('/centros-costo', r); }
+  async centroCostoActualizar(r: import('./contaTypes').CentroCostoUpdate) { await this.http.put('/centros-costo', r); }
+  async tipoGastoCrear(r: import('./contaTypes').TipoGastoCreate) { await this.http.post('/tipos-gasto', r); }
+  async tipoGastoActualizar(r: import('./contaTypes').TipoGastoUpdate) { await this.http.put('/tipos-gasto', r); }
+  async entidadCrear(r: import('./contaTypes').EntidadCreate) { await this.http.post('/entidades', r); }
+  async entidadActualizar(r: import('./contaTypes').EntidadUpdate) { await this.http.put('/entidades', r); }
+  async cuentaCrear(r: import('./contaTypes').CuentaBancariaCreate) { await this.http.post('/cuentas-bancarias', r); }
+  async cuentaActualizar(r: import('./contaTypes').CuentaBancariaUpdate) { await this.http.put('/cuentas-bancarias', r); }
+  async sisolParticipacionList(): Promise<import('./contaTypes').SisolParticipacion[]> { return (await this.http.get('/sisol/participacion')).data; }
+  async sisolParticipacionCrear(r: import('./contaTypes').SisolParticipacionCreate) { await this.http.post('/sisol/participacion', r); }
+  async configList(): Promise<import('./contaTypes').ConfigRow[]> { return (await this.http.get('/config')).data; }
+  async configActualizar(clave: string, valor: string) { await this.http.put('/config', { Clave: clave, Valor: valor }); }
+
+  // ---- Usuarios ----
+  async roles(): Promise<import('./contaTypes').Rol[]> { return (await this.http.get('/auth/roles')).data; }
+  async usuarios(): Promise<import('./contaTypes').Usuario[]> { return (await this.http.get('/auth/usuarios')).data; }
+  async usuarioCrear(r: import('./contaTypes').UsuarioCreate) { await this.http.post('/auth/usuarios', r); }
+  async usuarioActualizar(r: import('./contaTypes').UsuarioUpdate) { await this.http.put('/auth/usuarios', r); }
+
+  // ---- Compras ----
+  async comprasList(periodo?: string, soloSinClasificar = false): Promise<import('./contaTypes').CompraRow[]> {
+    return (await this.http.get('/compras', { params: { periodo, soloSinClasificar } })).data;
+  }
+  async compraClasificar(idCompra: number, idCentroCosto: number, idTipoGasto: number): Promise<number> {
+    const { data } = await this.http.post<{ i_IdEgreso: number }>(`/compras/${idCompra}/clasificar`, { IdCentroCosto: idCentroCosto, IdTipoGasto: idTipoGasto });
+    return data.i_IdEgreso;
+  }
 }
 
 export const contabilidadService = new ContabilidadService();

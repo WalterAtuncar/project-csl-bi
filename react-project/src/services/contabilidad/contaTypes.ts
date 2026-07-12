@@ -331,3 +331,51 @@ export interface SisolDetalle {
   Liquidacion: SisolLiquidacion | null;
   Especialistas: SisolEspecialista[];
 }
+
+// ---- Catalogos (write) ----
+export interface CentroCostoCreate { IdPadre?: number | null; Codigo: string; Nombre: string; Descripcion?: string | null; IdTipoCaja?: number | null; }
+export interface CentroCostoUpdate { IdCentroCosto: number; Nombre: string; Descripcion?: string | null; IdTipoCaja?: number | null; Activo: boolean; }
+export interface TipoGastoCreate { IdPadre?: number | null; Codigo: string; Nombre: string; SeccionFlujo?: string | null; }
+export interface TipoGastoUpdate { IdTipoGasto: number; Nombre: string; SeccionFlujo?: string | null; Activo: boolean; }
+export interface EntidadCreate { Nombre: string; Tipo: string; }
+export interface EntidadUpdate { IdEntidad: number; Nombre: string; Tipo: string; Activo: boolean; }
+export interface CuentaBancariaCreate { Banco: string; NroCuenta: string; Moneda: string; }
+export interface CuentaBancariaUpdate { IdCuentaBancaria: number; Banco: string; NroCuenta: string; Moneda: string; Activo: boolean; }
+export interface SisolParticipacion { i_IdParticipacion: number; d_PorcClinica: number; d_PorcHospital: number; t_VigenciaDesde: string; t_VigenciaHasta: string | null; }
+export interface SisolParticipacionCreate { PorcClinica: number; PorcHospital: number; VigenciaDesde: string; }
+export interface ConfigRow { v_Clave: string; v_Valor: string; v_Descripcion: string; }
+
+// ---- Usuarios ----
+export interface Rol { i_IdRol: number; v_Codigo: string; v_Nombre: string; }
+export interface Usuario {
+  i_IdUsuario: number;
+  v_Username: string;
+  v_NombreCompleto: string;
+  b_Activo: boolean;
+  t_UltimoLogin: string | null;
+  Roles: string;
+}
+export interface UsuarioCreate { Username: string; Password: string; NombreCompleto: string; Roles: string; }
+export interface UsuarioUpdate { IdUsuario: number; NombreCompleto: string; Activo: boolean; Roles: string; }
+
+// ---- Compras ----
+export interface CompraRow {
+  i_IdCompra: number;
+  periodo: string;
+  fecha_emision: string | null;
+  tipo_comprobante: string;
+  Documento: string;
+  Proveedor: string;
+  Ruc: string;
+  base_imponible: number;
+  igv: number;
+  importe_total: number;
+  codigo_moneda: string;
+  estado: string;
+  i_IdCentroCosto: number | null;
+  CentroCosto: string | null;
+  i_IdTipoGasto: number | null;
+  TipoGasto: string | null;
+  i_IdEgreso: number | null;
+  Clasificada: boolean;
+}

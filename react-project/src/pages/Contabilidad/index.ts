@@ -7,3 +7,6 @@ export { default as FlujoConsolidado } from './FlujoConsolidado';
 export { default as Rentabilidad } from './Rentabilidad';
 export { default as RentabilidadUnidades } from './RentabilidadUnidades';
 export { default as Sisol } from './Sisol';
+export { default as Compras } from './Compras';
+export { default as Catalogos } from './Catalogos';
+export { default as Usuarios } from './Usuarios';

@@ -1,10 +1,11 @@
 import React from 'react';
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { Receipt, Users, LogOut, Calculator, Wallet, TrendingUp, PieChart, Building2, HeartPulse } from 'lucide-react';
+import { Receipt, Users, LogOut, Calculator, Wallet, TrendingUp, PieChart, Building2, HeartPulse, FileText, Settings, ShieldCheck } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
 
-const navItems = [
+// 'need' controla la visibilidad: undefined = todos; 'write' = SA/CONTABILIDAD; 'SA' = solo SA.
+const navItems: { to: string; label: string; icon: React.ComponentType<{ className?: string }>; need?: 'write' | 'SA' }[] = [
   { to: '/conta/caja', label: 'Caja Diaria', icon: Wallet },
   { to: '/conta/flujo-consolidado', label: 'Flujo Consolidado', icon: TrendingUp },
   { to: '/conta/rentabilidad', label: 'Rentabilidad', icon: PieChart },
@@ -12,10 +13,13 @@ const navItems = [
   { to: '/conta/sisol', label: 'Liquidación SISOL', icon: HeartPulse },
   { to: '/conta/egresos', label: 'Egresos', icon: Receipt },
   { to: '/conta/personal', label: 'Costos de Personal', icon: Users },
+  { to: '/conta/compras', label: 'Registro de Compras', icon: FileText },
+  { to: '/conta/catalogos', label: 'Catálogos', icon: Settings, need: 'write' },
+  { to: '/conta/usuarios', label: 'Usuarios', icon: ShieldCheck, need: 'SA' },
 ];
 
 const ContaLayout: React.FC = () => {
-  const { isAuthenticated, user, logout } = useContaAuth();
+  const { isAuthenticated, user, logout, canWrite, hasRole } = useContaAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -24,6 +28,7 @@ const ContaLayout: React.FC = () => {
   }
 
   const doLogout = () => { logout(); navigate('/conta/login', { replace: true }); };
+  const visibleNav = navItems.filter((n) => !n.need || (n.need === 'write' ? canWrite : hasRole(n.need)));
 
   return (
     <div className="min-h-screen flex bg-slate-100 dark:bg-slate-900">
@@ -37,8 +42,8 @@ const ContaLayout: React.FC = () => {
             <div className="text-[11px] text-slate-400">San Lorenzo</div>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
-          {navItems.map(({ to, label, icon: Icon }) => (
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {visibleNav.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

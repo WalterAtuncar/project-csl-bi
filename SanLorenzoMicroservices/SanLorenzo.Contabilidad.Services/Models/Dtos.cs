@@ -460,4 +460,41 @@ namespace Contabilidad.Models
         public SisolLiquidacionRow Liquidacion { get; set; }
         public List<SisolEspecialistaRow> Especialistas { get; set; } = new();
     }
+
+    // ---------- Compras (clasificacion contable) ----------
+    public class CompraClasificarRequest
+    {
+        public int IdCentroCosto { get; set; }
+        public int IdTipoGasto { get; set; }
+    }
+    public class CompraClasificacionRow
+    {
+        public int i_IdCompra { get; set; }
+        public int i_IdCentroCosto { get; set; }
+        public string CentroCosto { get; set; }
+        public int i_IdTipoGasto { get; set; }
+        public string TipoGasto { get; set; }
+        public int? i_IdEgreso { get; set; }
+    }
+    public class CompraRow
+    {
+        public int i_IdCompra { get; set; }
+        public string periodo { get; set; }
+        public DateTime? fecha_emision { get; set; }
+        public string tipo_comprobante { get; set; }
+        public string Documento { get; set; }
+        public string Proveedor { get; set; }
+        public string Ruc { get; set; }
+        public decimal base_imponible { get; set; }
+        public decimal igv { get; set; }
+        public decimal importe_total { get; set; }
+        public string codigo_moneda { get; set; }
+        public string estado { get; set; }
+        public int? i_IdCentroCosto { get; set; }
+        public string CentroCosto { get; set; }
+        public int? i_IdTipoGasto { get; set; }
+        public string TipoGasto { get; set; }
+        public int? i_IdEgreso { get; set; }
+        public bool Clasificada { get; set; }
+    }
 }
