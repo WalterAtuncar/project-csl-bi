@@ -62,6 +62,7 @@ builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<AuthRepository>();
 builder.Services.AddScoped<CatalogoRepository>();
 builder.Services.AddScoped<EgresoRepository>();
+builder.Services.AddScoped<CajaRepository>();
 
 var app = builder.Build();
 

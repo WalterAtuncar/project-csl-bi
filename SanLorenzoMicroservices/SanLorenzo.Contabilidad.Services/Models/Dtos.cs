@@ -247,4 +247,103 @@ namespace Contabilidad.Models
         public int? IdCentroCosto { get; set; }
         public DateTime FechaPago { get; set; }
     }
+
+    // ---------- Motor de caja ----------
+    public class CajaIngresoRow
+    {
+        public int? i_IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
+        public int? i_IdFormaPago { get; set; }
+        public string FormaPago { get; set; }
+        public bool EsCobranzaCredito { get; set; }
+        public DateTime Dia { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class CajaEgresoRow
+    {
+        public string Seccion { get; set; }
+        public int? i_IdCentroCosto { get; set; }
+        public string CentroCosto { get; set; }
+        public DateTime Dia { get; set; }
+        public bool EsIngreso { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class CajaDiaRow
+    {
+        public DateTime Dia { get; set; }
+        public decimal Ingresos { get; set; }
+        public decimal Egresos { get; set; }
+        public decimal OtrosIngresos { get; set; }
+        public decimal FlujoDia { get; set; }
+        public decimal SaldoAcumulado { get; set; }
+    }
+    public class FlujoMesRow
+    {
+        public byte Mes { get; set; }
+        public decimal IngresosOp { get; set; }
+        public decimal EgrPersonal { get; set; }
+        public decimal EgrAdmin { get; set; }
+        public decimal EgrMedico { get; set; }
+        public decimal EgrTributos { get; set; }
+        public decimal EgrRenta { get; set; }
+        public decimal TotalEgresosOp { get; set; }
+        public decimal FlujoOperativo { get; set; }
+        public decimal Inversion { get; set; }
+        public decimal CajaOpInversion { get; set; }
+        public decimal Financiamiento { get; set; }
+        public decimal CajaOpFinanciamiento { get; set; }
+        public decimal OtrosEgresos { get; set; }
+        public decimal OtrosIngresos { get; set; }
+        public decimal SaldoDeCaja { get; set; }
+        public decimal SaldoInicial { get; set; }
+        public decimal SaldoFinal { get; set; }
+    }
+    public class FlujoIngresoUnidadRow
+    {
+        public byte Mes { get; set; }
+        public int? i_IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
+        public bool EsCredito { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class FlujoEgresoSeccionRow
+    {
+        public byte Mes { get; set; }
+        public string Seccion { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class FlujoConsolidadoResponse
+    {
+        public List<FlujoMesRow> Resumen { get; set; } = new();
+        public List<FlujoIngresoUnidadRow> IngresosPorUnidad { get; set; } = new();
+        public List<FlujoEgresoSeccionRow> EgresosPorSeccion { get; set; } = new();
+    }
+    public class CerrarMesRequest { public short Anio { get; set; } public byte Mes { get; set; } }
+    public class AperturaRequest
+    {
+        public short Anio { get; set; }
+        public byte Mes { get; set; }
+        public decimal SaldoInicial { get; set; }
+        public decimal MontoInicialNeto { get; set; }
+    }
+    public class SaldoBancoRow
+    {
+        public int? i_Id { get; set; }
+        public short n_Anio { get; set; }
+        public byte n_Mes { get; set; }
+        public int i_IdCuentaBancaria { get; set; }
+        public string v_Banco { get; set; }
+        public string v_NroCuenta { get; set; }
+        public string v_Moneda { get; set; }
+        public decimal d_SaldoSoles { get; set; }
+        public decimal d_SaldoDolares { get; set; }
+    }
+    public class SaldoBancoUpsertRequest
+    {
+        public short Anio { get; set; }
+        public byte Mes { get; set; }
+        public int IdCuentaBancaria { get; set; }
+        public decimal SaldoSoles { get; set; }
+        public decimal SaldoDolares { get; set; }
+    }
 }

@@ -162,3 +162,80 @@ export const CONCEPTOS_PERSONAL = [
   'BENEFICIOS_SOCIALES',
   'PERSONAL_ADICIONAL',
 ] as const;
+
+// ---- Motor de caja ----
+export interface CajaIngresoRow {
+  i_IdTipoCaja: number | null;
+  Unidad: string | null;
+  i_IdFormaPago: number | null;
+  FormaPago: string | null;
+  EsCobranzaCredito: boolean;
+  Dia: string;
+  Monto: number;
+}
+
+export interface CajaEgresoRow {
+  Seccion: string;
+  i_IdCentroCosto: number | null;
+  CentroCosto: string | null;
+  Dia: string;
+  EsIngreso: boolean;
+  Monto: number;
+}
+
+export interface CajaDiaRow {
+  Dia: string;
+  Ingresos: number;
+  Egresos: number;
+  OtrosIngresos: number;
+  FlujoDia: number;
+  SaldoAcumulado: number;
+}
+
+export interface FlujoMesRow {
+  Mes: number;
+  IngresosOp: number;
+  EgrPersonal: number;
+  EgrAdmin: number;
+  EgrMedico: number;
+  EgrTributos: number;
+  EgrRenta: number;
+  TotalEgresosOp: number;
+  FlujoOperativo: number;
+  Inversion: number;
+  CajaOpInversion: number;
+  Financiamiento: number;
+  CajaOpFinanciamiento: number;
+  OtrosEgresos: number;
+  OtrosIngresos: number;
+  SaldoDeCaja: number;
+  SaldoInicial: number;
+  SaldoFinal: number;
+}
+
+export interface FlujoIngresoUnidadRow {
+  Mes: number;
+  i_IdTipoCaja: number | null;
+  Unidad: string;
+  EsCredito: boolean;
+  Monto: number;
+}
+
+export interface FlujoEgresoSeccionRow {
+  Mes: number;
+  Seccion: string;
+  Monto: number;
+}
+
+export interface FlujoConsolidado {
+  Resumen: FlujoMesRow[];
+  IngresosPorUnidad: FlujoIngresoUnidadRow[];
+  EgresosPorSeccion: FlujoEgresoSeccionRow[];
+}
+
+export interface CerrarMesResultado {
+  ingresos: number;
+  egresos: number;
+  otrosIngresos: number;
+  saldoFinal: number;
+}

@@ -1,10 +1,12 @@
 import React from 'react';
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { Receipt, Users, LogOut, Calculator } from 'lucide-react';
+import { Receipt, Users, LogOut, Calculator, Wallet, TrendingUp } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
 
 const navItems = [
+  { to: '/conta/caja', label: 'Caja Diaria', icon: Wallet },
+  { to: '/conta/flujo-consolidado', label: 'Flujo Consolidado', icon: TrendingUp },
   { to: '/conta/egresos', label: 'Egresos', icon: Receipt },
   { to: '/conta/personal', label: 'Costos de Personal', icon: Users },
 ];

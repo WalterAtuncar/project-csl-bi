@@ -3,6 +3,7 @@ import type {
   ContaLoginResponse, CentroCosto, TipoGasto, Entidad, CuentaBancaria,
   Egreso, EgresoListResponse, EgresoCreate, EgresoUpdate, EgresoPagar,
   EgresoCargaFila, EgresoCargaResultado, CostoPersonal, CostoPersonalUpsert,
+  CajaDiaRow, FlujoConsolidado, CerrarMesResultado,
 } from './contaTypes';
 
 // Base URL de la API dedicada de Contabilidad. Configurable por env; dev por defecto.
@@ -119,6 +120,34 @@ class ContabilidadService {
   async costoPersonalPagar(anio: number, mes: number, fechaPago: string, idCentroCosto?: number): Promise<number> {
     const { data } = await this.http.post<{ pagadas: number }>('/costos-personal/pagar', { Anio: anio, Mes: mes, IdCentroCosto: idCentroCosto ?? null, FechaPago: fechaPago });
     return data.pagadas;
+  }
+
+  // ---- Motor de caja ----
+  async cajaIngresos(desde: string, hasta: string): Promise<import('./contaTypes').CajaIngresoRow[]> {
+    const { data } = await this.http.get<import('./contaTypes').CajaIngresoRow[]>('/caja/ingresos', { params: { desde, hasta } });
+    return data;
+  }
+  async cajaEgresos(desde: string, hasta: string): Promise<import('./contaTypes').CajaEgresoRow[]> {
+    const { data } = await this.http.get<import('./contaTypes').CajaEgresoRow[]>('/caja/egresos', { params: { desde, hasta } });
+    return data;
+  }
+  async cajaDiaria(anio: number, mes: number): Promise<CajaDiaRow[]> {
+    const { data } = await this.http.get<CajaDiaRow[]>('/caja/diaria', { params: { anio, mes } });
+    return data;
+  }
+  async flujoConsolidado(anio: number): Promise<FlujoConsolidado> {
+    const { data } = await this.http.get<FlujoConsolidado>('/caja/flujo-consolidado', { params: { anio } });
+    return data;
+  }
+  async cajaCerrarMes(anio: number, mes: number): Promise<CerrarMesResultado> {
+    const { data } = await this.http.post<CerrarMesResultado>('/caja/cerrar-mes', { Anio: anio, Mes: mes });
+    return data;
+  }
+  async cajaReabrirMes(anio: number, mes: number): Promise<void> {
+    await this.http.post('/caja/reabrir-mes', { Anio: anio, Mes: mes });
+  }
+  async cajaApertura(anio: number, mes: number, saldoInicial: number, montoInicialNeto: number): Promise<void> {
+    await this.http.post('/caja/apertura', { Anio: anio, Mes: mes, SaldoInicial: saldoInicial, MontoInicialNeto: montoInicialNeto });
   }
 }
 
