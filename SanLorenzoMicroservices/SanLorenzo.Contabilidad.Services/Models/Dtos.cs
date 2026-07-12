@@ -136,4 +136,115 @@ namespace Contabilidad.Models
 
     public class ConfigRow { public string v_Clave { get; set; } public string v_Valor { get; set; } public string v_Descripcion { get; set; } }
     public class ConfigUpdateRequest { public string Clave { get; set; } public string Valor { get; set; } }
+
+    // ---------- Egresos ----------
+    public class EgresoRow
+    {
+        public int i_IdEgreso { get; set; }
+        public DateTime t_FechaDocumento { get; set; }
+        public string v_TipoDocumento { get; set; }
+        public string v_SerieNumero { get; set; }
+        public string Receptor { get; set; }
+        public string CentroCosto { get; set; }
+        public int? i_IdTipoCaja { get; set; }
+        public string TipoGasto { get; set; }
+        public string Seccion { get; set; }
+        public string v_Condicion { get; set; }
+        public string v_Moneda { get; set; }
+        public decimal d_TipoCambio { get; set; }
+        public decimal d_MontoBruto { get; set; }
+        public decimal d_IGV { get; set; }
+        public decimal d_MontoNeto { get; set; }
+        public string v_Estado { get; set; }
+        public DateTime? t_FechaPago { get; set; }
+        public int? i_IdFormaPago { get; set; }
+        public string v_Glosa { get; set; }
+        public int TotalRows { get; set; }
+    }
+    public class EgresoCreateRequest
+    {
+        public int? IdProveedor { get; set; }
+        public int? IdEntidad { get; set; }
+        public DateTime FechaDocumento { get; set; }
+        public string TipoDocumento { get; set; } = "FACTURA";
+        public string SerieNumero { get; set; }
+        public int IdCentroCosto { get; set; }
+        public int IdTipoGasto { get; set; }
+        public string Condicion { get; set; } = "CONTADO";
+        public string Moneda { get; set; } = "PEN";
+        public decimal TipoCambio { get; set; } = 1;
+        public decimal MontoBruto { get; set; }
+        public decimal IGV { get; set; }
+        public string Glosa { get; set; }
+        public int? IdCompra { get; set; }
+    }
+    public class EgresoUpdateRequest : EgresoCreateRequest { public int IdEgreso { get; set; } }
+    public class EgresoPagarRequest
+    {
+        public int IdEgreso { get; set; }
+        public DateTime FechaPago { get; set; }
+        public int? IdFormaPago { get; set; }
+        public int? IdCuentaBancaria { get; set; }
+    }
+    public class EgresoAnularRequest { public int IdEgreso { get; set; } public string Motivo { get; set; } }
+
+    public class EgresoCargaFila
+    {
+        public string RucOEntidad { get; set; }
+        public DateTime? FechaDocumento { get; set; }
+        public string TipoDocumento { get; set; }
+        public string SerieNumero { get; set; }
+        public string CodCentroCosto { get; set; }
+        public string CodTipoGasto { get; set; }
+        public string Condicion { get; set; }
+        public string Moneda { get; set; }
+        public decimal? TipoCambio { get; set; }
+        public decimal? MontoBruto { get; set; }
+        public decimal? IGV { get; set; }
+        public string Glosa { get; set; }
+    }
+    public class EgresoCargaResultado
+    {
+        public int Insertadas { get; set; }
+        public int ConError { get; set; }
+        public List<EgresoCargaError> Errores { get; set; } = new();
+    }
+    public class EgresoCargaError
+    {
+        public int fila { get; set; }
+        public string v_RucOEntidad { get; set; }
+        public string v_CodCentroCosto { get; set; }
+        public string v_CodTipoGasto { get; set; }
+        public decimal? d_MontoBruto { get; set; }
+        public string v_Error { get; set; }
+    }
+
+    // ---------- Costos de personal ----------
+    public class CostoPersonalRow
+    {
+        public int i_Id { get; set; }
+        public short n_Anio { get; set; }
+        public byte n_Mes { get; set; }
+        public int i_IdCentroCosto { get; set; }
+        public string CentroCosto { get; set; }
+        public string v_Concepto { get; set; }
+        public decimal d_Monto { get; set; }
+        public string v_Estado { get; set; }
+        public DateTime? t_FechaPago { get; set; }
+    }
+    public class CostoPersonalUpsertRequest
+    {
+        public short Anio { get; set; }
+        public byte Mes { get; set; }
+        public int IdCentroCosto { get; set; }
+        public string Concepto { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class CostoPersonalPagarRequest
+    {
+        public short Anio { get; set; }
+        public byte Mes { get; set; }
+        public int? IdCentroCosto { get; set; }
+        public DateTime FechaPago { get; set; }
+    }
 }

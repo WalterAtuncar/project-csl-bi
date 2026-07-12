@@ -7,7 +7,8 @@ using Contabilidad.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = null); // JSON = nombres C# (i_IdEgreso, Receptor...)
 builder.Services.AddEndpointsApiExplorer();
 
 // Swagger con soporte de Bearer token
@@ -60,6 +61,7 @@ builder.Services.AddSingleton<Db>();
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<AuthRepository>();
 builder.Services.AddScoped<CatalogoRepository>();
+builder.Services.AddScoped<EgresoRepository>();
 
 var app = builder.Build();
 
