@@ -18,6 +18,9 @@ namespace Contabilidad.Models
         public string v_NombreCompleto { get; set; }
         public bool b_Activo { get; set; }
         public DateTime? t_UltimoLogin { get; set; }
+        public string v_AuthOrigen { get; set; }
+        public string v_UsernameLegacy { get; set; }
+        public int? i_SystemUserIdLegacy { get; set; }
         public string Roles { get; set; }
     }
     public class UsuarioAuthRow
@@ -27,7 +30,55 @@ namespace Contabilidad.Models
         public string v_PasswordHash { get; set; }
         public string v_NombreCompleto { get; set; }
         public bool b_Activo { get; set; }
+        public string v_AuthOrigen { get; set; }
         public string Roles { get; set; }
+    }
+
+    // ---------- Login unificado BI (identidad legacy + autorizacion conta) ----------
+    /// <summary>Usuario del sistema legacy (objModel de /Auth/Login). Se devuelve intacto al front
+    /// para poblar el userData que las pantallas legacy ya usan.</summary>
+    public class LegacyUser
+    {
+        public int i_SystemUserId { get; set; }
+        public string v_UserName { get; set; }
+        public int i_RoleId { get; set; }
+        public string v_PersonId { get; set; }
+        public int i_RolVentaId { get; set; }
+        public int i_ProfesionId { get; set; }
+    }
+    public class LoginBiResponse : LoginResponse
+    {
+        public LegacyUser LegacyUser { get; set; }   // null si el login fue LOCAL (breakglass)
+    }
+    /// <summary>Fila que resuelve el vinculo activo tras validar credenciales en el legacy.</summary>
+    public class LoginBiLookupRow
+    {
+        public int i_IdUsuario { get; set; }
+        public string v_Username { get; set; }
+        public string v_NombreCompleto { get; set; }
+        public bool b_Activo { get; set; }
+        public string v_AuthOrigen { get; set; }
+        public string Roles { get; set; }
+    }
+    public class LegacyUsuarioBusqueda
+    {
+        public int i_SystemUserId { get; set; }
+        public string v_UserName { get; set; }
+        public string Nombre { get; set; }
+        public bool YaVinculado { get; set; }
+    }
+    public class VincularRequest
+    {
+        public int SystemUserId { get; set; }
+        public string Username { get; set; }
+        public string Nombre { get; set; }
+        public string Roles { get; set; }   // CSV
+    }
+    public class VinculoUpdateRequest
+    {
+        public int IdUsuario { get; set; }
+        public string Roles { get; set; }
+        public bool Activo { get; set; }
     }
     public class UsuarioCreateRequest
     {

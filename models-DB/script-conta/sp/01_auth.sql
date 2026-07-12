@@ -9,7 +9,7 @@ CREATE PROCEDURE conta.sp_Auth_GetUsuario
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT u.i_IdUsuario, u.v_Username, u.v_PasswordHash, u.v_NombreCompleto, u.b_Activo,
+    SELECT u.i_IdUsuario, u.v_Username, u.v_PasswordHash, u.v_NombreCompleto, u.b_Activo, u.v_AuthOrigen,
            STUFF((SELECT ',' + r.v_Nombre
                     FROM conta.usuario_rol ur JOIN conta.rol r ON r.i_IdRol = ur.i_IdRol
                    WHERE ur.i_IdUsuario = u.i_IdUsuario

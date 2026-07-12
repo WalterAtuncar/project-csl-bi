@@ -67,6 +67,16 @@ builder.Services.AddScoped<RentabilidadRepository>();
 builder.Services.AddScoped<SisolRepository>();
 builder.Services.AddScoped<CompraRepository>();
 
+// Cliente legacy para el login unificado (server-to-server; la contrasena solo transita).
+builder.Services.AddHttpClient<LegacyAuthClient>((sp, client) =>
+{
+    var cfg = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = cfg["Legacy:BaseUrl"] ?? "http://190.116.90.35:8183/api";
+    if (!baseUrl.EndsWith("/")) baseUrl += "/";   // BaseAddress con '/' final: "Auth/Login" relativo conserva /api
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(cfg.GetValue<int?>("Legacy:TimeoutSeconds") ?? 10);
+});
+
 var app = builder.Build();
 
 // Manejo global de errores: convierte RAISERROR de los SP en 400 con mensaje legible.

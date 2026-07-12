@@ -63,5 +63,36 @@ namespace Contabilidad.Repositories
                 new { r.IdUsuario, r.NombreCompleto, r.Activo, r.Roles, IdUsuarioAccion = idAccion },
                 commandType: CommandType.StoredProcedure);
         }
+
+        // ---------- Login unificado BI ----------
+        public LoginBiLookupRow LoginBiLookup(int systemUserIdLegacy)
+        {
+            using var cn = _db.Open();
+            return cn.QueryFirstOrDefault<LoginBiLookupRow>("conta.sp_Auth_LoginBiLookup",
+                new { SystemUserIdLegacy = systemUserIdLegacy }, commandType: CommandType.StoredProcedure);
+        }
+
+        public IEnumerable<LegacyUsuarioBusqueda> LegacyBuscar(string filtro)
+        {
+            using var cn = _db.Open();
+            return cn.Query<LegacyUsuarioBusqueda>("conta.sp_Auth_LegacyBuscar",
+                new { Filtro = filtro }, commandType: CommandType.StoredProcedure);
+        }
+
+        public int Vincular(VincularRequest r, int idAccion)
+        {
+            using var cn = _db.Open();
+            return cn.QueryFirstOrDefault<int>("conta.sp_Auth_Vincular",
+                new { r.SystemUserId, r.Username, r.Nombre, r.Roles, IdUsuarioAccion = idAccion },
+                commandType: CommandType.StoredProcedure);
+        }
+
+        public int VinculoUpdate(VinculoUpdateRequest r, int idAccion)
+        {
+            using var cn = _db.Open();
+            return cn.QueryFirstOrDefault<int>("conta.sp_Auth_VinculoUpdate",
+                new { r.IdUsuario, r.Roles, r.Activo, IdUsuarioAccion = idAccion },
+                commandType: CommandType.StoredProcedure);
+        }
     }
 }
