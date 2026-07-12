@@ -373,10 +373,23 @@ export interface Usuario {
   v_NombreCompleto: string;
   b_Activo: boolean;
   t_UltimoLogin: string | null;
+  v_AuthOrigen: 'LOCAL' | 'LEGACY' | string;
+  v_UsernameLegacy: string | null;
+  i_SystemUserIdLegacy: number | null;
   Roles: string;
 }
 export interface UsuarioCreate { Username: string; Password: string; NombreCompleto: string; Roles: string; }
 export interface UsuarioUpdate { IdUsuario: number; NombreCompleto: string; Activo: boolean; Roles: string; }
+
+// ---- Login unificado: cableado de usuarios del sistema legacy ----
+export interface LegacyUsuarioBusqueda {
+  i_SystemUserId: number;
+  v_UserName: string;
+  Nombre: string;
+  YaVinculado: boolean;
+}
+export interface VincularRequest { SystemUserId: number; Username: string; Nombre: string; Roles: string; }
+export interface VinculoUpdateRequest { IdUsuario: number; Roles: string; Activo: boolean; }
 
 // ---- Compras ----
 export interface CompraRow {

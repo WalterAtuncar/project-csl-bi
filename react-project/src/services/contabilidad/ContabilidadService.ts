@@ -217,6 +217,12 @@ class ContabilidadService {
   async usuarios(): Promise<import('./contaTypes').Usuario[]> { return (await this.http.get('/auth/usuarios')).data; }
   async usuarioCrear(r: import('./contaTypes').UsuarioCreate) { await this.http.post('/auth/usuarios', r); }
   async usuarioActualizar(r: import('./contaTypes').UsuarioUpdate) { await this.http.put('/auth/usuarios', r); }
+  // Cableado de usuarios del sistema legacy (solo SA)
+  async legacyBuscar(filtro: string): Promise<import('./contaTypes').LegacyUsuarioBusqueda[]> {
+    return (await this.http.get('/auth/legacy-usuarios', { params: { filtro } })).data;
+  }
+  async vincular(r: import('./contaTypes').VincularRequest) { await this.http.post('/auth/vincular', r); }
+  async vinculoActualizar(r: import('./contaTypes').VinculoUpdateRequest) { await this.http.put('/auth/vincular', r); }
 
   // ---- Compras ----
   async comprasList(periodo?: string, soloSinClasificar = false): Promise<import('./contaTypes').CompraRow[]> {
