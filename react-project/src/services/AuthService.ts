@@ -86,6 +86,30 @@ export class AuthService extends BaseApiService {
   }
 
   /**
+   * Puebla el userData legacy a partir del objeto que devuelve el login unificado
+   * (LegacyUser del API conta). Mismo shape que el login legacy directo: las pantallas
+   * legacy que leen userData.systemUserId siguen funcionando sin cambios.
+   */
+  saveUserDataFromLegacy(legacy: {
+    i_SystemUserId: number; v_UserName: string; i_RoleId: number;
+    v_PersonId: string; i_RolVentaId: number; i_ProfesionId: number;
+  }): UserData {
+    const userData: UserData = {
+      systemUserId: legacy.i_SystemUserId,
+      userName: legacy.v_UserName,
+      roleId: legacy.i_RoleId,
+      personId: legacy.v_PersonId,
+      rolVentaId: legacy.i_RolVentaId,
+      profesionId: legacy.i_ProfesionId,
+      isAuthenticated: true,
+      loginTime: new Date().toISOString(),
+    };
+    this.saveUserData(userData);
+    window.dispatchEvent(new CustomEvent('auth:login', { detail: userData }));
+    return userData;
+  }
+
+  /**
    * Realiza el logout del usuario
    */
   async logout(): Promise<void> {

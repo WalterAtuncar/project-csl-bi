@@ -9,6 +9,20 @@ export interface ContaLoginResponse {
   Roles: string[];
 }
 
+// Usuario del sistema legacy (objModel de /Auth/Login), devuelto por el login unificado
+// para poblar el userData que las pantallas legacy ya usan.
+export interface LegacyUser {
+  i_SystemUserId: number;
+  v_UserName: string;
+  i_RoleId: number;
+  v_PersonId: string;
+  i_RolVentaId: number;
+  i_ProfesionId: number;
+}
+export interface LoginBiResponse extends ContaLoginResponse {
+  LegacyUser: LegacyUser | null; // null si el login fue LOCAL (breakglass del sa)
+}
+
 export interface CentroCosto {
   i_IdCentroCosto: number;
   i_IdPadre: number | null;

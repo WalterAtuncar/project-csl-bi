@@ -59,6 +59,15 @@ class ContabilidadService {
     return data;
   }
 
+  // Login unificado del BI: valida credenciales del sistema legacy y resuelve la sesion conta.
+  // Guarda la sesion conta (token + user); el LegacyUser (si viene) lo usa el front para el userData legacy.
+  async loginBi(username: string, password: string): Promise<import('./contaTypes').LoginBiResponse> {
+    const { data } = await this.http.post<import('./contaTypes').LoginBiResponse>('/auth/login-bi', { Username: username, Password: password });
+    this.setToken(data.Token);
+    localStorage.setItem('conta_user', JSON.stringify({ IdUsuario: data.IdUsuario, Username: data.Username, Nombre: data.Nombre, Roles: data.Roles }));
+    return data;
+  }
+
   async bootstrap(password: string): Promise<void> {
     await this.http.post('/auth/bootstrap', { password });
   }

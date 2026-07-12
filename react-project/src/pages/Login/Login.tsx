@@ -5,42 +5,47 @@ import { User, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Button from '../../components/UI/Button';
 import { useTheme } from '../../context/ThemeContext';
 import ThemeToggle from '../../components/UI/ThemeToggle';
-import { useAuth } from '../../hooks';
+import { authService } from '../../services';
+import contabilidadService from '../../services/contabilidad/ContabilidadService';
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { login, isLoading } = useAuth();
-  
+
   useTheme();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!username || !password) {
       setError('Por favor, complete todos los campos');
       return;
     }
 
     setError('');
-    
+    setIsLoading(true);
+
     try {
-      const userData = await login(username, password);
-      
-      // Login exitoso - navegar al dashboard
-      console.log('Login exitoso:', userData);
-      
-      // Pequeño delay para asegurar que el estado se actualice
-      setTimeout(() => {
-        navigate('/dashboards/general');
-      }, 100);
+      // Login unificado: valida contra el sistema (legacy) y resuelve la sesion de contabilidad.
+      const res = await contabilidadService.loginBi(username, password);
+
+      if (res.LegacyUser) {
+        // Usuario del sistema: puebla el userData legacy (pantallas del BI) y entra al dashboard.
+        authService.saveUserDataFromLegacy(res.LegacyUser);
+        setTimeout(() => navigate('/dashboards/general'), 100);
+      } else {
+        // Login LOCAL (breakglass del administrador): entra al modulo de contabilidad.
+        setTimeout(() => navigate('/conta'), 100);
+      }
     } catch (error: unknown) {
-      console.error('Error de login:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error al iniciar sesión. Verifique sus credenciales.';
       setError(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   };
 
