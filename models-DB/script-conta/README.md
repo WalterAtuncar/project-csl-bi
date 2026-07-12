@@ -26,6 +26,7 @@ node query.js --write --file ddl/04_egresos.sql
 node query.js --write --file ddl/05_caja.sql
 node query.js --write --file ddl/06_sisol.sql
 node query.js --write --file ddl/07_compras.sql
+node query.js --write --file ddl/08_login_unificado.sql
 
 # Stored procedures / funciones (idempotentes, re-aplicables)
 node query.js --write --file sp/00_helpers.sql
@@ -37,7 +38,14 @@ node query.js --write --file sp/05_rentabilidad.sql
 node query.js --write --file sp/06_sisol.sql
 node query.js --write --file sp/07_compras.sql
 node query.js --write --file sp/08_indicadores.sql
+node query.js --write --file sp/09_login_unificado.sql
 ```
+
+**Login unificado del BI** (ver `../docs/PLAN_LOGIN_UNIFICADO_BI.md`): `ddl/08` extiende
+`conta.usuario` (origen LOCAL/LEGACY) y `sp/09` agrega el lookup del vinculo + la busqueda y
+vinculacion de usuarios del sistema legacy (`systemuser`, solo SELECT cross-DB). La autenticacion
+la resuelve el API conta contra `/Auth/Login` del legacy; la autorizacion (rol) la resuelve el
+vinculo. `sp/01` fue extendido (GetUsuario devuelve v_AuthOrigen; List devuelve origen/username legacy).
 
 ## Inventario (17 tablas en `conta`)
 

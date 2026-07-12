@@ -241,6 +241,26 @@ duplicado manejado con mensaje; GERENTE/CONTABILIDAD no ven la sección (API y U
 - Migración de los ~100 endpoints legacy al API conta (decisión previa: a futuro).
 - HTTPS/certificados del despliegue.
 
+## 7-bis. ESTADO DE EJECUCIÓN (2026-07-12)
+
+| Fase | Estado | Commit | Notas |
+|---|---|---|---|
+| 0 — DDL + SPs | ✅ hecho | `408d378` | GATE 0 probado por db-console (buscar/vincular/lookup/duplicado/desactivar/reactivar); datos de prueba limpiados |
+| 1 — API (login-bi, vincular) | ✅ hecho | `c023bec` | GATE 1: casos 1 (sa local 200), 4 (401), 5 (503 + breakglass), 6 (SA 200 / GERENTE 403), 7 (password no logueada) verificados por curl |
+| 2 — Front login unificado | ✅ hecho | `9645e3e` | `loginBi` + `saveUserDataFromLegacy`; una sola pantalla; front compila |
+| 3 — UI de cableado | ✅ hecho | `829f6b2` | Buscador + vincular en Usuarios (SA); columna Origen; fix toggle de roles (v_Nombre) |
+| 4 — E2E + rollout + docs | 🔶 parcial | (este) | Docs actualizadas. Falta la E2E del happy-path con una credencial real del desktop y el rollout (vincular usuarios reales) — dependen del usuario |
+
+### Pendiente (depende del usuario)
+
+1. **E2E happy-path**: un usuario real del desktop vinculado por el SA debe (a) loguear en el BI con
+   su clave del desktop, (b) entrar al dashboard legacy y (c) navegar a `/conta` sin re-login.
+   Requiere UNA credencial real (usuario+clave del desktop) que solo el usuario tiene. Los casos que
+   no requieren secreto ya se verificaron (GATE 1).
+2. **Rollout**: el SA vincula desde la UI (Usuarios → Vincular usuario del sistema) a las personas
+   que hoy usan el BI, **antes** de publicar el front nuevo (si no, quedan fuera por el whitelist —
+   comportamiento deseado, pero hay que secuenciarlo). Decisión de negocio (quién entra, con qué rol).
+
 ## 8. RESUMEN DE FASES (tracking del ejecutor)
 
 | Fase | Entregable | Dependencia | GATE |
