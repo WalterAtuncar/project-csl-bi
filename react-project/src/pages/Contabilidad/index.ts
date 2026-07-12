@@ -4,3 +4,5 @@ export { default as Egresos } from './Egresos';
 export { default as CostosPersonal } from './CostosPersonal';
 export { default as CajaDiaria } from './CajaDiaria';
 export { default as FlujoConsolidado } from './FlujoConsolidado';
+export { default as Rentabilidad } from './Rentabilidad';
+export { default as RentabilidadUnidades } from './RentabilidadUnidades';

@@ -63,6 +63,7 @@ builder.Services.AddScoped<AuthRepository>();
 builder.Services.AddScoped<CatalogoRepository>();
 builder.Services.AddScoped<EgresoRepository>();
 builder.Services.AddScoped<CajaRepository>();
+builder.Services.AddScoped<RentabilidadRepository>();
 
 var app = builder.Build();
 

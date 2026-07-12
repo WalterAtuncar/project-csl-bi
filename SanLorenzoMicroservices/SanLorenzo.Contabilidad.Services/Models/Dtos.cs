@@ -346,4 +346,71 @@ namespace Contabilidad.Models
         public decimal SaldoSoles { get; set; }
         public decimal SaldoDolares { get; set; }
     }
+
+    // ---------- Rentabilidad ----------
+    public class RentabilidadIngresoRow
+    {
+        public int? i_IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
+        public decimal BrutoConIGV { get; set; }
+        public decimal IGV { get; set; }
+        public decimal NetoSinIGV { get; set; }
+        public decimal PorcClinica { get; set; }
+        public decimal NetoRentabilidad { get; set; }
+        public decimal ParticipacionHospital { get; set; }
+    }
+    public class RentabilidadGastoRow
+    {
+        public int? i_IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
+        public int? i_IdCentroCosto { get; set; }
+        public string CentroCosto { get; set; }
+        public decimal Gasto { get; set; }
+    }
+    public class RentabilidadGeneralRow
+    {
+        public decimal Ingresos { get; set; }
+        public decimal Gastos { get; set; }
+        public decimal Resultado { get; set; }
+        public decimal MargenPorc { get; set; }
+        public string Semaforo { get; set; }
+        public decimal RentableMin { get; set; }
+        public decimal BajoMin { get; set; }
+    }
+    public class RentabilidadUnidadRow
+    {
+        public int? i_IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
+        public decimal Ingresos { get; set; }
+        public decimal Gastos { get; set; }
+        public decimal Resultado { get; set; }
+        public decimal MargenPorc { get; set; }
+        public string Semaforo { get; set; }
+        public bool EsTotal { get; set; }
+        public bool EsAdministracion { get; set; }
+    }
+    public class ComparativaMesRow
+    {
+        public byte Mes { get; set; }
+        public decimal Ingresos { get; set; }
+        public decimal Gastos { get; set; }
+        public decimal Resultado { get; set; }
+        public decimal MargenPorc { get; set; }
+        public bool TrimestralActiva { get; set; }
+        public bool SemestralActiva { get; set; }
+    }
+    public class ComparativaPeriodoRow
+    {
+        public byte Trimestre { get; set; }
+        public byte Semestre { get; set; }
+        public decimal Ingresos { get; set; }
+        public decimal Gastos { get; set; }
+        public decimal Resultado { get; set; }
+    }
+    public class ComparativaResponse
+    {
+        public List<ComparativaMesRow> Mensual { get; set; } = new();
+        public List<ComparativaPeriodoRow> Trimestral { get; set; } = new();
+        public List<ComparativaPeriodoRow> Semestral { get; set; } = new();
+    }
 }

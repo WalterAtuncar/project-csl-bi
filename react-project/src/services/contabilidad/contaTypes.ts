@@ -239,3 +239,63 @@ export interface CerrarMesResultado {
   otrosIngresos: number;
   saldoFinal: number;
 }
+
+// ---- Rentabilidad ----
+export interface RentabilidadGeneral {
+  Ingresos: number;
+  Gastos: number;
+  Resultado: number;
+  MargenPorc: number;
+  Semaforo: 'RENTABLE' | 'BAJO_MARGEN' | 'PERDIDA' | string;
+  RentableMin: number;
+  BajoMin: number;
+}
+export interface RentabilidadUnidadRow {
+  i_IdTipoCaja: number | null;
+  Unidad: string;
+  Ingresos: number;
+  Gastos: number;
+  Resultado: number;
+  MargenPorc: number;
+  Semaforo: string;
+  EsTotal: boolean;
+  EsAdministracion: boolean;
+}
+export interface RentabilidadGastoRow {
+  i_IdTipoCaja: number | null;
+  Unidad: string;
+  i_IdCentroCosto: number | null;
+  CentroCosto: string | null;
+  Gasto: number;
+}
+export interface RentabilidadIngresoRow {
+  i_IdTipoCaja: number | null;
+  Unidad: string;
+  BrutoConIGV: number;
+  IGV: number;
+  NetoSinIGV: number;
+  PorcClinica: number;
+  NetoRentabilidad: number;
+  ParticipacionHospital: number;
+}
+export interface ComparativaMesRow {
+  Mes: number;
+  Ingresos: number;
+  Gastos: number;
+  Resultado: number;
+  MargenPorc: number;
+  TrimestralActiva: boolean;
+  SemestralActiva: boolean;
+}
+export interface ComparativaPeriodoRow {
+  Trimestre: number;
+  Semestre: number;
+  Ingresos: number;
+  Gastos: number;
+  Resultado: number;
+}
+export interface ComparativaResponse {
+  Mensual: ComparativaMesRow[];
+  Trimestral: ComparativaPeriodoRow[];
+  Semestral: ComparativaPeriodoRow[];
+}

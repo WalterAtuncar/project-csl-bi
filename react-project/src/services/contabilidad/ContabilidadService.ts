@@ -149,6 +149,24 @@ class ContabilidadService {
   async cajaApertura(anio: number, mes: number, saldoInicial: number, montoInicialNeto: number): Promise<void> {
     await this.http.post('/caja/apertura', { Anio: anio, Mes: mes, SaldoInicial: saldoInicial, MontoInicialNeto: montoInicialNeto });
   }
+
+  // ---- Rentabilidad ----
+  async rentabilidadGeneral(anio: number, mes: number): Promise<import('./contaTypes').RentabilidadGeneral> {
+    const { data } = await this.http.get('/rentabilidad/general', { params: { anio, mes } });
+    return data;
+  }
+  async rentabilidadPorUnidad(anio: number, mes: number): Promise<import('./contaTypes').RentabilidadUnidadRow[]> {
+    const { data } = await this.http.get('/rentabilidad/por-unidad', { params: { anio, mes } });
+    return data;
+  }
+  async rentabilidadGastos(anio: number, mes: number): Promise<import('./contaTypes').RentabilidadGastoRow[]> {
+    const { data } = await this.http.get('/rentabilidad/gastos', { params: { anio, mes } });
+    return data;
+  }
+  async rentabilidadComparativa(anio: number): Promise<import('./contaTypes').ComparativaResponse> {
+    const { data } = await this.http.get('/rentabilidad/comparativa', { params: { anio } });
+    return data;
+  }
 }
 
 export const contabilidadService = new ContabilidadService();
