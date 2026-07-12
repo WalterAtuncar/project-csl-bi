@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { Receipt, Users, LogOut, Calculator, Wallet, TrendingUp, PieChart, Building2 } from 'lucide-react';
+import { Receipt, Users, LogOut, Calculator, Wallet, TrendingUp, PieChart, Building2, HeartPulse } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
 
 const navItems = [
@@ -9,6 +9,7 @@ const navItems = [
   { to: '/conta/flujo-consolidado', label: 'Flujo Consolidado', icon: TrendingUp },
   { to: '/conta/rentabilidad', label: 'Rentabilidad', icon: PieChart },
   { to: '/conta/rentabilidad-unidades', label: 'Rentabilidad x Unidad', icon: Building2 },
+  { to: '/conta/sisol', label: 'Liquidación SISOL', icon: HeartPulse },
   { to: '/conta/egresos', label: 'Egresos', icon: Receipt },
   { to: '/conta/personal', label: 'Costos de Personal', icon: Users },
 ];

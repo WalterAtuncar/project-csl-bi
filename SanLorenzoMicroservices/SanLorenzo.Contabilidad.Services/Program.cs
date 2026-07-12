@@ -64,6 +64,7 @@ builder.Services.AddScoped<CatalogoRepository>();
 builder.Services.AddScoped<EgresoRepository>();
 builder.Services.AddScoped<CajaRepository>();
 builder.Services.AddScoped<RentabilidadRepository>();
+builder.Services.AddScoped<SisolRepository>();
 
 var app = builder.Build();
 

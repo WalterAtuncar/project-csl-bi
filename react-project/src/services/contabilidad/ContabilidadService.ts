@@ -167,6 +167,23 @@ class ContabilidadService {
     const { data } = await this.http.get('/rentabilidad/comparativa', { params: { anio } });
     return data;
   }
+
+  // ---- SISOL ----
+  async sisolList(anio: number): Promise<import('./contaTypes').SisolLiquidacion[]> {
+    const { data } = await this.http.get('/sisol/liquidaciones', { params: { anio } });
+    return data;
+  }
+  async sisolGet(anio: number, mes: number): Promise<import('./contaTypes').SisolDetalle> {
+    const { data } = await this.http.get(`/sisol/liquidaciones/${anio}/${mes}`);
+    return data;
+  }
+  async sisolCalcular(anio: number, mes: number, especialistas: import('./contaTypes').SisolEspecialistaInput[]): Promise<number> {
+    const { data } = await this.http.post<{ i_IdLiquidacion: number }>('/sisol/liquidaciones/calcular', { Anio: anio, Mes: mes, Especialistas: especialistas });
+    return data.i_IdLiquidacion;
+  }
+  async sisolPagar(idLiquidacion: number, fechaPago: string): Promise<void> {
+    await this.http.post(`/sisol/liquidaciones/${idLiquidacion}/pagar`, { IdLiquidacion: idLiquidacion, FechaPago: fechaPago });
+  }
 }
 
 export const contabilidadService = new ContabilidadService();

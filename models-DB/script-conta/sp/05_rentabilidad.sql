@@ -73,11 +73,14 @@ RETURN (
         FROM walk GROUP BY origen
     ),
     gastos AS (
+        -- Se excluye la participacion Hospital SISOL (egreso ligado a una liquidacion):
+        -- rentabilidad ya cuenta solo el % clinica como ingreso; contarla seria doble penalizacion.
         SELECT e.i_IdCentroCosto, e.d_MontoNeto AS Monto
         FROM conta.egreso e
         WHERE e.v_Estado <> 'ANULADO'
           AND e.t_FechaDocumento >= DATEFROMPARTS(@Anio,@Mes,1)
           AND e.t_FechaDocumento <  DATEADD(MONTH,1,DATEFROMPARTS(@Anio,@Mes,1))
+          AND NOT EXISTS (SELECT 1 FROM conta.sisol_liquidacion sl WHERE sl.i_IdEgresoHospital = e.i_IdEgreso)
         UNION ALL
         SELECT cpm.i_IdCentroCosto, cpm.d_Monto
         FROM conta.costo_personal_mensual cpm

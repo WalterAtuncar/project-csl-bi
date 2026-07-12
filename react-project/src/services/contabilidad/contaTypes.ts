@@ -299,3 +299,35 @@ export interface ComparativaResponse {
   Trimestral: ComparativaPeriodoRow[];
   Semestral: ComparativaPeriodoRow[];
 }
+
+// ---- SISOL ----
+export interface SisolLiquidacion {
+  i_IdLiquidacion: number;
+  n_Anio: number;
+  n_Mes: number;
+  d_VentaNeta: number;
+  d_PorcClinica: number;
+  d_ParticipacionClinica: number;
+  d_ParticipacionHospital: number;
+  v_Estado: 'CALCULADO' | 'PAGADO' | string;
+  t_FechaPago: string | null;
+  i_IdEgresoHospital: number | null;
+}
+export interface SisolEspecialista {
+  i_Id: number;
+  v_IdMedico: string;
+  v_NombreMedico: string;
+  d_BaseCalculo: number;
+  d_Porcentaje: number;
+  d_Monto: number;
+  v_Estado: string;
+}
+export interface SisolEspecialistaInput {
+  IdMedico: string;
+  NombreMedico: string;
+  Porcentaje: number;
+}
+export interface SisolDetalle {
+  Liquidacion: SisolLiquidacion | null;
+  Especialistas: SisolEspecialista[];
+}

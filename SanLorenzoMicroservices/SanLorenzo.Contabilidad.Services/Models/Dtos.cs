@@ -413,4 +413,51 @@ namespace Contabilidad.Models
         public List<ComparativaPeriodoRow> Trimestral { get; set; } = new();
         public List<ComparativaPeriodoRow> Semestral { get; set; } = new();
     }
+
+    // ---------- SISOL ----------
+    public class SisolLiquidacionRow
+    {
+        public int i_IdLiquidacion { get; set; }
+        public short n_Anio { get; set; }
+        public byte n_Mes { get; set; }
+        public decimal d_VentaNeta { get; set; }
+        public decimal d_PorcClinica { get; set; }
+        public decimal d_ParticipacionClinica { get; set; }
+        public decimal d_ParticipacionHospital { get; set; }
+        public string v_Estado { get; set; }
+        public DateTime? t_FechaPago { get; set; }
+        public int? i_IdEgresoHospital { get; set; }
+    }
+    public class SisolEspecialistaRow
+    {
+        public int i_Id { get; set; }
+        public string v_IdMedico { get; set; }
+        public string v_NombreMedico { get; set; }
+        public decimal d_BaseCalculo { get; set; }
+        public decimal d_Porcentaje { get; set; }
+        public decimal d_Monto { get; set; }
+        public string v_Estado { get; set; }
+    }
+    public class SisolEspecialistaInput
+    {
+        public string IdMedico { get; set; }
+        public string NombreMedico { get; set; }
+        public decimal Porcentaje { get; set; }
+    }
+    public class SisolCalcularRequest
+    {
+        public short Anio { get; set; }
+        public byte Mes { get; set; }
+        public List<SisolEspecialistaInput> Especialistas { get; set; } = new();
+    }
+    public class SisolPagarRequest
+    {
+        public int IdLiquidacion { get; set; }
+        public DateTime FechaPago { get; set; }
+    }
+    public class SisolDetalle
+    {
+        public SisolLiquidacionRow Liquidacion { get; set; }
+        public List<SisolEspecialistaRow> Especialistas { get; set; } = new();
+    }
 }
