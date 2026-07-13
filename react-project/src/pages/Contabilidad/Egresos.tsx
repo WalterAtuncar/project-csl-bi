@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 import { useContaAuth } from '../../context/ContaAuthContext';
+import SearchableSelect from './components/SearchableSelect';
 import type {
   Egreso, CentroCosto, TipoGasto, Entidad, CuentaBancaria,
   EgresoCreate, EgresoCargaFila, EgresoCargaResultado, EstadoEgreso,
@@ -339,10 +340,13 @@ const Egresos: React.FC = () => {
               </select>
             </Field>
             <Field label="Tipo de gasto">
-              <select value={form.IdTipoGasto || ''} onChange={(e) => setForm({ ...form, IdTipoGasto: Number(e.target.value) })} className={selCls}>
-                <option value="">Seleccione...</option>
-                {tipos.filter((t) => t.i_IdPadre != null).map((t) => <option key={t.i_IdTipoGasto} value={t.i_IdTipoGasto}>{t.v_Nombre}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.IdTipoGasto || null}
+                options={tipos.filter((t) => t.i_IdPadre != null).map((t) => ({ value: t.i_IdTipoGasto, label: t.v_Nombre }))}
+                onChange={(v) => setForm({ ...form, IdTipoGasto: v ?? 0 })}
+                placeholder="Seleccione..."
+                className={selCls}
+              />
             </Field>
             <Field label="Monto bruto"><input type="number" step="0.01" value={form.MontoBruto} onChange={(e) => setForm({ ...form, MontoBruto: Number(e.target.value) })} className={selCls} /></Field>
             <Field label="IGV"><input type="number" step="0.01" value={form.IGV} onChange={(e) => setForm({ ...form, IGV: Number(e.target.value) })} className={selCls} /></Field>
