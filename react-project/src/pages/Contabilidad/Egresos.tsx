@@ -102,6 +102,18 @@ const Egresos: React.FC = () => {
 
   const totalNeto = useMemo(() => items.reduce((s, x) => s + (x.v_Estado !== 'ANULADO' ? x.d_MontoNeto : 0), 0), [items]);
 
+  // Campos obligatorios del egreso (segun conta.egreso NOT NULL + CK_egreso_receptor + negocio).
+  // Con esto se habilita/deshabilita el boton Guardar del modal.
+  const formValido = useMemo(() => (
+    (form.IdEntidad != null || form.IdProveedor != null) &&   // CK_egreso_receptor
+    !!form.FechaDocumento &&                                   // t_FechaDocumento NOT NULL
+    !!form.TipoDocumento &&                                    // v_TipoDocumento NOT NULL
+    form.IdCentroCosto > 0 &&                                  // i_IdCentroCosto NOT NULL (FK)
+    form.IdTipoGasto > 0 &&                                    // i_IdTipoGasto NOT NULL (FK)
+    Number.isFinite(form.MontoBruto) && form.MontoBruto > 0 && // d_MontoBruto NOT NULL, negocio > 0
+    Number.isFinite(form.IGV) && form.IGV >= 0 && form.IGV <= form.MontoBruto  // neto >= 0 (CK_egreso_montos)
+  ), [form]);
+
   // ---- alta / edicion ----
   const openNuevo = () => { setForm(emptyForm()); setEditId(null); setFormOpen(true); };
   const openEditar = async (id: number) => {
@@ -124,6 +136,7 @@ const Egresos: React.FC = () => {
     if (!form.IdCentroCosto) { toast.error('Seleccione centro de costo'); return; }
     if (!form.IdTipoGasto) { toast.error('Seleccione tipo de gasto'); return; }
     if (form.MontoBruto <= 0) { toast.error('Monto bruto invalido'); return; }
+    if (form.IGV < 0 || form.IGV > form.MontoBruto) { toast.error('El IGV no puede ser mayor al monto bruto'); return; }
     try {
       if (editId) {
         await contabilidadService.egresoActualizar({ ...form, IdEgreso: editId });
@@ -312,16 +325,16 @@ const Egresos: React.FC = () => {
 
       {/* modal alta/edicion */}
       {formOpen && (
-        <Modal title={editId ? `Editar egreso #${editId}` : 'Nuevo egreso'} onClose={() => setFormOpen(false)} onSave={saveForm}>
+        <Modal title={editId ? `Editar egreso #${editId}` : 'Nuevo egreso'} onClose={() => setFormOpen(false)} onSave={saveForm} saveDisabled={!formValido}>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Receptor (entidad)" full>
+            <Field label="Receptor (entidad)" full required>
               <select value={form.IdEntidad ?? ''} onChange={(e) => setForm({ ...form, IdEntidad: e.target.value ? Number(e.target.value) : null })} className={selCls}>
                 <option value="">Seleccione...</option>
                 {entidades.map((x) => <option key={x.i_IdEntidad} value={x.i_IdEntidad}>{x.v_Nombre} ({x.v_Tipo})</option>)}
               </select>
             </Field>
-            <Field label="Fecha documento"><input type="date" value={form.FechaDocumento} onChange={(e) => setForm({ ...form, FechaDocumento: e.target.value })} className={selCls} /></Field>
-            <Field label="Tipo documento">
+            <Field label="Fecha documento" required><input type="date" value={form.FechaDocumento} onChange={(e) => setForm({ ...form, FechaDocumento: e.target.value })} className={selCls} /></Field>
+            <Field label="Tipo documento" required>
               <select value={form.TipoDocumento} onChange={(e) => setForm({ ...form, TipoDocumento: e.target.value })} className={selCls}>
                 {['FACTURA', 'RECIBO', 'PLANILLA', 'VOUCHER', 'OTRO'].map((x) => <option key={x} value={x}>{x}</option>)}
               </select>
@@ -333,13 +346,13 @@ const Egresos: React.FC = () => {
                 <option value="CREDITO">CREDITO</option>
               </select>
             </Field>
-            <Field label="Centro de costo">
+            <Field label="Centro de costo" required>
               <select value={form.IdCentroCosto || ''} onChange={(e) => setForm({ ...form, IdCentroCosto: Number(e.target.value) })} className={selCls}>
                 <option value="">Seleccione...</option>
                 {centros.map((c) => <option key={c.i_IdCentroCosto} value={c.i_IdCentroCosto}>{c.v_Nombre}</option>)}
               </select>
             </Field>
-            <Field label="Tipo de gasto">
+            <Field label="Tipo de gasto" required>
               <SearchableSelect
                 value={form.IdTipoGasto || null}
                 options={tipos.filter((t) => t.i_IdPadre != null).map((t) => ({ value: t.i_IdTipoGasto, label: t.v_Nombre }))}
@@ -348,11 +361,15 @@ const Egresos: React.FC = () => {
                 className={selCls}
               />
             </Field>
-            <Field label="Monto bruto"><input type="number" step="0.01" value={form.MontoBruto} onChange={(e) => setForm({ ...form, MontoBruto: Number(e.target.value) })} className={selCls} /></Field>
+            <Field label="Monto bruto" required><input type="number" step="0.01" value={form.MontoBruto} onChange={(e) => setForm({ ...form, MontoBruto: Number(e.target.value) })} className={selCls} /></Field>
             <Field label="IGV"><input type="number" step="0.01" value={form.IGV} onChange={(e) => setForm({ ...form, IGV: Number(e.target.value) })} className={selCls} /></Field>
             <Field label="Glosa" full><input value={form.Glosa ?? ''} onChange={(e) => setForm({ ...form, Glosa: e.target.value })} className={selCls} /></Field>
           </div>
-          <p className="text-xs text-slate-400 mt-2">Neto = Bruto − IGV = <b>S/ {money((form.MontoBruto || 0) - (form.IGV || 0))}</b>. Se crea en estado POR PAGAR (no afecta caja hasta pagarse).</p>
+          <p className="text-xs text-slate-400 mt-2">
+            Neto = Bruto − IGV = <b>S/ {money((form.MontoBruto || 0) - (form.IGV || 0))}</b>. Se crea en estado POR PAGAR (no afecta caja hasta pagarse).
+            {form.IGV > form.MontoBruto && <span className="text-rose-500"> · El IGV no puede superar el monto bruto.</span>}
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1"><span className="text-rose-500">*</span> Campos obligatorios.{!formValido && ' Complete los obligatorios para habilitar Guardar.'}</p>
         </Modal>
       )}
 
@@ -415,14 +432,16 @@ const Egresos: React.FC = () => {
 // ---- helpers UI ----
 const selCls = 'w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-sm outline-none focus:ring-2 focus:ring-emerald-500';
 
-const Field: React.FC<{ label: string; full?: boolean; children: React.ReactNode }> = ({ label, full, children }) => (
+const Field: React.FC<{ label: string; full?: boolean; required?: boolean; children: React.ReactNode }> = ({ label, full, required, children }) => (
   <div className={full ? 'col-span-2' : ''}>
-    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">{label}</label>
+    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+      {label}{required && <span className="text-rose-500 ml-0.5">*</span>}
+    </label>
     {children}
   </div>
 );
 
-const Modal: React.FC<{ title: string; onClose: () => void; onSave?: () => void; saveLabel?: string; hideSave?: boolean; children: React.ReactNode }> = ({ title, onClose, onSave, saveLabel = 'Guardar', hideSave, children }) => (
+const Modal: React.FC<{ title: string; onClose: () => void; onSave?: () => void; saveLabel?: string; hideSave?: boolean; saveDisabled?: boolean; children: React.ReactNode }> = ({ title, onClose, onSave, saveLabel = 'Guardar', hideSave, saveDisabled, children }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
     <div className="w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700">
@@ -432,7 +451,14 @@ const Modal: React.FC<{ title: string; onClose: () => void; onSave?: () => void;
       <div className="p-5">{children}</div>
       <div className="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700">
         <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cerrar</button>
-        {!hideSave && <button onClick={onSave} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold">{saveLabel}</button>}
+        {!hideSave && (
+          <button
+            onClick={onSave}
+            disabled={saveDisabled}
+            title={saveDisabled ? 'Complete los campos obligatorios' : undefined}
+            className={`px-4 py-2 rounded-lg text-white text-sm font-semibold ${saveDisabled ? 'bg-emerald-600/50 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+          >{saveLabel}</button>
+        )}
       </div>
     </div>
   </div>
