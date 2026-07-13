@@ -159,6 +159,13 @@ namespace Contabilidad.Models
     public class EntidadCreateRequest { public string Nombre { get; set; } public string Tipo { get; set; } }
     public class EntidadUpdateRequest { public int IdEntidad { get; set; } public string Nombre { get; set; } public string Tipo { get; set; } public bool Activo { get; set; } }
 
+    public class ProveedorDto
+    {
+        public int i_IdProveedor { get; set; }
+        public string Ruc { get; set; }
+        public string RazonSocial { get; set; }
+    }
+
     public class CuentaBancariaRow
     {
         public int i_IdCuentaBancaria { get; set; }
@@ -203,6 +210,7 @@ namespace Contabilidad.Models
         public string v_TipoDocumento { get; set; }
         public string v_SerieNumero { get; set; }
         public string Receptor { get; set; }
+        public string TipoReceptor { get; set; }
         public string CentroCosto { get; set; }
         public int? i_IdTipoCaja { get; set; }
         public string TipoGasto { get; set; }
@@ -235,6 +243,10 @@ namespace Contabilidad.Models
         public decimal IGV { get; set; }
         public string Glosa { get; set; }
         public int? IdCompra { get; set; }
+        public string Estado { get; set; } = "POR_PAGAR";
+        public DateTime? FechaPago { get; set; }
+        public int? IdFormaPago { get; set; }
+        public int? IdCuentaBancaria { get; set; }
     }
     public class EgresoUpdateRequest : EgresoCreateRequest { public int IdEgreso { get; set; } }
     public class EgresoPagarRequest

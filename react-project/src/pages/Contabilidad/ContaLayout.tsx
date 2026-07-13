@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { Receipt, Users, LogOut, Calculator, Wallet, TrendingUp, PieChart, HeartPulse, FileText, Settings, ShieldCheck } from 'lucide-react';
+import { Receipt, Users, LogOut, Calculator, Wallet, TrendingUp, PieChart, HeartPulse, Settings, ShieldCheck } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
 
 // 'need' controla la visibilidad: undefined = todos; 'write' = SA/CONTABILIDAD; 'SA' = solo SA.
@@ -15,7 +15,11 @@ const navItems: { to: string; label: string; icon: React.ComponentType<{ classNa
   { to: '/conta/sisol', label: 'Liquidación SISOL', icon: HeartPulse },
   { to: '/conta/egresos', label: 'Egresos', icon: Receipt },
   { to: '/conta/personal', label: 'Costos de Personal', icon: Users },
-  { to: '/conta/compras', label: 'Registro de Compras', icon: FileText },
+  // [SOFT-DELETE 2026-07-13] "Registro de Compras" (/conta/compras) retirada del menu: el registro
+  // de egresos (/conta/egresos) unifico compras (receptor PROVEEDOR) + entidades. La bandeja fiscal
+  // no tiene feed (dbo.registro_compras=0). Para restaurar cuando exista el feed PLE/SUNAT: re-agregar
+  // el import de FileText arriba y la entrada:
+  // { to: '/conta/compras', label: 'Registro de Compras', icon: FileText },
   { to: '/conta/catalogos', label: 'Catálogos', icon: Settings, need: 'write' },
   { to: '/conta/usuarios', label: 'Usuarios', icon: ShieldCheck, need: 'SA' },
 ];

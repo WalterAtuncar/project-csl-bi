@@ -1,3 +1,7 @@
+// [SOFT-DELETE 2026-07-13] Bandeja fiscal de clasificacion de compras SIN feed (dbo.registro_compras=0).
+// Retirada del sidebar y del routing: el registro de egresos (/conta/egresos) unifico compras (receptor
+// PROVEEDOR) + entidades. Este componente queda INTACTO en disco. Restaurar cuando exista el feed
+// PLE/SUNAT: re-agregar la ruta en App.tsx (element={<Compras />}) y el navItem en ContaLayout.
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Tag, CheckCircle2, RefreshCw, X } from 'lucide-react';

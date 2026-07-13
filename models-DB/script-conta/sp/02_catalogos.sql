@@ -277,3 +277,20 @@ BEGIN
     SELECT @Clave AS v_Clave, @Valor AS v_Valor;
 END
 GO
+
+-- ---------------- PROVEEDOR (catalogo, solo lectura de dbo.proveedores) ----------------
+-- PLAN_EGRESO_UNIFICADO D9: alimenta el toggle receptor PROVEEDOR del modal de egresos.
+-- SOLO SELECT sobre dbo.proveedores (tabla creada por el BI). Columnas reales confirmadas
+-- (sys.columns): id_proveedor, ruc, razon_social, direccion, email, activo, fecha_registro.
+IF OBJECT_ID('conta.sp_Proveedor_List','P') IS NOT NULL DROP PROCEDURE conta.sp_Proveedor_List;
+GO
+CREATE PROCEDURE conta.sp_Proveedor_List @SoloActivos BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT p.id_proveedor AS i_IdProveedor, p.ruc AS Ruc, p.razon_social AS RazonSocial
+    FROM dbo.proveedores p
+    WHERE (@SoloActivos = 0 OR p.activo = 1)
+    ORDER BY p.razon_social;
+END
+GO

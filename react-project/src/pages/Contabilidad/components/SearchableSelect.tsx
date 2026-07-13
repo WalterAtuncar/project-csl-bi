@@ -86,7 +86,7 @@ const SearchableSelect: React.FC<Props> = ({ value, options, onChange, placehold
         onClick={() => !disabled && setOpen((o) => !o)}
         className={`${className} flex items-center justify-between gap-2 text-left ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
-        <span className={`truncate ${selected ? '' : 'text-slate-400'}`}>{selected ? selected.label : placeholder}</span>
+        <span className={`truncate ${selected ? '' : 'text-slate-400'}`} title={selected ? selected.label : undefined}>{selected ? selected.label : placeholder}</span>
         <ChevronDown className={`h-4 w-4 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -114,6 +114,7 @@ const SearchableSelect: React.FC<Props> = ({ value, options, onChange, placehold
                 <li key={o.value}>
                   <button
                     type="button"
+                    title={o.label}
                     onMouseEnter={() => setHighlight(i)}
                     onClick={() => choose(o)}
                     className={`w-full text-left px-3 py-1.5 text-sm flex items-center justify-between gap-2

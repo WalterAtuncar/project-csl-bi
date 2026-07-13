@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { loaderService } from '../LoaderService';
 import type {
-  ContaLoginResponse, CentroCosto, TipoGasto, Entidad, CuentaBancaria,
+  ContaLoginResponse, CentroCosto, TipoGasto, Entidad, CuentaBancaria, ProveedorRow,
   Egreso, EgresoListResponse, EgresoCreate, EgresoUpdate, EgresoPagar,
   EgresoCargaFila, EgresoCargaResultado, CostoPersonal, CostoPersonalUpsert,
   CajaDiaRow, FlujoConsolidado, FlujoDetallado, CerrarMesResultado, FormaPagoRow,
@@ -118,6 +118,11 @@ class ContabilidadService {
     const { data } = await this.http.get<CuentaBancaria[]>('/cuentas-bancarias', { params: { soloActivos } });
     return data;
   }
+  // Catalogo de proveedores (dbo.proveedores) para el toggle receptor del egreso unificado.
+  async proveedores(soloActivos = true): Promise<ProveedorRow[]> {
+    const { data } = await this.http.get<ProveedorRow[]>('/proveedores', { params: { soloActivos } });
+    return data;
+  }
 
   // ---- Egresos ----
   async egresosList(f: EgresoFilters): Promise<EgresoListResponse> {
@@ -129,7 +134,15 @@ class ContabilidadService {
     return data;
   }
   async egresoCrear(r: EgresoCreate): Promise<number> {
-    const { data } = await this.http.post<{ i_IdEgreso: number }>('/egresos', r);
+    // Convencion de eficiencia: el payload default queda IDENTICO al historico -> solo se envian
+    // los campos de estado inicial (D3/D4) cuando NO son el default (Estado 'POR_PAGAR' se omite;
+    // FechaPago/IdFormaPago/IdCuentaBancaria nulos se omiten). El SP repone sus propios defaults.
+    const body: Record<string, unknown> = { ...r };
+    if (!r.Estado || r.Estado === 'POR_PAGAR') delete body.Estado;
+    if (r.FechaPago == null) delete body.FechaPago;
+    if (r.IdFormaPago == null) delete body.IdFormaPago;
+    if (r.IdCuentaBancaria == null) delete body.IdCuentaBancaria;
+    const { data } = await this.http.post<{ i_IdEgreso: number }>('/egresos', body);
     return data.i_IdEgreso;
   }
   async egresoActualizar(r: EgresoUpdate): Promise<number> {

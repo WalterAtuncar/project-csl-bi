@@ -52,6 +52,10 @@ namespace Contabilidad.Controllers
         [Authorize(Roles = ESCRITURA)]
         public IActionResult EntidadActualizar([FromBody] EntidadUpdateRequest r) => Ok(new { i_IdEntidad = _repo.EntidadUpdate(r, User.UserId()) });
 
+        // ---- Proveedores (catalogo, solo lectura) ----
+        [HttpGet("proveedores")]
+        public IActionResult Proveedores([FromQuery] bool soloActivos = true) => Ok(_repo.Proveedores(soloActivos));
+
         // ---- Cuentas bancarias ----
         [HttpGet("cuentas-bancarias")]
         public IActionResult Cuentas([FromQuery] bool soloActivos = false) => Ok(_repo.CuentaList(soloActivos));

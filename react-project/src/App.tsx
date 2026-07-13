@@ -13,7 +13,12 @@ import ExampleAssets from './components/ExampleAssets';
 import AnalisisV2 from './pages/ConsultasBI/Analisis-v2';
 import { GlobalLoader, ToastProvider } from './components/UI';
 import { ContaAuthProvider } from './context/ContaAuthContext';
-import { ContaLogin, ContaLayout, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, Sisol, Compras, Catalogos, Usuarios } from './pages/Contabilidad';
+import { ContaLogin, ContaLayout, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, Sisol, Catalogos, Usuarios } from './pages/Contabilidad';
+// [SOFT-DELETE 2026-07-13] Registro de Compras absorbido por Egresos (/conta/egresos), que ahora
+// unifica compras (receptor PROVEEDOR) + entidades. La ruta /conta/compras redirige a /conta/egresos
+// para no romper bookmarks. El componente Compras sigue en disco (bandeja fiscal sin feed). Restaurar
+// cuando exista el feed PLE/SUNAT: descomentar el import y devolver element={<Compras />} a su <Route>.
+// import { Compras } from './pages/Contabilidad';
 // [SOFT-DELETE 2026-07-12] RentabilidadUnidades absorbida por Rentabilidad.tsx (seccion Por Unidad).
 // Fuera del routing: la ruta /conta/rentabilidad-unidades ahora redirige a /conta/rentabilidad.
 // El componente sigue en disco. Para restaurar: descomentar el import de abajo y devolver
@@ -43,7 +48,9 @@ const App: React.FC = () => {
             <Route path="sisol" element={<Sisol />} />
             <Route path="egresos" element={<Egresos />} />
             <Route path="personal" element={<CostosPersonal />} />
-            <Route path="compras" element={<Compras />} />
+            {/* [SOFT-DELETE 2026-07-13] Ruta absorbida por /conta/egresos (unifica proveedor/entidad).
+                Redirige para no romper bookmarks/links viejos. Restaurar: element={<Compras />}. */}
+            <Route path="compras" element={<Navigate to="/conta/egresos" replace />} />
             <Route path="catalogos" element={<Catalogos />} />
             <Route path="usuarios" element={<Usuarios />} />
           </Route>

@@ -8,7 +8,7 @@ import contabilidadService from '../../services/contabilidad/ContabilidadService
 import { useContaAuth } from '../../context/ContaAuthContext';
 import SearchableSelect from './components/SearchableSelect';
 import type {
-  Egreso, CentroCosto, TipoGasto, Entidad, CuentaBancaria,
+  Egreso, CentroCosto, TipoGasto, Entidad, CuentaBancaria, ProveedorRow,
   EgresoCreate, EgresoCargaFila, EgresoCargaResultado, EstadoEgreso,
 } from '../../services/contabilidad/contaTypes';
 
@@ -20,11 +20,29 @@ const FORMAS_PAGO = [
 ];
 const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const today = () => new Date().toISOString().slice(0, 10);
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+// ---- Periodo (D2): el selector año/mes es AYUDA DE CAPTURA. No se envia al backend (el periodo
+// contable sigue derivado de las fechas). Solo gobierna el rango/valor default de FechaDocumento.
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const firstDayOfMonth = (anio: number, mes: number) => `${anio}-${pad2(mes)}-01`;
+const lastDayOfMonth = (anio: number, mes: number) => `${anio}-${pad2(mes)}-${pad2(new Date(anio, mes, 0).getDate())}`;
+// Fecha default dentro de un periodo: hoy si es el mes en curso; dia 1 en caso contrario.
+const defaultFechaEnPeriodo = (anio: number, mes: number) => {
+  const d = new Date();
+  return anio === d.getFullYear() && mes === d.getMonth() + 1 ? today() : firstDayOfMonth(anio, mes);
+};
 
 const estadoBadge: Record<EstadoEgreso, string> = {
   POR_PAGAR: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   PAGADO: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   ANULADO: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+};
+
+// Badge del tipo de receptor en la grilla (D7): PROV (sky) / ENT (violet).
+const receptorBadge: Record<'PROVEEDOR' | 'ENTIDAD', string> = {
+  PROVEEDOR: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  ENTIDAD: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
 };
 
 const emptyForm = (): EgresoCreate => ({
@@ -45,6 +63,7 @@ const Egresos: React.FC = () => {
   const [tipos, setTipos] = useState<TipoGasto[]>([]);
   const [entidades, setEntidades] = useState<Entidad[]>([]);
   const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
+  const [proveedores, setProveedores] = useState<ProveedorRow[]>([]);
 
   // filtros
   const [fEstado, setFEstado] = useState('');
@@ -56,10 +75,30 @@ const Egresos: React.FC = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<EgresoCreate>(emptyForm());
   const [editId, setEditId] = useState<number | null>(null);
+  // --- estado local del modal de alta/edicion (no se envia crudo al backend) ---
+  const [tipoReceptor, setTipoReceptor] = useState<'PROVEEDOR' | 'ENTIDAD'>('PROVEEDOR'); // D1
+  const [periodo, setPeriodo] = useState<{ anio: number; mes: number }>(() => {
+    const d = new Date();
+    return { anio: d.getFullYear(), mes: d.getMonth() + 1 };
+  }); // D2 (ayuda de captura)
+  const [estadoInicial, setEstadoInicial] = useState<'POR_PAGAR' | 'PAGADO'>('POR_PAGAR'); // D4, solo en crear
+  const [pagoInicial, setPagoInicial] = useState({ FechaPago: today(), IdFormaPago: 1, IdCuentaBancaria: 0 });
   const [pagarFor, setPagarFor] = useState<Egreso | null>(null);
   const [pago, setPago] = useState({ FechaPago: today(), IdFormaPago: 1, IdCuentaBancaria: 0 });
   const [cargaResult, setCargaResult] = useState<EgresoCargaResultado | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Rango del periodo elegido: gobierna min/max del date-input de FechaDocumento (D2).
+  const periodoMin = firstDayOfMonth(periodo.anio, periodo.mes);
+  const periodoMax = lastDayOfMonth(periodo.anio, periodo.mes);
+  // Opciones de año: actual y anterior; se agrega el año del periodo si un egreso editado cae fuera.
+  const aniosOpts = useMemo(() => {
+    const y = new Date().getFullYear();
+    const base = [y, y - 1];
+    return base.includes(periodo.anio) ? base : [...base, periodo.anio].sort((a, b) => b - a);
+  }, [periodo.anio]);
+  const pagoFueraDePeriodo = estadoInicial === 'PAGADO' && !!pagoInicial.FechaPago
+    && (pagoInicial.FechaPago < periodoMin || pagoInicial.FechaPago > periodoMax);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -87,13 +126,14 @@ const Egresos: React.FC = () => {
   useEffect(() => {
     (async () => {
       try {
-        const [c, t, e, b] = await Promise.all([
+        const [c, t, e, b, p] = await Promise.all([
           contabilidadService.centrosCosto(true),
           contabilidadService.tiposGasto(true),
           contabilidadService.entidades(true),
           contabilidadService.cuentasBancarias(true),
+          contabilidadService.proveedores(true),
         ]);
-        setCentros(c); setTipos(t); setEntidades(e); setCuentas(b);
+        setCentros(c); setTipos(t); setEntidades(e); setCuentas(b); setProveedores(p);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Error cargando catalogos');
       }
@@ -105,34 +145,68 @@ const Egresos: React.FC = () => {
   // Campos obligatorios del egreso (segun conta.egreso NOT NULL + CK_egreso_receptor + negocio).
   // Con esto se habilita/deshabilita el boton Guardar del modal.
   const formValido = useMemo(() => (
-    (form.IdEntidad != null || form.IdProveedor != null) &&   // CK_egreso_receptor
+    (form.IdEntidad != null || form.IdProveedor != null) &&   // CK_egreso_receptor (exactamente uno)
     !!form.FechaDocumento &&                                   // t_FechaDocumento NOT NULL
+    form.FechaDocumento >= periodoMin && form.FechaDocumento <= periodoMax && // dentro del periodo (D2)
     !!form.TipoDocumento &&                                    // v_TipoDocumento NOT NULL
     form.IdCentroCosto > 0 &&                                  // i_IdCentroCosto NOT NULL (FK)
     form.IdTipoGasto > 0 &&                                    // i_IdTipoGasto NOT NULL (FK)
     Number.isFinite(form.MontoBruto) && form.MontoBruto > 0 && // d_MontoBruto NOT NULL, negocio > 0
-    Number.isFinite(form.IGV) && form.IGV >= 0 && form.IGV <= form.MontoBruto  // neto >= 0 (CK_egreso_montos)
-  ), [form]);
+    Number.isFinite(form.IGV) && form.IGV >= 0 && form.IGV <= form.MontoBruto && // neto >= 0 (CK_egreso_montos)
+    // Estado inicial PAGADO (solo crear) EXIGE fecha de pago (D4; el SP hace RAISERROR si falta).
+    (editId != null || estadoInicial !== 'PAGADO' || !!pagoInicial.FechaPago)
+  ), [form, periodoMin, periodoMax, editId, estadoInicial, pagoInicial.FechaPago]);
 
   // ---- alta / edicion ----
-  const openNuevo = () => { setForm(emptyForm()); setEditId(null); setFormOpen(true); };
+  // Cambia el periodo (D2): ajusta min/max del date-input y reposiciona FechaDocumento (hoy si el
+  // mes esta en curso; dia 1 en caso contrario) para que siga siendo valida dentro del rango.
+  const cambiarPeriodo = (anio: number, mes: number) => {
+    setPeriodo({ anio, mes });
+    setForm((f) => ({ ...f, FechaDocumento: defaultFechaEnPeriodo(anio, mes) }));
+  };
+
+  // Cambia el tipo de receptor (D1): limpia AMBOS ids (elegir uno luego limpia el otro).
+  const cambiarTipoReceptor = (t: 'PROVEEDOR' | 'ENTIDAD') => {
+    setTipoReceptor(t);
+    setForm((f) => ({ ...f, IdProveedor: null, IdEntidad: null }));
+  };
+
+  const openNuevo = () => {
+    const d = new Date();
+    const per = { anio: d.getFullYear(), mes: d.getMonth() + 1 };
+    setPeriodo(per);
+    setTipoReceptor('PROVEEDOR');
+    setEstadoInicial('POR_PAGAR');
+    setPagoInicial({ FechaPago: today(), IdFormaPago: 1, IdCuentaBancaria: 0 });
+    setForm(emptyForm()); // FechaDocumento = hoy (dentro del periodo del mes en curso)
+    setEditId(null);
+    setFormOpen(true);
+  };
+
   const openEditar = async (id: number) => {
     try {
-      const e = await contabilidadService.egresoGet(id);
+      const e = await contabilidadService.egresoGet(id); // sp_Egreso_Get: SELECT e.* (ids incluidos)
       if (e.v_Estado !== 'POR_PAGAR') { toast.error('Solo se editan egresos POR PAGAR'); return; }
+      const fdoc = e.t_FechaDocumento.slice(0, 10);
+      // Periodo derivado de la fecha de documento del egreso editado.
+      setPeriodo({ anio: Number(fdoc.slice(0, 4)), mes: Number(fdoc.slice(5, 7)) });
+      // D8: prefillar los ids REALES que devuelve el GET (antes se descartaban y obligaban a
+      // re-seleccionar) y derivar el tipo de receptor. La transicion de estado va por Pagar,
+      // por eso el selector de Estado no se muestra en editar.
+      setTipoReceptor(e.i_IdProveedor != null ? 'PROVEEDOR' : 'ENTIDAD');
       setForm({
-        IdEntidad: null, IdProveedor: null, FechaDocumento: e.t_FechaDocumento.slice(0, 10),
-        TipoDocumento: e.v_TipoDocumento, SerieNumero: e.v_SerieNumero || '',
-        IdCentroCosto: 0, IdTipoGasto: 0, Condicion: e.v_Condicion, Moneda: e.v_Moneda,
+        IdEntidad: e.i_IdEntidad ?? null, IdProveedor: e.i_IdProveedor ?? null,
+        FechaDocumento: fdoc, TipoDocumento: e.v_TipoDocumento, SerieNumero: e.v_SerieNumero || '',
+        IdCentroCosto: e.i_IdCentroCosto ?? 0, IdTipoGasto: e.i_IdTipoGasto ?? 0,
+        Condicion: e.v_Condicion, Moneda: e.v_Moneda,
         TipoCambio: e.d_TipoCambio, MontoBruto: e.d_MontoBruto, IGV: e.d_IGV, Glosa: e.v_Glosa || '',
       });
-      // el receptor y catalogos por id no vienen resueltos en el GET (muestra nombres); se re-seleccionan
       setEditId(id); setFormOpen(true);
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Error'); }
   };
 
   const saveForm = async () => {
-    if (!form.IdEntidad && !form.IdProveedor) { toast.error('Seleccione un receptor (entidad)'); return; }
+    if (!form.IdEntidad && !form.IdProveedor) { toast.error('Seleccione un receptor (proveedor o entidad)'); return; }
     if (!form.IdCentroCosto) { toast.error('Seleccione centro de costo'); return; }
     if (!form.IdTipoGasto) { toast.error('Seleccione tipo de gasto'); return; }
     if (form.MontoBruto <= 0) { toast.error('Monto bruto invalido'); return; }
@@ -142,8 +216,15 @@ const Egresos: React.FC = () => {
         await contabilidadService.egresoActualizar({ ...form, IdEgreso: editId });
         toast.success('Egreso actualizado');
       } else {
-        await contabilidadService.egresoCrear(form);
-        toast.success('Egreso registrado (POR PAGAR)');
+        // Estado inicial (D4). El service omite los campos default; solo se envian si PAGADO.
+        const payload: EgresoCreate = { ...form, Estado: estadoInicial };
+        if (estadoInicial === 'PAGADO') {
+          payload.FechaPago = pagoInicial.FechaPago;
+          payload.IdFormaPago = pagoInicial.IdFormaPago;
+          payload.IdCuentaBancaria = pagoInicial.IdCuentaBancaria || null;
+        }
+        await contabilidadService.egresoCrear(payload);
+        toast.success(estadoInicial === 'PAGADO' ? 'Egreso registrado (PAGADO)' : 'Egreso registrado (POR PAGAR)');
       }
       setFormOpen(false); setPage(1); load();
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Error al guardar'); }
@@ -274,6 +355,7 @@ const Egresos: React.FC = () => {
               <th className="px-3 py-2">Fecha doc.</th>
               <th className="px-3 py-2">Documento</th>
               <th className="px-3 py-2">Receptor</th>
+              <th className="px-3 py-2">Tipo</th>
               <th className="px-3 py-2">Centro / Gasto</th>
               <th className="px-3 py-2 text-right">Neto</th>
               <th className="px-3 py-2 text-right">Bruto</th>
@@ -283,14 +365,21 @@ const Egresos: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={10} className="px-3 py-8 text-center text-slate-400">Cargando...</td></tr>}
-            {!loading && items.length === 0 && <tr><td colSpan={10} className="px-3 py-8 text-center text-slate-400">Sin egresos</td></tr>}
+            {loading && <tr><td colSpan={11} className="px-3 py-8 text-center text-slate-400">Cargando...</td></tr>}
+            {!loading && items.length === 0 && <tr><td colSpan={11} className="px-3 py-8 text-center text-slate-400">Sin egresos</td></tr>}
             {!loading && items.map((e) => (
               <tr key={e.i_IdEgreso} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
                 <td className="px-3 py-2 text-slate-400">{e.i_IdEgreso}</td>
                 <td className="px-3 py-2">{e.t_FechaDocumento.slice(0, 10)}</td>
                 <td className="px-3 py-2">{e.v_TipoDocumento}<div className="text-xs text-slate-400">{e.v_SerieNumero}</div></td>
                 <td className="px-3 py-2">{e.Receptor}</td>
+                <td className="px-3 py-2">
+                  {e.TipoReceptor && (
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${receptorBadge[e.TipoReceptor]}`}>
+                      {e.TipoReceptor === 'PROVEEDOR' ? 'PROV' : 'ENT'}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2">{e.CentroCosto}<div className="text-xs text-slate-400">{e.TipoGasto}</div></td>
                 <td className="px-3 py-2 text-right font-medium">{money(e.d_MontoNeto)}</td>
                 <td className="px-3 py-2 text-right text-slate-500">{money(e.d_MontoBruto)}</td>
@@ -327,13 +416,49 @@ const Egresos: React.FC = () => {
       {formOpen && (
         <Modal title={editId ? `Editar egreso #${editId}` : 'Nuevo egreso'} onClose={() => setFormOpen(false)} onSave={saveForm} saveDisabled={!formValido}>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Receptor (entidad)" full required>
-              <select value={form.IdEntidad ?? ''} onChange={(e) => setForm({ ...form, IdEntidad: e.target.value ? Number(e.target.value) : null })} className={selCls}>
-                <option value="">Seleccione...</option>
-                {entidades.map((x) => <option key={x.i_IdEntidad} value={x.i_IdEntidad}>{x.v_Nombre} ({x.v_Tipo})</option>)}
-              </select>
+            {/* Periodo (D2): ayuda de captura, no se envia al backend. Gobierna el rango de FechaDocumento. */}
+            <Field label="Periodo (ayuda de captura)" full>
+              <div className="flex gap-2">
+                <select value={periodo.anio} onChange={(e) => cambiarPeriodo(Number(e.target.value), periodo.mes)} className={selCls}>
+                  {aniosOpts.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <select value={periodo.mes} onChange={(e) => cambiarPeriodo(periodo.anio, Number(e.target.value))} className={selCls}>
+                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </div>
             </Field>
-            <Field label="Fecha documento" required><input type="date" value={form.FechaDocumento} onChange={(e) => setForm({ ...form, FechaDocumento: e.target.value })} className={selCls} /></Field>
+
+            {/* Receptor (D1): toggle PROVEEDOR/ENTIDAD; elegir uno limpia el otro (CK_egreso_receptor). */}
+            <Field label="Receptor" full required>
+              <Segmented
+                value={tipoReceptor}
+                onChange={(v) => cambiarTipoReceptor(v as 'PROVEEDOR' | 'ENTIDAD')}
+                options={[{ value: 'PROVEEDOR', label: 'Proveedor' }, { value: 'ENTIDAD', label: 'Entidad' }]}
+              />
+            </Field>
+            <Field label={tipoReceptor === 'PROVEEDOR' ? 'Proveedor' : 'Entidad'} full required>
+              {tipoReceptor === 'PROVEEDOR' ? (
+                <SearchableSelect
+                  value={form.IdProveedor ?? null}
+                  options={proveedores.map((p) => ({ value: p.i_IdProveedor, label: p.Ruc ? `${p.RazonSocial} · ${p.Ruc}` : p.RazonSocial }))}
+                  onChange={(v) => setForm({ ...form, IdProveedor: v, IdEntidad: null })}
+                  placeholder="Seleccione proveedor..."
+                  className={selCls}
+                />
+              ) : (
+                <SearchableSelect
+                  value={form.IdEntidad ?? null}
+                  options={entidades.map((x) => ({ value: x.i_IdEntidad, label: `${x.v_Nombre} (${x.v_Tipo})` }))}
+                  onChange={(v) => setForm({ ...form, IdEntidad: v, IdProveedor: null })}
+                  placeholder="Seleccione entidad..."
+                  className={selCls}
+                />
+              )}
+            </Field>
+
+            <Field label="Fecha documento" required>
+              <input type="date" min={periodoMin} max={periodoMax} value={form.FechaDocumento} onChange={(e) => setForm({ ...form, FechaDocumento: e.target.value })} className={selCls} />
+            </Field>
             <Field label="Tipo documento" required>
               <select value={form.TipoDocumento} onChange={(e) => setForm({ ...form, TipoDocumento: e.target.value })} className={selCls}>
                 {['FACTURA', 'RECIBO', 'PLANILLA', 'VOUCHER', 'OTRO'].map((x) => <option key={x} value={x}>{x}</option>)}
@@ -347,10 +472,13 @@ const Egresos: React.FC = () => {
               </select>
             </Field>
             <Field label="Centro de costo" required>
-              <select value={form.IdCentroCosto || ''} onChange={(e) => setForm({ ...form, IdCentroCosto: Number(e.target.value) })} className={selCls}>
-                <option value="">Seleccione...</option>
-                {centros.map((c) => <option key={c.i_IdCentroCosto} value={c.i_IdCentroCosto}>{c.v_Nombre}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.IdCentroCosto || null}
+                options={centros.map((c) => ({ value: c.i_IdCentroCosto, label: c.v_Nombre }))}
+                onChange={(v) => setForm({ ...form, IdCentroCosto: v ?? 0 })}
+                placeholder="Seleccione..."
+                className={selCls}
+              />
             </Field>
             <Field label="Tipo de gasto" required>
               <SearchableSelect
@@ -363,12 +491,55 @@ const Egresos: React.FC = () => {
             </Field>
             <Field label="Monto bruto" required><input type="number" step="0.01" value={form.MontoBruto} onChange={(e) => setForm({ ...form, MontoBruto: Number(e.target.value) })} className={selCls} /></Field>
             <Field label="IGV"><input type="number" step="0.01" value={form.IGV} onChange={(e) => setForm({ ...form, IGV: Number(e.target.value) })} className={selCls} /></Field>
+
+            {/* Estado inicial (D4): SOLO al crear; en editar la transicion va por Pagar. */}
+            {!editId && (
+              <Field label="Estado inicial" full>
+                <Segmented
+                  value={estadoInicial}
+                  onChange={(v) => setEstadoInicial(v as 'POR_PAGAR' | 'PAGADO')}
+                  options={[{ value: 'POR_PAGAR', label: 'Por pagar' }, { value: 'PAGADO', label: 'Pagado' }]}
+                />
+              </Field>
+            )}
+            {!editId && estadoInicial === 'PAGADO' && (
+              <>
+                <Field label="Fecha de pago" required>
+                  <input type="date" value={pagoInicial.FechaPago} onChange={(e) => setPagoInicial({ ...pagoInicial, FechaPago: e.target.value })} className={selCls} />
+                </Field>
+                <Field label="Forma de pago">
+                  <select value={pagoInicial.IdFormaPago} onChange={(e) => setPagoInicial({ ...pagoInicial, IdFormaPago: Number(e.target.value) })} className={selCls}>
+                    {FORMAS_PAGO.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Cuenta bancaria (opcional)" full>
+                  <select value={pagoInicial.IdCuentaBancaria} onChange={(e) => setPagoInicial({ ...pagoInicial, IdCuentaBancaria: Number(e.target.value) })} className={selCls}>
+                    <option value={0}>—</option>
+                    {cuentas.map((c) => <option key={c.i_IdCuentaBancaria} value={c.i_IdCuentaBancaria}>{c.v_Banco} · {c.v_NroCuenta}</option>)}
+                  </select>
+                </Field>
+                {pagoFueraDePeriodo && (
+                  <p className="col-span-2 text-xs text-amber-600 dark:text-amber-400">
+                    La fecha de pago está fuera del periodo seleccionado (normal en crédito que se paga otro mes). Impactará la caja en su propio mes.
+                  </p>
+                )}
+              </>
+            )}
+
             <Field label="Glosa" full><input value={form.Glosa ?? ''} onChange={(e) => setForm({ ...form, Glosa: e.target.value })} className={selCls} /></Field>
           </div>
-          <p className="text-xs text-slate-400 mt-2">
-            Neto = Bruto − IGV = <b>S/ {money((form.MontoBruto || 0) - (form.IGV || 0))}</b>. Se crea en estado POR PAGAR (no afecta caja hasta pagarse).
-            {form.IGV > form.MontoBruto && <span className="text-rose-500"> · El IGV no puede superar el monto bruto.</span>}
-          </p>
+          <div className="mt-2 space-y-1">
+            <p className="text-xs text-slate-400">
+              Neto = Bruto − IGV = <b>S/ {money((form.MontoBruto || 0) - (form.IGV || 0))}</b>.
+              {form.IGV > form.MontoBruto && <span className="text-rose-500"> · El IGV no puede superar el monto bruto.</span>}
+            </p>
+            <p className="text-xs text-slate-400">
+              Impacta <b>Rentabilidad</b> por la fecha de documento apenas se registra, aunque quede POR PAGAR; en <b>Caja</b> recién impacta al pagarse.
+            </p>
+            {!editId && estadoInicial === 'PAGADO' && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">Se crea PAGADO: impacta caja en la fecha de pago.</p>
+            )}
+          </div>
           <p className="text-[11px] text-slate-400 mt-1"><span className="text-rose-500">*</span> Campos obligatorios.{!formValido && ' Complete los obligatorios para habilitar Guardar.'}</p>
         </Modal>
       )}
@@ -441,9 +612,27 @@ const Field: React.FC<{ label: string; full?: boolean; required?: boolean; child
   </div>
 );
 
+// Control segmentado (toggle de 2+ opciones) para receptor y estado inicial del egreso.
+const Segmented: React.FC<{ value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }> = ({ value, onChange, options }) => (
+  <div className="inline-flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden">
+    {options.map((o, i) => (
+      <button
+        key={o.value}
+        type="button"
+        onClick={() => onChange(o.value)}
+        className={`px-4 py-1.5 text-sm font-medium transition ${i > 0 ? 'border-l border-slate-300 dark:border-slate-600' : ''} ${
+          value === o.value
+            ? 'bg-emerald-600 text-white'
+            : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+        }`}
+      >{o.label}</button>
+    ))}
+  </div>
+);
+
 const Modal: React.FC<{ title: string; onClose: () => void; onSave?: () => void; saveLabel?: string; hideSave?: boolean; saveDisabled?: boolean; children: React.ReactNode }> = ({ title, onClose, onSave, saveLabel = 'Guardar', hideSave, saveDisabled, children }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-    <div className="w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className="w-full max-w-2xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700">
         <h3 className="font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
         <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"><X className="h-5 w-5 text-slate-400" /></button>

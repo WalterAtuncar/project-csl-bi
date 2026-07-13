@@ -8,12 +8,23 @@ CREATE PROCEDURE conta.sp_Egreso_Insert
     @IdProveedor INT = NULL, @IdEntidad INT = NULL, @FechaDocumento DATE, @TipoDocumento NVARCHAR(30),
     @SerieNumero NVARCHAR(50) = NULL, @IdCentroCosto INT, @IdTipoGasto INT, @Condicion NVARCHAR(20) = 'CONTADO',
     @Moneda CHAR(3) = 'PEN', @TipoCambio DECIMAL(9,4) = 1, @MontoBruto DECIMAL(18,2), @IGV DECIMAL(18,2) = 0,
-    @Glosa NVARCHAR(300) = NULL, @IdCompra INT = NULL, @IdUsuario INT
+    @Glosa NVARCHAR(300) = NULL, @IdCompra INT = NULL, @IdUsuario INT,
+    -- Estado inicial (PLAN_EGRESO_UNIFICADO D3/D4). Params opcionales AL FINAL: retrocompatibles.
+    -- sp_Compra_Clasificar sigue llamando con params viejos (POR_PAGAR) sin cambios.
+    @Estado NVARCHAR(15) = 'POR_PAGAR', @FechaPago DATE = NULL,
+    @IdFormaPago INT = NULL, @IdCuentaBancaria INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     IF @IdProveedor IS NULL AND @IdEntidad IS NULL
     BEGIN RAISERROR('Debe indicar proveedor o entidad.', 16, 1); RETURN; END
+
+    -- Estado inicial (D3/D4): solo POR_PAGAR o PAGADO al nacer; PAGADO exige fecha de pago
+    -- (respalda el CHECK CK_egreso_pagado). ANULADO no es un estado de alta.
+    IF @Estado NOT IN ('POR_PAGAR','PAGADO')
+    BEGIN RAISERROR('Estado inicial invalido (POR_PAGAR|PAGADO).', 16, 1); RETURN; END
+    IF @Estado = 'PAGADO' AND @FechaPago IS NULL
+    BEGIN RAISERROR('Un egreso PAGADO requiere fecha de pago.', 16, 1); RETURN; END
 
     -- Anti-duplicado (Fase 6): un egreso manual no puede repetir documento+proveedor de una
     -- compra ya clasificada (que genero su propio egreso espejo). Solo aplica al alta manual.
@@ -27,12 +38,22 @@ BEGIN
     DECLARE @id INT;
     INSERT INTO conta.egreso (i_IdProveedor, i_IdEntidad, t_FechaDocumento, v_TipoDocumento, v_SerieNumero,
         i_IdCentroCosto, i_IdTipoGasto, v_Condicion, v_Moneda, d_TipoCambio, d_MontoBruto, d_IGV, d_MontoNeto,
-        v_Estado, v_Glosa, i_IdCompra, i_InsertaIdUsuario)
+        v_Estado, v_Glosa, i_IdCompra, i_InsertaIdUsuario,
+        t_FechaPago, i_IdFormaPago, i_IdCuentaBancaria)
     VALUES (@IdProveedor, @IdEntidad, @FechaDocumento, @TipoDocumento, @SerieNumero,
         @IdCentroCosto, @IdTipoGasto, @Condicion, @Moneda, @TipoCambio, @MontoBruto, @IGV, @neto,
-        'POR_PAGAR', @Glosa, @IdCompra, @IdUsuario);
+        @Estado, @Glosa, @IdCompra, @IdUsuario,
+        CASE WHEN @Estado = 'PAGADO' THEN @FechaPago END,
+        CASE WHEN @Estado = 'PAGADO' THEN @IdFormaPago END,
+        CASE WHEN @Estado = 'PAGADO' THEN @IdCuentaBancaria END);
     SET @id = SCOPE_IDENTITY();
-    EXEC conta.sp_Auditoria_Insert 'conta.egreso', @id, 'INSERT', @TipoDocumento, @IdUsuario;
+    -- Auditoria: un unico evento INSERT; si nace PAGADO el detalle lo registra con su fecha de pago.
+    DECLARE @det NVARCHAR(100) = CASE WHEN @Estado = 'PAGADO'
+        THEN CONCAT(@TipoDocumento, ' PAGADO ', CONVERT(varchar, @FechaPago, 23))
+        ELSE @TipoDocumento END;
+    EXEC conta.sp_Auditoria_Insert 'conta.egreso', @id, 'INSERT', @det, @IdUsuario;
+    -- INVARIANTE: un unico resultset, una unica columna i_IdEgreso (sp_Compra_Clasificar hace
+    -- INSERT INTO @out(i_IdEgreso INT) EXEC contra este SP; NO cambiar el shape).
     SELECT @id AS i_IdEgreso;
 END
 GO
@@ -125,6 +146,7 @@ BEGIN
     DECLARE @off INT = (@Page - 1) * @PageSize;
     SELECT e.i_IdEgreso, e.t_FechaDocumento, e.v_TipoDocumento, e.v_SerieNumero,
            COALESCE(p.razon_social, ent.v_Nombre) AS Receptor,
+           CAST(CASE WHEN e.i_IdProveedor IS NOT NULL THEN 'PROVEEDOR' ELSE 'ENTIDAD' END AS NVARCHAR(10)) AS TipoReceptor,
            cc.v_Nombre AS CentroCosto, cc.i_IdTipoCaja,
            tg.v_Nombre AS TipoGasto, tgraiz.v_SeccionFlujo AS Seccion,
            e.v_Condicion, e.v_Moneda, e.d_TipoCambio, e.d_MontoBruto, e.d_IGV, e.d_MontoNeto,

@@ -59,6 +59,14 @@ export interface CuentaBancaria {
   b_Activo: boolean;
 }
 
+// Proveedor (dbo.proveedores via conta.sp_Proveedor_List / GET /proveedores) — catalogo
+// del toggle receptor del egreso unificado. JSON sin camelCase (calca el ProveedorDto).
+export interface ProveedorRow {
+  i_IdProveedor: number;
+  Ruc: string;
+  RazonSocial: string;
+}
+
 export type EstadoEgreso = 'POR_PAGAR' | 'PAGADO' | 'ANULADO';
 
 export interface Egreso {
@@ -67,6 +75,8 @@ export interface Egreso {
   v_TipoDocumento: string;
   v_SerieNumero: string | null;
   Receptor: string;
+  // Discriminador del receptor (sp_Egreso_List, D7). PROVEEDOR = compra; ENTIDAD = asociado/convenio.
+  TipoReceptor?: 'PROVEEDOR' | 'ENTIDAD';
   CentroCosto: string;
   i_IdTipoCaja: number | null;
   TipoGasto: string;
@@ -81,6 +91,12 @@ export interface Egreso {
   t_FechaPago: string | null;
   i_IdFormaPago: number | null;
   v_Glosa: string | null;
+  // Ids crudos: SOLO los expone sp_Egreso_Get (SELECT e.*), no la lista. Se usan para prefillar
+  // el modal en modo Editar (D8) y derivar el tipo de receptor.
+  i_IdProveedor?: number | null;
+  i_IdEntidad?: number | null;
+  i_IdCentroCosto?: number | null;
+  i_IdTipoGasto?: number | null;
 }
 
 export interface EgresoListResponse {
@@ -105,6 +121,12 @@ export interface EgresoCreate {
   IGV: number;
   Glosa?: string | null;
   IdCompra?: number | null;
+  // Estado inicial (sp_Egreso_Insert extendido, D3/D4). Default 'POR_PAGAR' (el service no lo
+  // envia si es el default). 'PAGADO' EXIGE FechaPago; IdFormaPago default EFECTIVO(1).
+  Estado?: string;
+  FechaPago?: string | null;
+  IdFormaPago?: number | null;
+  IdCuentaBancaria?: number | null;
 }
 
 export interface EgresoUpdate extends EgresoCreate {
