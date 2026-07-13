@@ -417,6 +417,134 @@ END
 GO
 
 -- ---------------------------------------------------------------------
+-- 4b) Flujo de caja DETALLADO anual (mockups 02/03).
+--     SOLO detalle: la cola (flujo operativo/cajas/saldos) la aporta
+--     sp_Caja_FlujoConsolidado (D1). Mismo universo/filtros que el consolidado:
+--     GATE = cada bloque suma su linea del consolidado (Delta=0).
+--       RS1 ingresos  mes x unidad x forma de pago (+EsCredito)  -- @FormasPago/@IncluirCredito SOLO aqui
+--       RS2 personal  mes x unidad x concepto (walk mapc)        -- NUNCA se filtra
+--       RS3 egresos   mes x seccion x hoja (+entidad D7) + MED-LEG legacy -- NUNCA se filtra
+--       RS4 catalogo  todas las hojas de conta.tipo_gasto (para pintar 0)
+-- ---------------------------------------------------------------------
+IF OBJECT_ID('conta.sp_Caja_FlujoDetallado','P') IS NOT NULL DROP PROCEDURE conta.sp_Caja_FlujoDetallado;
+GO
+CREATE PROCEDURE conta.sp_Caja_FlujoDetallado @Anio SMALLINT,
+    @FormasPago NVARCHAR(200) = NULL, @IncluirCredito BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @iniAnio DATE = DATEFROMPARTS(@Anio,1,1), @finAnio DATE = DATEFROMPARTS(@Anio+1,1,1);
+
+    -- formas de pago seleccionadas (CSV -> filas, contra el catalogo grupo 46, no la tabla de hechos).
+    -- IDENTICO a sp_Caja_FlujoConsolidado para garantizar Delta=0 en el filtro (GATE G4).
+    DECLARE @fp TABLE (i_IdFormaPago INT PRIMARY KEY);
+    IF @FormasPago IS NOT NULL AND LTRIM(RTRIM(@FormasPago)) <> ''
+        INSERT INTO @fp
+        SELECT dh.i_ItemId FROM dbo.datahierarchy dh
+        WHERE dh.i_GroupId = 46
+          AND ',' + @FormasPago + ',' LIKE '%,' + CAST(dh.i_ItemId AS VARCHAR(10)) + ',%';
+
+    -- RS1: INGRESOS mes x unidad x forma de pago (+EsCredito).
+    -- Mismo FROM/WHERE que @ingMes del consolidado AGREGANDO dh46 (forma de pago, grupo 46).
+    -- @FormasPago/@IncluirCredito filtran SOLO este RS, con semantica IDENTICA al consolidado.
+    SELECT MONTH(cd.t_InsertaFecha) AS Mes,
+           tcct.i_IdTipoCaja,
+           ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD') AS Unidad,
+           cd.i_IdFormaPago,
+           ISNULL(dh46.v_Value1,'SIN FORMA DE PAGO') AS FormaPago,
+           CAST(CASE WHEN dh41.v_Value1='CREDITO' THEN 1 ELSE 0 END AS BIT) AS EsCredito,
+           SUM(cd.d_ImporteSoles) AS Monto
+    FROM dbo.cobranzadetalle cd
+    INNER JOIN dbo.venta v ON v.v_IdVenta=cd.v_IdVenta AND ISNULL(v.i_Eliminado,0)=0
+    LEFT JOIN dbo.tipocaja_clientetipo tcct ON tcct.i_ClienteEsAgente=v.i_ClienteEsAgente AND tcct.b_Activo=1
+    LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja=tcct.i_IdTipoCaja
+    LEFT JOIN dbo.datahierarchy dh46 ON dh46.i_GroupId=46 AND dh46.i_ItemId=cd.i_IdFormaPago
+    LEFT JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId=41 AND dh41.i_ItemId=v.i_IdCondicionPago
+    WHERE ISNULL(cd.i_Eliminado,0)=0 AND cd.t_InsertaFecha >= @iniAnio AND cd.t_InsertaFecha < @finAnio
+      AND ( @FormasPago IS NULL OR LTRIM(RTRIM(@FormasPago)) = ''
+            OR cd.i_IdFormaPago IN (SELECT i_IdFormaPago FROM @fp) )
+      AND ( @IncluirCredito = 1 OR dh41.v_Value1 IS NULL OR dh41.v_Value1 <> 'CREDITO' )
+    GROUP BY MONTH(cd.t_InsertaFecha), tcct.i_IdTipoCaja, tc.v_NombreTipoCaja,
+             cd.i_IdFormaPago, dh46.v_Value1, CASE WHEN dh41.v_Value1='CREDITO' THEN 1 ELSE 0 END
+    ORDER BY Mes, Unidad, FormaPago, EsCredito;
+
+    -- RS2: PERSONAL mes x unidad x concepto (PAGADO por t_FechaPago). NO se filtra por formas/credito.
+    -- Unidad = tipocaja del centro via walk mapc (identico a 05_rentabilidad fn_Rentabilidad_Gastos);
+    -- centro sin unidad -> 'ADMINISTRACION' (D6).
+    ;WITH walk AS (
+        SELECT c.i_IdCentroCosto AS origen, c.i_IdPadre, c.i_IdTipoCaja
+        FROM conta.centro_costo c
+        UNION ALL
+        SELECT w.origen, p.i_IdPadre, p.i_IdTipoCaja
+        FROM walk w JOIN conta.centro_costo p ON p.i_IdCentroCosto = w.i_IdPadre
+        WHERE w.i_IdTipoCaja IS NULL
+    ),
+    mapc AS (
+        SELECT origen AS i_IdCentroCosto, MAX(i_IdTipoCaja) AS i_IdTipoCaja
+        FROM walk GROUP BY origen
+    )
+    SELECT MONTH(cpm.t_FechaPago) AS Mes,
+           ISNULL(tc.v_NombreTipoCaja,'ADMINISTRACION') AS Unidad,
+           cpm.v_Concepto AS Concepto,
+           SUM(cpm.d_Monto) AS Monto
+    FROM conta.costo_personal_mensual cpm
+    LEFT JOIN mapc m ON m.i_IdCentroCosto = cpm.i_IdCentroCosto
+    LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = m.i_IdTipoCaja
+    WHERE cpm.v_Estado='PAGADO' AND cpm.t_FechaPago >= @iniAnio AND cpm.t_FechaPago < @finAnio
+    GROUP BY MONTH(cpm.t_FechaPago), tc.v_NombreTipoCaja, cpm.v_Concepto
+    ORDER BY Mes, Unidad, Concepto
+    OPTION (MAXRECURSION 100);
+
+    -- RS3: EGRESOS mes x seccion x hoja (+entidad D7). NO se filtra por formas/credito.
+    -- Base = MISMO universo de egresos del consolidado (conta.egreso por seccion via tg_root) PERO
+    -- conservando el nodo hoja (e.i_IdTipoGasto -> v_Codigo/v_Nombre); si el egreso apunta a un nodo
+    -- raiz -> hoja '(SIN RUBRO)'. + linea legacy MED-LEG (cajamayor 'E', mismo universo/bruto d_Total).
+    ;WITH tg_root AS (
+        SELECT i_IdTipoGasto, i_IdPadre, v_SeccionFlujo FROM conta.tipo_gasto WHERE i_IdPadre IS NULL
+        UNION ALL
+        SELECT c.i_IdTipoGasto, c.i_IdPadre, r.v_SeccionFlujo FROM conta.tipo_gasto c JOIN tg_root r ON c.i_IdPadre=r.i_IdTipoGasto
+    )
+    SELECT MONTH(e.t_FechaPago) AS Mes,
+           ISNULL(r.v_SeccionFlujo,'OTROS_EGRESOS') AS Seccion,
+           CASE WHEN tg.i_IdPadre IS NULL THEN '(SIN RUBRO)' ELSE tg.v_Codigo END AS CodigoHoja,
+           CASE WHEN tg.i_IdPadre IS NULL THEN '(SIN RUBRO)' ELSE tg.v_Nombre END AS Hoja,
+           e.i_IdEntidad,
+           ent.v_Nombre AS Entidad,
+           SUM(e.d_MontoBruto * e.d_TipoCambio) AS Monto
+    FROM conta.egreso e
+    JOIN tg_root r ON r.i_IdTipoGasto = e.i_IdTipoGasto
+    JOIN conta.tipo_gasto tg ON tg.i_IdTipoGasto = e.i_IdTipoGasto
+    LEFT JOIN conta.entidad ent ON ent.i_IdEntidad = e.i_IdEntidad
+    WHERE e.v_Estado='PAGADO' AND e.t_FechaPago >= @iniAnio AND e.t_FechaPago < @finAnio
+    GROUP BY MONTH(e.t_FechaPago), ISNULL(r.v_SeccionFlujo,'OTROS_EGRESOS'),
+             CASE WHEN tg.i_IdPadre IS NULL THEN '(SIN RUBRO)' ELSE tg.v_Codigo END,
+             CASE WHEN tg.i_IdPadre IS NULL THEN '(SIN RUBRO)' ELSE tg.v_Nombre END,
+             e.i_IdEntidad, ent.v_Nombre
+
+    UNION ALL
+
+    SELECT MONTH(cm.t_FechaMovimiento) AS Mes,
+           'MEDICO' AS Seccion,
+           'MED-LEG' AS CodigoHoja,
+           'PAGOS MEDICOS (CAJA LEGACY)' AS Hoja,
+           CAST(NULL AS INT) AS i_IdEntidad,
+           CAST(NULL AS NVARCHAR(400)) AS Entidad,
+           SUM(cm.d_Total) AS Monto
+    FROM dbo.cajamayor_movimiento cm
+    WHERE cm.v_TipoMovimiento='E' AND cm.t_FechaMovimiento >= @iniAnio AND cm.t_FechaMovimiento < @finAnio
+    GROUP BY MONTH(cm.t_FechaMovimiento)
+    ORDER BY Mes, Seccion, CodigoHoja
+    OPTION (MAXRECURSION 100);
+
+    -- RS4: CATALOGO de hojas (esqueleto para el front, D2). Todas las hojas aunque valgan 0.
+    SELECT r.v_SeccionFlujo AS Seccion, h.v_Codigo AS CodigoHoja, h.v_Nombre AS Hoja,
+           h.i_IdTipoGasto AS Orden
+    FROM conta.tipo_gasto h JOIN conta.tipo_gasto r ON r.i_IdTipoGasto = h.i_IdPadre
+    ORDER BY r.i_IdTipoGasto, h.i_IdTipoGasto;
+END
+GO
+
+-- ---------------------------------------------------------------------
 -- 5) Apertura (solo primer periodo de la cadena)
 -- ---------------------------------------------------------------------
 IF OBJECT_ID('conta.sp_SaldoCaja_SetApertura','P') IS NOT NULL DROP PROCEDURE conta.sp_SaldoCaja_SetApertura;

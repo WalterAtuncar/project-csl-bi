@@ -282,6 +282,46 @@ export interface FlujoConsolidado {
   EgresosPorSeccion: FlujoEgresoSeccionRow[];
 }
 
+// ---- Flujo de caja DETALLADO (mockups 02/03) — espejo de FlujoDetalladoDto. JSON sin camelCase.
+// SOLO detalle: la cola (flujo operativo/cajas/saldos) se reusa del Resumen del consolidado (D1).
+// i_IdEntidad/Entidad son nullable (hoy siempre null); Personal hoy viene vacio (demo).
+export interface FlujoDetalleIngresoRow {
+  Mes: number;
+  i_IdTipoCaja: number | null;
+  Unidad: string;
+  i_IdFormaPago: number | null;
+  FormaPago: string;
+  EsCredito: boolean;
+  Monto: number;
+}
+export interface FlujoDetallePersonalRow {
+  Mes: number;
+  Unidad: string;
+  Concepto: string;
+  Monto: number;
+}
+export interface FlujoDetalleEgresoRow {
+  Mes: number;
+  Seccion: string;
+  CodigoHoja: string;
+  Hoja: string;
+  i_IdEntidad: number | null;
+  Entidad: string | null;
+  Monto: number;
+}
+export interface FlujoDetalleCatalogoRow {
+  Seccion: string;
+  CodigoHoja: string;
+  Hoja: string;
+  Orden: number;
+}
+export interface FlujoDetallado {
+  Ingresos: FlujoDetalleIngresoRow[];
+  Personal: FlujoDetallePersonalRow[];
+  Egresos: FlujoDetalleEgresoRow[];
+  Catalogo: FlujoDetalleCatalogoRow[];
+}
+
 export interface CerrarMesResultado {
   ingresos: number;
   egresos: number;

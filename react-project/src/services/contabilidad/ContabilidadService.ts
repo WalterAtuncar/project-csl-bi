@@ -3,7 +3,7 @@ import type {
   ContaLoginResponse, CentroCosto, TipoGasto, Entidad, CuentaBancaria,
   Egreso, EgresoListResponse, EgresoCreate, EgresoUpdate, EgresoPagar,
   EgresoCargaFila, EgresoCargaResultado, CostoPersonal, CostoPersonalUpsert,
-  CajaDiaRow, FlujoConsolidado, CerrarMesResultado, FormaPagoRow,
+  CajaDiaRow, FlujoConsolidado, FlujoDetallado, CerrarMesResultado, FormaPagoRow,
 } from './contaTypes';
 
 // Base URL de la API dedicada de Contabilidad. Configurable por env; dev por defecto.
@@ -175,6 +175,17 @@ class ContabilidadService {
     if (formasPago) params.formasPago = formasPago;
     if (incluirCredito === false) params.incluirCredito = false;
     const { data } = await this.http.get<FlujoConsolidado>('/caja/flujo-consolidado', { params });
+    return data;
+  }
+  // Detalle del flujo (mockups 02/03): ingresos unidad×forma, personal unidad×concepto,
+  // egresos seccion×hoja, + catalogo de hojas. Misma convencion de eficiencia que flujoConsolidado
+  // (URL default = ?anio=YYYY; formasPago solo si hay subset; incluirCredito solo cuando es false).
+  // La cola (flujo/cajas/saldos) NO viene de aqui: se reusa del Resumen del consolidado (D1).
+  async flujoDetallado(anio: number, formasPago?: string, incluirCredito?: boolean): Promise<FlujoDetallado> {
+    const params: Record<string, unknown> = { anio };
+    if (formasPago) params.formasPago = formasPago;
+    if (incluirCredito === false) params.incluirCredito = false;
+    const { data } = await this.http.get<FlujoDetallado>('/caja/flujo-detallado', { params });
     return data;
   }
   async cajaCerrarMes(anio: number, mes: number): Promise<CerrarMesResultado> {

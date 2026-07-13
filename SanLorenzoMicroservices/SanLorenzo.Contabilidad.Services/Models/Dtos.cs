@@ -388,6 +388,48 @@ namespace Contabilidad.Models
         public List<FlujoIngresoUnidadRow> IngresosPorUnidad { get; set; } = new();
         public List<FlujoEgresoSeccionRow> EgresosPorSeccion { get; set; } = new();
     }
+    // ---------- Flujo de caja DETALLADO (mockups 02/03) ----------
+    public class FlujoDetalleIngresoDto
+    {
+        public int Mes { get; set; }
+        public int? i_IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
+        public int? i_IdFormaPago { get; set; }
+        public string FormaPago { get; set; }
+        public bool EsCredito { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class FlujoDetallePersonalDto
+    {
+        public int Mes { get; set; }
+        public string Unidad { get; set; }
+        public string Concepto { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class FlujoDetalleEgresoDto
+    {
+        public int Mes { get; set; }
+        public string Seccion { get; set; }
+        public string CodigoHoja { get; set; }
+        public string Hoja { get; set; }
+        public int? i_IdEntidad { get; set; }
+        public string Entidad { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class FlujoDetalleCatalogoDto
+    {
+        public string Seccion { get; set; }
+        public string CodigoHoja { get; set; }
+        public string Hoja { get; set; }
+        public int Orden { get; set; }
+    }
+    public class FlujoDetalladoDto
+    {
+        public List<FlujoDetalleIngresoDto> Ingresos { get; set; } = new();
+        public List<FlujoDetallePersonalDto> Personal { get; set; } = new();
+        public List<FlujoDetalleEgresoDto> Egresos { get; set; } = new();
+        public List<FlujoDetalleCatalogoDto> Catalogo { get; set; } = new();
+    }
     public class CerrarMesRequest { public short Anio { get; set; } public byte Mes { get; set; } }
     public class AperturaRequest
     {

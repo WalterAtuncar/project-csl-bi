@@ -47,6 +47,11 @@ namespace Contabilidad.Controllers
             [FromQuery] string formasPago = null, [FromQuery] bool incluirCredito = true)
             => Ok(_repo.FlujoConsolidado(anio, formasPago, incluirCredito));
 
+        [HttpGet("flujo-detallado")]
+        public IActionResult FlujoDetallado([FromQuery] short anio,
+            [FromQuery] string formasPago = null, [FromQuery] bool incluirCredito = true)
+            => Ok(_repo.FlujoDetallado(anio, formasPago, incluirCredito));
+
         [HttpPost("cerrar-mes")]
         [Authorize(Roles = ESCRITURA)]
         public IActionResult CerrarMes([FromBody] CerrarMesRequest r)

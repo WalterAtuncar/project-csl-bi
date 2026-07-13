@@ -3,20 +3,18 @@ import toast from 'react-hot-toast';
 import { Lock, Unlock, PlayCircle, RefreshCw } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 import { useContaAuth } from '../../context/ContaAuthContext';
-import type { FlujoConsolidado as FlujoData, FlujoMesRow, FormaPagoRow } from '../../services/contabilidad/contaTypes';
+import type { FlujoConsolidado as FlujoData, FlujoMesRow, FormaPagoRow, FlujoDetallado } from '../../services/contabilidad/contaTypes';
 import MediosPagoFilterCard from './components/MediosPagoFilterCard';
-
-const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
-const money = (n: number) => (n === 0 ? '—' : n.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
-
-type RowKind = 'header' | 'detail' | 'total' | 'saldo';
-interface Row { label: string; values: number[]; total: number; kind: RowKind; indent?: boolean }
+import FlujoDetalladoSection from './components/FlujoDetalladoSection';
+import { MESES, money, rowClass, cellBg } from './components/flujoShared';
+import type { Row, RowKind } from './components/flujoShared';
 
 const FlujoConsolidado: React.FC = () => {
   const { canWrite, hasRole } = useContaAuth();
   const now = new Date();
   const [anio, setAnio] = useState(now.getFullYear());
   const [data, setData] = useState<FlujoData | null>(null);
+  const [detalle, setDetalle] = useState<FlujoDetallado | null>(null);
   const [loading, setLoading] = useState(false);
   const [mesCerrar, setMesCerrar] = useState(now.getMonth() + 1);
 
@@ -39,7 +37,13 @@ const FlujoConsolidado: React.FC = () => {
       // Convencion de eficiencia (§5.2): todos marcados => sin formasPago; credito ON => sin incluirCredito.
       const formasPagoParam = medios.length > 0 && seleccion.length < medios.length ? seleccion.join(',') : undefined;
       const incluirCreditoParam = incluirCredito ? undefined : false;
-      setData(await contabilidadService.flujoConsolidado(anio, formasPagoParam, incluirCreditoParam));
+      // Un header, dos secciones: consolidado + detallado con params IDENTICOS => mismo universo (D1).
+      const [consol, det] = await Promise.all([
+        contabilidadService.flujoConsolidado(anio, formasPagoParam, incluirCreditoParam),
+        contabilidadService.flujoDetallado(anio, formasPagoParam, incluirCreditoParam),
+      ]);
+      setData(consol);
+      setDetalle(det);
     }
     catch (e) { toast.error(e instanceof Error ? e.message : 'Error cargando flujo'); }
     finally { setLoading(false); }
@@ -211,25 +215,12 @@ const FlujoConsolidado: React.FC = () => {
         Montos en soles redondeados. SALDO FINAL = SALDO INICIAL + SALDO DE CAJA; el saldo final de cada mes es el inicial del siguiente (encadenado).
         {filtroActivo && ' Con filtro activo, los egresos y los saldos se muestran totales (no reflejan el filtro por medio de pago).'}
       </p>
+
+      {/* Segunda seccion: mismo header (año + filtro + credito) llena las dos tablas (D1). */}
+      <FlujoDetalladoSection detalle={detalle} resumen={data?.Resumen ?? []} filtroActivo={filtroActivo} loading={loading} />
     </div>
   );
 };
-
-function rowClass(kind: RowKind): string {
-  switch (kind) {
-    case 'header': return 'bg-slate-100 dark:bg-slate-700/50 font-bold text-slate-700 dark:text-slate-200 uppercase text-[11px]';
-    case 'total': return 'border-t border-slate-200 dark:border-slate-700 font-semibold text-slate-800 dark:text-slate-100';
-    case 'saldo': return 'bg-emerald-50 dark:bg-emerald-900/20 font-bold text-emerald-700 dark:text-emerald-300';
-    default: return 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/30';
-  }
-}
-function cellBg(kind: RowKind): string {
-  switch (kind) {
-    case 'header': return 'bg-slate-100 dark:bg-slate-700/50';
-    case 'saldo': return 'bg-emerald-50 dark:bg-emerald-900/20';
-    default: return 'bg-white dark:bg-slate-800';
-  }
-}
 
 const selCls = 'px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-sm outline-none focus:ring-2 focus:ring-emerald-500';
 

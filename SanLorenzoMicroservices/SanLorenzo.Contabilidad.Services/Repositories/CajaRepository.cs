@@ -69,6 +69,25 @@ namespace Contabilidad.Repositories
             };
         }
 
+        public FlujoDetalladoDto FlujoDetallado(short anio, string formasPago, bool incluirCredito)
+        {
+            using var cn = _db.Open();
+            using var multi = cn.QueryMultiple("conta.sp_Caja_FlujoDetallado",
+                new
+                {
+                    Anio = anio,
+                    FormasPago = string.IsNullOrWhiteSpace(formasPago) ? null : formasPago,
+                    IncluirCredito = incluirCredito
+                }, commandType: CommandType.StoredProcedure);
+            return new FlujoDetalladoDto
+            {
+                Ingresos = multi.Read<FlujoDetalleIngresoDto>().AsList(),
+                Personal = multi.Read<FlujoDetallePersonalDto>().AsList(),
+                Egresos = multi.Read<FlujoDetalleEgresoDto>().AsList(),
+                Catalogo = multi.Read<FlujoDetalleCatalogoDto>().AsList(),
+            };
+        }
+
         public CuadreDiaDto CuadreDia(DateTime fecha, string formasPago, bool incluirCredito)
         {
             using var cn = _db.Open();
