@@ -123,6 +123,102 @@ END
 GO
 
 -- ---------------------------------------------------------------------
+-- 2c) Cuadre de caja diario (detalle de UN dia, estilo reporte SAMBHS).
+--     Mismo universo que sp_Caja_Ingresos/sp_Caja_Egresos (tuberia CAJA):
+--       RS1 = ingresos del dia a nivel documento (cobranza).
+--       RS2 = egresos del dia a nivel registro, 3 fuentes:
+--             conta.egreso PAGADO (t_FechaPago) + costo_personal_mensual PAGADO
+--             + dbo.cajamayor_movimiento 'E' (efectivo consumado ECA/ECF, bruto d_Total).
+--     GATE: SUM(RS1) = Ingresos del dia en sp_Caja_Diaria (mismos filtros);
+--           SUM(RS2) = Egresos del dia en sp_Caja_Diaria.
+--     @FormasPago (CSV grupo 46; NULL/'' = todos) y @IncluirCredito filtran SOLO
+--     los ingresos (RS1) con semantica IDENTICA a sp_Caja_Diaria (D2/D5).
+--     Los egresos (RS2) NUNCA se filtran. SQL 2012: patron CSV+LIKE, sin STRING_SPLIT.
+-- ---------------------------------------------------------------------
+IF OBJECT_ID('conta.sp_Caja_CuadreDia','P') IS NOT NULL DROP PROCEDURE conta.sp_Caja_CuadreDia;
+GO
+CREATE PROCEDURE conta.sp_Caja_CuadreDia
+    @Fecha          DATE,
+    @FormasPago     NVARCHAR(200) = NULL,
+    @IncluirCredito BIT = 1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @fin DATE = DATEADD(DAY, 1, @Fecha);
+
+    -- formas de pago seleccionadas (CSV -> filas contra el catalogo grupo 46).
+    -- IDENTICO a sp_Caja_Diaria para garantizar Delta=0 en el filtro (GATE G2).
+    DECLARE @fp TABLE (i_IdFormaPago INT PRIMARY KEY);
+    IF @FormasPago IS NOT NULL AND LTRIM(RTRIM(@FormasPago)) <> ''
+        INSERT INTO @fp
+        SELECT dh.i_ItemId FROM dbo.datahierarchy dh
+        WHERE dh.i_GroupId = 46
+          AND ',' + @FormasPago + ',' LIKE '%,' + CAST(dh.i_ItemId AS VARCHAR(10)) + ',%';
+
+    -- RS1: INGRESOS del dia a nivel documento (cobranza)
+    SELECT
+        doc.v_Siglas + ' ' + LTRIM(RTRIM(v.v_SerieDocumento)) + '-' + LTRIM(RTRIM(v.v_CorrelativoDocumento)) AS Documento,
+        ISNULL(tc.v_NombreTipoCaja, 'SIN UNIDAD')  AS Unidad,
+        cd.i_IdFormaPago,
+        ISNULL(dh46.v_Value1, 'SIN FORMA DE PAGO') AS FormaPago,
+        CAST(CASE WHEN dh41.v_Value1 = 'CREDITO' THEN 1 ELSE 0 END AS BIT) AS EsCobranzaCredito,
+        SUM(cd.d_ImporteSoles) AS Monto
+    FROM dbo.cobranzadetalle cd
+    INNER JOIN dbo.venta v        ON v.v_IdVenta = cd.v_IdVenta AND ISNULL(v.i_Eliminado,0) = 0
+    LEFT  JOIN dbo.documento doc  ON doc.i_CodigoDocumento = v.i_IdTipoDocumento AND ISNULL(doc.i_Eliminado,0) = 0
+    LEFT  JOIN dbo.tipocaja_clientetipo tcct ON tcct.i_ClienteEsAgente = v.i_ClienteEsAgente AND tcct.b_Activo = 1
+    LEFT  JOIN dbo.tipocaja tc    ON tc.i_IdTipoCaja = tcct.i_IdTipoCaja
+    LEFT  JOIN dbo.datahierarchy dh46 ON dh46.i_GroupId = 46 AND dh46.i_ItemId = cd.i_IdFormaPago
+    LEFT  JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId = 41 AND dh41.i_ItemId = v.i_IdCondicionPago
+    WHERE ISNULL(cd.i_Eliminado,0) = 0
+      AND cd.t_InsertaFecha >= @Fecha AND cd.t_InsertaFecha < @fin
+      AND ( @FormasPago IS NULL OR LTRIM(RTRIM(@FormasPago)) = ''
+            OR cd.i_IdFormaPago IN (SELECT i_IdFormaPago FROM @fp) )
+      AND ( @IncluirCredito = 1 OR ISNULL(dh41.v_Value1,'') <> 'CREDITO' )
+    GROUP BY doc.v_Siglas, v.v_SerieDocumento, v.v_CorrelativoDocumento,
+             tc.v_NombreTipoCaja, cd.i_IdFormaPago, dh46.v_Value1,
+             CASE WHEN dh41.v_Value1 = 'CREDITO' THEN 1 ELSE 0 END
+    ORDER BY FormaPago, Documento;
+
+    -- RS2: EGRESOS del dia a nivel registro (3 fuentes, NUNCA filtrados)
+    SELECT * FROM (
+        -- 1) egreso conta PAGADO (bruto = d_MontoBruto * d_TipoCambio, igual que sp_Caja_Egresos)
+        SELECT 'EGRESO CONTA' AS Origen,
+               e.v_SerieNumero AS Documento,
+               ISNULL(cc.v_Nombre,'ADMINISTRACION') AS CentroCosto,
+               e.v_Glosa AS Concepto,
+               e.d_MontoBruto * e.d_TipoCambio AS Monto
+        FROM conta.egreso e
+        LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = e.i_IdCentroCosto
+        WHERE e.v_Estado = 'PAGADO' AND e.t_FechaPago >= @Fecha AND e.t_FechaPago < @fin
+
+        UNION ALL
+        -- 2) costos de personal PAGADOS
+        SELECT 'PERSONAL', NULL, ISNULL(cc.v_Nombre,'ADMINISTRACION'),
+               cpm.v_Concepto, cpm.d_Monto
+        FROM conta.costo_personal_mensual cpm
+        LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = cpm.i_IdCentroCosto
+        WHERE cpm.v_Estado = 'PAGADO' AND cpm.t_FechaPago >= @Fecha AND cpm.t_FechaPago < @fin
+
+        UNION ALL
+        -- 3) egresos de la caja mayor legacy (efectivo consumado, ECA/ECF; ~98% pagos a medicos).
+        --    Documento/Concepto de las columnas PROPIAS del movimiento (mas legibles que el
+        --    join a venta: v_NumeroDocumento='ECA-00027737', v_ConceptoMovimiento=glosa real).
+        --    Monto = d_Total (bruto), igual que sp_Caja_Egresos/sp_Caja_Diaria. Centro por i_IdTipoCaja.
+        SELECT 'CAJA LEGACY',
+               LTRIM(RTRIM(cm.v_NumeroDocumento)),
+               ISNULL(cc.v_Nombre,'ADMINISTRACION'),
+               LTRIM(RTRIM(cm.v_ConceptoMovimiento)),
+               cm.d_Total
+        FROM dbo.cajamayor_movimiento cm
+        LEFT JOIN conta.centro_costo cc ON cc.i_IdTipoCaja = cm.i_IdTipoCaja AND cc.b_Activo = 1
+        WHERE cm.v_TipoMovimiento = 'E'
+          AND cm.t_FechaMovimiento >= @Fecha AND cm.t_FechaMovimiento < @fin
+    ) x ORDER BY x.Origen, x.Documento;
+END
+GO
+
+-- ---------------------------------------------------------------------
 -- 3) Caja diaria del mes (serie diaria + saldo acumulado encadenado)
 --    @FormasPago (CSV de ItemIds grupo 46; NULL/'' = todos) y @IncluirCredito
 --    filtran SOLO los ingresos (los egresos y el saldo se mantienen totales; D2/D5).

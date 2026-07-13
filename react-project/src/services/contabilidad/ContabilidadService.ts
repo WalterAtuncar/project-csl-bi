@@ -155,6 +155,17 @@ class ContabilidadService {
     const { data } = await this.http.get<CajaDiaRow[]>('/caja/diaria', { params });
     return data;
   }
+  // Cuadre de caja diario de UN dia (estilo SAMBHS). Misma convencion de eficiencia que cajaDiaria:
+  // solo se envia formasPago si hay subset seleccionado, solo se envia incluirCredito cuando es false
+  // (la URL default queda minima: solo ?fecha=). El filtro aplica server-side a Ingresos; los Egresos
+  // vienen SIEMPRE totales (regla D4 de la pantalla).
+  async cajaCuadreDia(fecha: string, formasPago?: string, incluirCredito?: boolean): Promise<import('./contaTypes').CuadreDiaResponse> {
+    const params: Record<string, unknown> = { fecha };
+    if (formasPago) params.formasPago = formasPago;
+    if (incluirCredito === false) params.incluirCredito = false;
+    const { data } = await this.http.get<import('./contaTypes').CuadreDiaResponse>('/caja/cuadre-dia', { params });
+    return data;
+  }
   async cajaIndicadores(anio: number, mes: number): Promise<import('./contaTypes').CajaIndicadores> {
     const { data } = await this.http.get('/caja/indicadores', { params: { anio, mes } });
     return data;

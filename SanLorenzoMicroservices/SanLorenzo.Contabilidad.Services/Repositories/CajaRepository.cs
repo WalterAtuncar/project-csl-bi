@@ -69,6 +69,23 @@ namespace Contabilidad.Repositories
             };
         }
 
+        public CuadreDiaDto CuadreDia(DateTime fecha, string formasPago, bool incluirCredito)
+        {
+            using var cn = _db.Open();
+            using var multi = cn.QueryMultiple("conta.sp_Caja_CuadreDia",
+                new
+                {
+                    Fecha = fecha,
+                    FormasPago = string.IsNullOrWhiteSpace(formasPago) ? null : formasPago,
+                    IncluirCredito = incluirCredito
+                }, commandType: CommandType.StoredProcedure);
+            return new CuadreDiaDto
+            {
+                Ingresos = multi.Read<CuadreDiaIngresoDto>().AsList(),
+                Egresos = multi.Read<CuadreDiaEgresoDto>().AsList(),
+            };
+        }
+
         public dynamic CerrarMes(short anio, byte mes, int idUsuario)
         {
             using var cn = _db.Open();

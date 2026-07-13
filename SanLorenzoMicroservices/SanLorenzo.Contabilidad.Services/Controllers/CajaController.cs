@@ -29,6 +29,11 @@ namespace Contabilidad.Controllers
             [FromQuery] string formasPago = null, [FromQuery] bool incluirCredito = true)
             => Ok(_repo.Diaria(anio, mes, formasPago, incluirCredito));
 
+        [HttpGet("cuadre-dia")]
+        public IActionResult CuadreDia([FromQuery] DateTime fecha,
+            [FromQuery] string formasPago = null, [FromQuery] bool incluirCredito = true)
+            => Ok(_repo.CuadreDia(fecha, formasPago, incluirCredito));
+
         [HttpGet("indicadores")]
         public IActionResult Indicadores([FromQuery] short anio, [FromQuery] byte mes)
             => Ok(_repo.Indicadores(anio, mes));

@@ -417,6 +417,30 @@ namespace Contabilidad.Models
         public decimal SaldoDolares { get; set; }
     }
 
+    // ---------- Cuadre de caja diario (estilo SAMBHS) ----------
+    public class CuadreDiaIngresoDto
+    {
+        public string Documento { get; set; }
+        public string Unidad { get; set; }
+        public int? i_IdFormaPago { get; set; }
+        public string FormaPago { get; set; }
+        public bool EsCobranzaCredito { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class CuadreDiaEgresoDto
+    {
+        public string Origen { get; set; }
+        public string Documento { get; set; }
+        public string CentroCosto { get; set; }
+        public string Concepto { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class CuadreDiaDto
+    {
+        public List<CuadreDiaIngresoDto> Ingresos { get; set; } = new();
+        public List<CuadreDiaEgresoDto> Egresos { get; set; } = new();
+    }
+
     // ---------- Rentabilidad ----------
     public class RentabilidadIngresoRow
     {

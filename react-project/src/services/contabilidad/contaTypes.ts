@@ -218,6 +218,29 @@ export interface CajaIndicadores {
   CreditoCobrado: number;
 }
 
+// Cuadre de caja diario (conta.sp_Caja_CuadreDia): detalle a nivel documento de UN dia,
+// estilo del reporte "Cuadre de Caja" del SAMBHS. Espejo exacto de los DTOs C#
+// (CuadreDiaIngresoDto / CuadreDiaEgresoDto / CuadreDiaDto). JSON sin camelCase.
+export interface CuadreDiaIngresoRow {
+  Documento: string | null;
+  Unidad: string;
+  i_IdFormaPago: number | null;
+  FormaPago: string;
+  EsCobranzaCredito: boolean;
+  Monto: number;
+}
+export interface CuadreDiaEgresoRow {
+  Origen: 'EGRESO CONTA' | 'PERSONAL' | 'CAJA LEGACY' | string;
+  Documento: string | null;
+  CentroCosto: string;
+  Concepto: string | null;
+  Monto: number;
+}
+export interface CuadreDiaResponse {
+  Ingresos: CuadreDiaIngresoRow[];
+  Egresos: CuadreDiaEgresoRow[];
+}
+
 export interface FlujoMesRow {
   Mes: number;
   IngresosOp: number;
