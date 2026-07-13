@@ -13,7 +13,12 @@ import ExampleAssets from './components/ExampleAssets';
 import AnalisisV2 from './pages/ConsultasBI/Analisis-v2';
 import { GlobalLoader, ToastProvider } from './components/UI';
 import { ContaAuthProvider } from './context/ContaAuthContext';
-import { ContaLogin, ContaLayout, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, RentabilidadUnidades, Sisol, Compras, Catalogos, Usuarios } from './pages/Contabilidad';
+import { ContaLogin, ContaLayout, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, Sisol, Compras, Catalogos, Usuarios } from './pages/Contabilidad';
+// [SOFT-DELETE 2026-07-12] RentabilidadUnidades absorbida por Rentabilidad.tsx (seccion Por Unidad).
+// Fuera del routing: la ruta /conta/rentabilidad-unidades ahora redirige a /conta/rentabilidad.
+// El componente sigue en disco. Para restaurar: descomentar el import de abajo y devolver
+// element={<RentabilidadUnidades />} a su <Route>, y re-agregar la entrada en ContaLayout.
+// import { RentabilidadUnidades } from './pages/Contabilidad';
 
 // El provider de auth de contabilidad envuelve las rutas hijas del modulo.
 const ContaOutlet: React.FC = () => <Outlet />;
@@ -32,7 +37,9 @@ const App: React.FC = () => {
             <Route path="caja" element={<CajaDiaria />} />
             <Route path="flujo-consolidado" element={<FlujoConsolidado />} />
             <Route path="rentabilidad" element={<Rentabilidad />} />
-            <Route path="rentabilidad-unidades" element={<RentabilidadUnidades />} />
+            {/* [SOFT-DELETE 2026-07-12] Ruta absorbida por /conta/rentabilidad (seccion Por Unidad).
+                Redirige para no romper bookmarks/links viejos. Restaurar: element={<RentabilidadUnidades />}. */}
+            <Route path="rentabilidad-unidades" element={<Navigate to="/conta/rentabilidad" replace />} />
             <Route path="sisol" element={<Sisol />} />
             <Route path="egresos" element={<Egresos />} />
             <Route path="personal" element={<CostosPersonal />} />

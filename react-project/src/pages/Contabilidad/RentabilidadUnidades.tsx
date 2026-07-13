@@ -1,3 +1,4 @@
+// [SOFT-DELETE 2026-07-12] Absorbida por Rentabilidad.tsx (seccion Por Unidad). Fuera del routing/menu; restaurar re-agregando ruta en App.tsx y entrada en ContaLayout.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
