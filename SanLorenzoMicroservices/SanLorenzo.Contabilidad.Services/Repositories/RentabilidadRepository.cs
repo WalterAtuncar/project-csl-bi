@@ -50,5 +50,17 @@ namespace Contabilidad.Repositories
                 Semestral = multi.Read<ComparativaPeriodoRow>().AsList(),
             };
         }
+
+        public RentabilidadConsultorioResponse PorConsultorio(short anio, byte mes, bool incluirCredito)
+        {
+            using var cn = _db.Open();
+            using var multi = cn.QueryMultiple("conta.sp_Rentabilidad_PorConsultorio",
+                new { Anio = anio, Mes = mes, IncluirCredito = incluirCredito }, commandType: CommandType.StoredProcedure);
+            return new RentabilidadConsultorioResponse
+            {
+                Filas = multi.Read<RentabilidadConsultorioRow>().AsList(),
+                SinClasificar = multi.Read<RentabilidadConsultorioDiagRow>().AsList(),
+            };
+        }
     }
 }

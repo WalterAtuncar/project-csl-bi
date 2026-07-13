@@ -483,6 +483,27 @@ namespace Contabilidad.Models
         public List<ComparativaPeriodoRow> Trimestral { get; set; } = new();
         public List<ComparativaPeriodoRow> Semestral { get; set; } = new();
     }
+    public class RentabilidadConsultorioRow
+    {
+        public string Grupo { get; set; }
+        public string Consultorio { get; set; }
+        public decimal Ingresos { get; set; }
+        public decimal PorcDelGrupo { get; set; }
+        public bool EsNoClasificado { get; set; }
+        public bool EsTotal { get; set; }
+    }
+    public class RentabilidadConsultorioDiagRow
+    {
+        public string Grupo { get; set; }
+        public string Motivo { get; set; }
+        public string Referencia { get; set; }
+        public decimal Monto { get; set; }
+    }
+    public class RentabilidadConsultorioResponse
+    {
+        public List<RentabilidadConsultorioRow> Filas { get; set; } = new();
+        public List<RentabilidadConsultorioDiagRow> SinClasificar { get; set; } = new();
+    }
 
     // ---------- SISOL ----------
     public class SisolLiquidacionRow

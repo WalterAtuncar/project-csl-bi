@@ -204,6 +204,14 @@ class ContabilidadService {
     const { data } = await this.http.get('/rentabilidad/comparativa', { params });
     return data;
   }
+  // Distribucion de ingresos por consultorio (asistencial/ocupacional) — PLAN_RENTABILIDAD_CONSULTORIO §5.2.
+  // Misma convencion del toggle: solo se envia incluirCredito cuando esta explicitamente en false.
+  async rentabilidadPorConsultorio(anio: number, mes: number, incluirCredito?: boolean): Promise<import('./contaTypes').RentabilidadConsultorioResponse> {
+    const params: Record<string, unknown> = { anio, mes };
+    if (incluirCredito === false) params.incluirCredito = false;
+    const { data } = await this.http.get('/rentabilidad/por-consultorio', { params });
+    return data;
+  }
 
   // ---- SISOL ----
   async sisolList(anio: number): Promise<import('./contaTypes').SisolLiquidacion[]> {

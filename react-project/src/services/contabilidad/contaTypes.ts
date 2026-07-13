@@ -326,6 +326,27 @@ export interface ComparativaResponse {
   Semestral: ComparativaPeriodoRow[];
 }
 
+// ---- Rentabilidad por Consultorio (Asistencial / Ocupacional) ----
+// Calcados de los DTOs C# (PLAN_RENTABILIDAD_CONSULTORIO §4). JSON sin camelCase.
+export interface RentabilidadConsultorioRow {
+  Grupo: 'ASISTENCIAL' | 'OCUPACIONAL' | 'OTRAS_UNIDADES' | string;
+  Consultorio: string;
+  Ingresos: number;
+  PorcDelGrupo: number;
+  EsNoClasificado: boolean;
+  EsTotal: boolean;
+}
+export interface RentabilidadConsultorioDiagRow {
+  Grupo: string;
+  Motivo: 'SIN_SERVICE' | 'SIN_CONSULTORIO' | 'SIN_LIQUIDACION' | string;
+  Referencia: string;
+  Monto: number;
+}
+export interface RentabilidadConsultorioResponse {
+  Filas: RentabilidadConsultorioRow[];
+  SinClasificar: RentabilidadConsultorioDiagRow[];
+}
+
 // ---- SISOL ----
 export interface SisolLiquidacion {
   i_IdLiquidacion: number;
