@@ -51,17 +51,11 @@ CREATE TABLE conta.entidad (
     t_ActualizaFecha     DATETIME NULL
 );
 
--- Cuentas bancarias propias.
-IF OBJECT_ID('conta.cuenta_bancaria','U') IS NULL
-CREATE TABLE conta.cuenta_bancaria (
-    i_IdCuentaBancaria   INT IDENTITY(1,1) PRIMARY KEY,
-    v_Banco              NVARCHAR(50) NOT NULL,
-    v_NroCuenta          NVARCHAR(40) NOT NULL,
-    v_Moneda             CHAR(3) NOT NULL DEFAULT 'PEN',
-    b_Activo             BIT NOT NULL DEFAULT 1,
-    i_InsertaIdUsuario   INT NOT NULL,
-    t_InsertaFecha       DATETIME NOT NULL DEFAULT GETDATE()
-);
+-- Cuentas bancarias: DEPRECADO conta.cuenta_bancaria (2026-07-13).
+-- El catalogo de cuentas se lee ahora del catalogo real de tesoreria del legacy
+-- dbo.documento (solo bancos, i_Naturaleza=3) via conta.sp_CuentaBancaria_List.
+-- Migracion de retiro: ddl/09_deprecate_cuenta_bancaria.sql (drop de 2 FKs + drop table).
+-- NO recrear esta tabla; el catalogo es un espejo de solo lectura del legacy.
 
 -- Porcentaje de participacion SISOL con vigencia por rango (respuesta 13).
 IF OBJECT_ID('conta.sisol_participacion','U') IS NULL

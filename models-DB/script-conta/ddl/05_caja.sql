@@ -24,7 +24,7 @@ CREATE TABLE conta.saldo_banco_mensual (
     i_Id                 INT IDENTITY(1,1) PRIMARY KEY,
     n_Anio               SMALLINT NOT NULL,
     n_Mes                TINYINT NOT NULL,
-    i_IdCuentaBancaria   INT NOT NULL REFERENCES conta.cuenta_bancaria(i_IdCuentaBancaria),
+    i_IdCuentaBancaria   INT NOT NULL,                  -- dbo.documento.i_CodigoDocumento (catalogo legacy, sin FK; ver ddl/09)
     d_SaldoSoles         DECIMAL(18,2) NOT NULL DEFAULT 0,
     d_SaldoDolares       DECIMAL(18,2) NOT NULL DEFAULT 0,
     i_ActualizaIdUsuario INT NULL,

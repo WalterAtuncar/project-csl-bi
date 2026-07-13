@@ -150,46 +150,37 @@ BEGIN
 END
 GO
 
--- ---------------- CUENTA BANCARIA ----------------
+-- ---------------- CUENTA BANCARIA (catalogo legacy, solo lectura) ----------------
+-- DEPRECADO conta.cuenta_bancaria (ver migracion ddl/09_deprecate_cuenta_bancaria.sql).
+-- Las cuentas bancarias se leen ahora del catalogo real de tesoreria del legacy
+-- dbo.documento (solo bancos, i_Naturaleza=3). Mismo patron que sp_Caja_FormasPago
+-- sobre dbo.datahierarchy (grupo 46). dbo.documento y conta viven en la MISMA BD:
+-- el SELECT a dbo es lectura permitida; NO se altera dbo. El CRUD (Insert/Update) se
+-- retira: el catalogo es un espejo de solo lectura. Contrato CuentaBancariaRow intacto.
 IF OBJECT_ID('conta.sp_CuentaBancaria_List','P') IS NOT NULL DROP PROCEDURE conta.sp_CuentaBancaria_List;
 GO
-CREATE PROCEDURE conta.sp_CuentaBancaria_List @SoloActivos BIT = 0
+CREATE PROCEDURE conta.sp_CuentaBancaria_List @SoloActivos BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT i_IdCuentaBancaria, v_Banco, v_NroCuenta, v_Moneda, b_Activo FROM conta.cuenta_bancaria
-    WHERE (@SoloActivos = 0 OR b_Activo = 1) ORDER BY v_Banco;
+    SELECT
+      d.i_CodigoDocumento                                      AS i_IdCuentaBancaria,
+      LTRIM(RTRIM(d.v_Nombre))                                 AS v_Banco,
+      LTRIM(RTRIM(ISNULL(d.v_Siglas,'')))                      AS v_NroCuenta,   -- codigo corto de tesoreria (BCS/BC$/BLN...)
+      CASE WHEN d.v_Siglas LIKE '%$%' THEN 'USD' ELSE 'PEN' END AS v_Moneda,     -- MN->PEN, ME/$->USD
+      CAST(1 AS BIT)                                           AS b_Activo
+    FROM dbo.documento d
+    WHERE d.i_UsadoTesoreria = 1
+      AND ISNULL(d.i_Eliminado,0) = 0
+      AND d.i_Naturaleza = 3
+    ORDER BY d.v_Nombre;
 END
 GO
 
+-- CRUD retirado (catalogo de solo lectura). DROP idempotente por si un despliegue previo los creo.
 IF OBJECT_ID('conta.sp_CuentaBancaria_Insert','P') IS NOT NULL DROP PROCEDURE conta.sp_CuentaBancaria_Insert;
 GO
-CREATE PROCEDURE conta.sp_CuentaBancaria_Insert
-    @Banco NVARCHAR(50), @NroCuenta NVARCHAR(40), @Moneda CHAR(3) = 'PEN', @IdUsuarioAccion INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @id INT;
-    INSERT INTO conta.cuenta_bancaria (v_Banco, v_NroCuenta, v_Moneda, i_InsertaIdUsuario)
-    VALUES (@Banco, @NroCuenta, @Moneda, @IdUsuarioAccion);
-    SET @id = SCOPE_IDENTITY();
-    EXEC conta.sp_Auditoria_Insert 'conta.cuenta_bancaria', @id, 'INSERT', @Banco, @IdUsuarioAccion;
-    SELECT @id AS i_IdCuentaBancaria;
-END
-GO
-
 IF OBJECT_ID('conta.sp_CuentaBancaria_Update','P') IS NOT NULL DROP PROCEDURE conta.sp_CuentaBancaria_Update;
-GO
-CREATE PROCEDURE conta.sp_CuentaBancaria_Update
-    @IdCuentaBancaria INT, @Banco NVARCHAR(50), @NroCuenta NVARCHAR(40), @Moneda CHAR(3), @Activo BIT, @IdUsuarioAccion INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-    UPDATE conta.cuenta_bancaria SET v_Banco = @Banco, v_NroCuenta = @NroCuenta, v_Moneda = @Moneda, b_Activo = @Activo
-    WHERE i_IdCuentaBancaria = @IdCuentaBancaria;
-    EXEC conta.sp_Auditoria_Insert 'conta.cuenta_bancaria', @IdCuentaBancaria, 'UPDATE', @Banco, @IdUsuarioAccion;
-    SELECT @IdCuentaBancaria AS i_IdCuentaBancaria;
-END
 GO
 
 -- ---------------- SISOL PARTICIPACION (con cierre de vigencia) ----------------

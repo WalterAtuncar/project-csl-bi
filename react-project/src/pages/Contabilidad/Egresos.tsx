@@ -288,13 +288,52 @@ const Egresos: React.FC = () => {
 
   // ---- carga masiva ----
   const descargarPlantilla = () => {
-    const rows = [
-      ['RucOEntidad', 'FechaDocumento', 'TipoDocumento', 'SerieNumero', 'CodCentroCosto', 'CodTipoGasto', 'Condicion', 'Moneda', 'TipoCambio', 'MontoBruto', 'IGV', 'Glosa'],
-      ['20512345678', '2026-06-15', 'FACTURA', 'F001-123', centros[0]?.v_Codigo || 'ADM', tipos[0]?.v_Codigo || 'ADM-FLE', 'CONTADO', 'PEN', 1, 118, 18, 'ejemplo'],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Egresos');
+
+    // --- Hoja 1: datos a llenar ---
+    const ejProv = proveedores[0]?.Ruc || '20512345678';
+    const ejEnt = entidades[0]?.v_Nombre || 'BIOMEDICINE';
+    const cc = centros[0]?.v_Codigo || 'ADM';
+    const tg = tipos.find((t) => t.i_IdPadre != null)?.v_Codigo || 'ADM-FLE';
+    const datos: (string | number)[][] = [
+      ['RucOEntidad', 'FechaDocumento', 'TipoDocumento', 'SerieNumero', 'CodCentroCosto', 'CodTipoGasto', 'Condicion', 'Moneda', 'TipoCambio', 'MontoBruto', 'IGV', 'Glosa'],
+      [ejProv, '2026-06-15', 'FACTURA', 'F001-123', cc, tg, 'CONTADO', 'PEN', 1, 118, 18, 'ejemplo proveedor (RUC -> compra)'],
+      [ejEnt, '2026-06-16', 'RECIBO', 'R001-045', cc, tg, 'CONTADO', 'PEN', 1, 100, 0, 'ejemplo entidad (nombre -> egreso)'],
+    ];
+    const wsDatos = XLSX.utils.aoa_to_sheet(datos);
+    wsDatos['!cols'] = [{ wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 32 }];
+    XLSX.utils.book_append_sheet(wb, wsDatos, 'Egresos');
+
+    // --- Hoja 2: referencia de codigos ---
+    const ref: (string | number)[][] = [];
+    ref.push(['GUIA DE CODIGOS - copie los valores EXACTOS en la hoja "Egresos"']);
+    ref.push([]);
+    ref.push(['COLUMNA RucOEntidad']);
+    ref.push(['- PROVEEDOR: escriba el RUC de 11 digitos  ->  se registra como COMPRA']);
+    ref.push(['- ENTIDAD: escriba el NOMBRE exacto  ->  se registra como EGRESO a entidad']);
+    ref.push([]);
+    ref.push(['Entidades (nombre exacto)', 'Tipo']);
+    entidades.forEach((e) => ref.push([e.v_Nombre, e.v_Tipo || '']));
+    ref.push([]);
+    ref.push(['Proveedores (RUC)', 'Razon social']);
+    proveedores.forEach((p) => ref.push([p.Ruc || '', p.RazonSocial]));
+    ref.push([]);
+    ref.push(['TipoDocumento (valores validos)']);
+    ['FACTURA', 'RECIBO', 'PLANILLA', 'VOUCHER', 'OTRO'].forEach((x) => ref.push([x]));
+    ref.push([]);
+    ref.push(['Condicion', 'CONTADO | CREDITO']);
+    ref.push(['Moneda', 'PEN | USD']);
+    ref.push([]);
+    ref.push(['CodCentroCosto', 'Nombre']);
+    centros.forEach((c) => ref.push([c.v_Codigo, c.v_Nombre]));
+    ref.push([]);
+    ref.push(['CodTipoGasto', 'Nombre']);
+    tipos.filter((t) => t.i_IdPadre != null).forEach((t) => ref.push([t.v_Codigo, t.v_Nombre]));
+
+    const wsRef = XLSX.utils.aoa_to_sheet(ref);
+    wsRef['!cols'] = [{ wch: 40 }, { wch: 44 }];
+    XLSX.utils.book_append_sheet(wb, wsRef, 'Referencias');
+
     XLSX.writeFile(wb, 'plantilla_egresos.xlsx');
   };
 
@@ -302,7 +341,7 @@ const Egresos: React.FC = () => {
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
+      const ws = wb.Sheets['Egresos'] ?? wb.Sheets[wb.SheetNames[0]];
       const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null });
       const filas: EgresoCargaFila[] = json.map((r) => ({
         RucOEntidad: String(r.RucOEntidad ?? '').trim(),

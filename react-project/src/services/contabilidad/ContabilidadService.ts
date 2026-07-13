@@ -308,8 +308,6 @@ class ContabilidadService {
   async tipoGastoActualizar(r: import('./contaTypes').TipoGastoUpdate) { await this.http.put('/tipos-gasto', r); }
   async entidadCrear(r: import('./contaTypes').EntidadCreate) { await this.http.post('/entidades', r); }
   async entidadActualizar(r: import('./contaTypes').EntidadUpdate) { await this.http.put('/entidades', r); }
-  async cuentaCrear(r: import('./contaTypes').CuentaBancariaCreate) { await this.http.post('/cuentas-bancarias', r); }
-  async cuentaActualizar(r: import('./contaTypes').CuentaBancariaUpdate) { await this.http.put('/cuentas-bancarias', r); }
   async sisolParticipacionList(): Promise<import('./contaTypes').SisolParticipacion[]> { return (await this.http.get('/sisol/participacion')).data; }
   async sisolParticipacionCrear(r: import('./contaTypes').SisolParticipacionCreate) { await this.http.post('/sisol/participacion', r); }
   async sisolParticipacionActualizar(r: import('./contaTypes').SisolParticipacionUpdate) { await this.http.put('/sisol/participacion', r); }
@@ -335,6 +333,55 @@ class ContabilidadService {
   async compraClasificar(idCompra: number, idCentroCosto: number, idTipoGasto: number): Promise<number> {
     const { data } = await this.http.post<{ i_IdEgreso: number }>(`/compras/${idCompra}/clasificar`, { IdCentroCosto: idCentroCosto, IdTipoGasto: idTipoGasto });
     return data.i_IdEgreso;
+  }
+
+  // ---- Honorarios médicos (base /honorarios; todo con JWT conta) ----
+  // Catálogo de consultorios (systemparameter 403) para el selector del modal.
+  async honorariosConsultorios(): Promise<import('./contaTypes').HonorarioConsultorio[]> {
+    const { data } = await this.http.get<import('./contaTypes').HonorarioConsultorio[]>('/honorarios/consultorios');
+    return data;
+  }
+  // Médicos por consultorio (omitido = todos).
+  async honorariosMedicos(consultorioId?: number): Promise<import('./contaTypes').HonorarioMedico[]> {
+    const params: Record<string, unknown> = {};
+    if (consultorioId != null && consultorioId > 0) params.consultorioId = consultorioId;
+    const { data } = await this.http.get<import('./contaTypes').HonorarioMedico[]>('/honorarios/medicos', { params });
+    return data;
+  }
+  // Autocomplete de profesionales (mín 3 chars — la pantalla ya lo valida; sondeo silencioso).
+  async honorariosProfesionales(texto: string): Promise<import('./contaTypes').HonorarioProfesional[]> {
+    const { data } = await this.http.get<import('./contaTypes').HonorarioProfesional[]>('/honorarios/profesionales', { params: { texto }, skipLoader: true } as never);
+    return data;
+  }
+  // Análisis de atenciones por consultorio+rango. PESADA (~varios s). consultorioId=-1 => todos.
+  async honorariosAnalisis(consultorioId: number, desde: string, hasta: string): Promise<import('./contaTypes').AnalisisHonorarioRow[]> {
+    const { data } = await this.http.get<import('./contaTypes').AnalisisHonorarioRow[]>('/honorarios/analisis', { params: { consultorioId, desde, hasta } });
+    return data;
+  }
+  // Grid de pagos con paginación real server-side (Total/Page/PageSize).
+  async honorariosPagos(f: import('./contaTypes').HonorarioPagosFilters): Promise<import('./contaTypes').HonorarioPagosResponse> {
+    const params: Record<string, unknown> = {};
+    if (f.desde) params.desde = f.desde;
+    if (f.hasta) params.hasta = f.hasta;
+    if (f.medicoId != null) params.medicoId = f.medicoId;
+    if (f.incluirAnulados) params.incluirAnulados = true;
+    params.page = f.page ?? 1;
+    params.pageSize = f.pageSize ?? 15;
+    const { data } = await this.http.get<import('./contaTypes').HonorarioPagosResponse>('/honorarios/pagos', { params });
+    return data;
+  }
+  async honorariosPagoGet(id: number): Promise<import('./contaTypes').HonorarioPagoDetalle> {
+    const { data } = await this.http.get<import('./contaTypes').HonorarioPagoDetalle>(`/honorarios/pagos/${id}`);
+    return data;
+  }
+  // Registro del pago (Roles SA,CONTABILIDAD; IdUsuario del JWT, NO se manda).
+  async honorariosPagoCrear(body: import('./contaTypes').HonorarioPagoCreate): Promise<import('./contaTypes').HonorarioPagoCreateResult> {
+    const { data } = await this.http.post<import('./contaTypes').HonorarioPagoCreateResult>('/honorarios/pagos', body);
+    return data;
+  }
+  async honorariosPagoAnular(id: number, motivo: string): Promise<{ i_IdPago: number }> {
+    const { data } = await this.http.post<{ i_IdPago: number }>(`/honorarios/pagos/${id}/anular`, { Motivo: motivo });
+    return data;
   }
 }
 

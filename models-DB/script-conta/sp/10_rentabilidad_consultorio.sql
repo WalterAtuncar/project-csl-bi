@@ -324,7 +324,8 @@ BEGIN
         Grupo           NVARCHAR(20)  NOT NULL,
         Consultorio     NVARCHAR(100) NOT NULL,
         Ingresos        DECIMAL(18,2) NOT NULL,
-        EsNoClasificado BIT           NOT NULL
+        EsNoClasificado BIT           NOT NULL,
+        Egresos         DECIMAL(18,2) NOT NULL DEFAULT (0)   -- v2: egresos por consultorio (solo ASISTENCIAL)
     );
 
     -- ASISTENCIAL (sin prorrateo: sumas exactas de 2 decimales).
@@ -355,6 +356,40 @@ BEGIN
     FROM conta.fn_Rentabilidad_IngresosEx(@Anio,@Mes,@IncluirCredito) f
     WHERE f.i_IdTipoCaja NOT IN (1,2);
 
+    -- ---------------------------------------------------------------------
+    -- 5b) EGRESOS por consultorio ASISTENCIAL (v2). Devengado (t_FechaDocumento),
+    --     <> ANULADO, con consultorio. Nombre = 403 (COLLATE DATABASE_DEFAULT,
+    --     fallback 'CONSULTORIO '+id) -> misma clave textual que #asis/#det.
+    --     OCUPACIONAL / OTRAS_UNIDADES: Egresos = 0 en esta fase.
+    -- ---------------------------------------------------------------------
+    IF OBJECT_ID('tempdb..#egr') IS NOT NULL DROP TABLE #egr;
+    SELECT
+        ISNULL(sp403.v_Value1 COLLATE DATABASE_DEFAULT,
+               'CONSULTORIO ' + CAST(e.i_IdConsultorio AS VARCHAR(10))) AS Consultorio,
+        CAST(SUM(e.d_MontoNeto) AS DECIMAL(18,2)) AS Egresos
+    INTO #egr
+    FROM conta.egreso e
+    LEFT JOIN SigesoftDesarrollo_2.dbo.systemparameter sp403
+        ON sp403.i_GroupId = 403 AND sp403.i_ParameterId = e.i_IdConsultorio
+    WHERE e.i_IdConsultorio IS NOT NULL
+      AND e.v_Estado <> 'ANULADO'
+      AND e.t_FechaDocumento >= @ini
+      AND e.t_FechaDocumento <  @finEx
+    GROUP BY e.i_IdConsultorio, sp403.v_Value1;
+
+    -- Adosar egresos a los consultorios ASISTENCIALES ya existentes (match por nombre).
+    UPDATE d
+       SET d.Egresos = g.Egresos
+    FROM #det d
+    JOIN #egr g ON g.Consultorio = d.Consultorio
+    WHERE d.Grupo = 'ASISTENCIAL';
+
+    -- Consultorios SOLO-EGRESO (egreso sin ingreso en el mes): fila con Ingresos = 0.
+    INSERT INTO #det (Grupo, Consultorio, Ingresos, EsNoClasificado, Egresos)
+    SELECT 'ASISTENCIAL', g.Consultorio, 0, 0, g.Egresos
+    FROM #egr g
+    WHERE NOT EXISTS (SELECT 1 FROM #det d WHERE d.Grupo = 'ASISTENCIAL' AND d.Consultorio = g.Consultorio);
+
     -- RS1 con % del grupo y filas TOTAL por grupo.
     -- ROTULO especifico por grupo SOLO para la fila fugada (EsNoClasificado=1):
     --   ASISTENCIAL -> 'NO SE ATENDIERON CON EL SISTEMA'
@@ -363,8 +398,11 @@ BEGIN
     -- Solo cambia la ETIQUETA mostrada: monto, %, EsNoClasificado=1 (ambar en el front),
     -- shape de columnas y ORDEN quedan identicos -> se ordena por ConsultorioOrd (rotulo
     -- interno crudo '(SIN CLASIFICAR)'), no por la etiqueta mostrada.
+    -- v2: RS1 gana Egresos y Resultado (=Ingresos-Egresos) AL FINAL. PorcDelGrupo (sobre
+    -- Ingresos) NO cambia; los TOTALes suman Ingresos y Egresos. Filtro relajado a
+    -- (Ingresos<>0 OR Egresos<>0) para no perder consultorios solo-egreso.
     ;WITH tot AS (
-        SELECT Grupo, SUM(Ingresos) AS GT FROM #det GROUP BY Grupo
+        SELECT Grupo, SUM(Ingresos) AS GT, SUM(Egresos) AS GE FROM #det GROUP BY Grupo
     ),
     rs1 AS (
         SELECT
@@ -377,10 +415,12 @@ BEGIN
             d.Ingresos,
             CAST(CASE WHEN t.GT = 0 THEN 0 ELSE 100.0 * d.Ingresos / t.GT END AS DECIMAL(9,2)) AS PorcDelGrupo,
             d.EsNoClasificado,
-            CAST(0 AS BIT) AS EsTotal
+            CAST(0 AS BIT) AS EsTotal,
+            d.Egresos,
+            CAST(d.Ingresos - d.Egresos AS DECIMAL(18,2)) AS Resultado
         FROM #det d
         JOIN tot t ON t.Grupo = d.Grupo
-        WHERE d.Ingresos <> 0
+        WHERE d.Ingresos <> 0 OR d.Egresos <> 0
         UNION ALL
         SELECT
             t.Grupo,
@@ -389,10 +429,12 @@ BEGIN
             t.GT,
             CAST(100.00 AS DECIMAL(9,2)),
             CAST(0 AS BIT),
-            CAST(1 AS BIT)
+            CAST(1 AS BIT),
+            t.GE,
+            CAST(t.GT - t.GE AS DECIMAL(18,2))
         FROM tot t
     )
-    SELECT Grupo, Consultorio, Ingresos, PorcDelGrupo, EsNoClasificado, EsTotal
+    SELECT Grupo, Consultorio, Ingresos, PorcDelGrupo, EsNoClasificado, EsTotal, Egresos, Resultado
     FROM rs1
     ORDER BY Grupo, EsTotal, Ingresos DESC, ConsultorioOrd;
 

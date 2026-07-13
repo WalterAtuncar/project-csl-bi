@@ -173,6 +173,7 @@ namespace Contabilidad.Models
         public string Email { get; set; }
     }
 
+    // Cuenta bancaria: solo lectura (espejo del catalogo de tesoreria legacy dbo.documento).
     public class CuentaBancariaRow
     {
         public int i_IdCuentaBancaria { get; set; }
@@ -181,8 +182,6 @@ namespace Contabilidad.Models
         public string v_Moneda { get; set; }
         public bool b_Activo { get; set; }
     }
-    public class CuentaBancariaCreateRequest { public string Banco { get; set; } public string NroCuenta { get; set; } public string Moneda { get; set; } = "PEN"; }
-    public class CuentaBancariaUpdateRequest { public int IdCuentaBancaria { get; set; } public string Banco { get; set; } public string NroCuenta { get; set; } public string Moneda { get; set; } public bool Activo { get; set; } }
 
     public class SisolParticipacionRow
     {
@@ -232,6 +231,8 @@ namespace Contabilidad.Models
         public DateTime? t_FechaPago { get; set; }
         public int? i_IdFormaPago { get; set; }
         public string v_Glosa { get; set; }
+        public int? i_IdConsultorio { get; set; }   // v3: consultorio logico (403); null en egresos normales
+        public string Consultorio { get; set; }      // v3: nombre 403 (join NULL-safe)
         public int TotalRows { get; set; }
     }
     public class EgresoCreateRequest
@@ -254,6 +255,7 @@ namespace Contabilidad.Models
         public DateTime? FechaPago { get; set; }
         public int? IdFormaPago { get; set; }
         public int? IdCuentaBancaria { get; set; }
+        public int? IdConsultorio { get; set; }   // v3: consultorio logico (403); el front de egresos aun no lo usa
     }
     public class EgresoUpdateRequest : EgresoCreateRequest { public int IdEgreso { get; set; } }
     public class EgresoPagarRequest
@@ -576,6 +578,8 @@ namespace Contabilidad.Models
         public decimal PorcDelGrupo { get; set; }
         public bool EsNoClasificado { get; set; }
         public bool EsTotal { get; set; }
+        public decimal Egresos { get; set; }     // v2: egresos por consultorio (solo ASISTENCIAL)
+        public decimal Resultado { get; set; }    // v2: Ingresos - Egresos
     }
     public class RentabilidadConsultorioDiagRow
     {
@@ -673,4 +677,165 @@ namespace Contabilidad.Models
         public int? i_IdEgreso { get; set; }
         public bool Clasificada { get; set; }
     }
+
+    // ---------- Honorarios medicos ----------
+    // Catalogo de consultorios (sp_Honorarios_Consultorios -> systemparameter grupo 403).
+    public class ConsultorioHonorarioDto
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; }
+        public decimal? PorcMedico { get; set; }
+    }
+    // Medicos por consultorio (sp_Honorarios_Medicos).
+    public class MedicoHonorarioDto
+    {
+        public int MedicoTratanteId { get; set; }
+        public string userName { get; set; }
+        public string name { get; set; }
+        public int? consultorioId { get; set; }
+        public string consultorio { get; set; }
+        public int i_RoleId { get; set; }
+    }
+    // Autocomplete de profesionales (sp_Honorarios_BuscarProfesional).
+    public class ProfesionalDto
+    {
+        public int systemUserId { get; set; }
+        public string personId { get; set; }
+        public string userName { get; set; }
+        public string Name { get; set; }
+    }
+    // Fila del analisis cross-DB (sp_Honorarios_Analisis, RS unico espejo del legacy).
+    // El SP devuelve ~70 columnas; aqui solo se mapean las que consume el front (Dapper ignora el resto).
+    public class AnalisisHonorarioRow
+    {
+        public string idVenta { get; set; }
+        public string formaPagoName { get; set; }
+        public string serie { get; set; }
+        public string numero { get; set; }
+        public string fechaPago { get; set; }          // string formateado (emision de la venta)
+        public decimal? monto { get; set; }
+        public decimal? precioServicio { get; set; }
+        public decimal? cantidad { get; set; }
+        public decimal? montoPagadoReal { get; set; }
+        public decimal? total { get; set; }
+        public string nombreServicio { get; set; }
+        public string v_ComprobantePago { get; set; }
+        public string v_ServiceId { get; set; }
+        public string docNumberPaciente { get; set; }
+        public string apPaternoPaciente { get; set; }
+        public string apMaternoPaciente { get; set; }
+        public string nombresPaciente { get; set; }
+        public int? medicoId { get; set; }
+        public string nombreMedico { get; set; }
+        public string especialidadMedico { get; set; }
+        public string consultorio { get; set; }
+        public int? consultorioId { get; set; }
+        public string tipoServicio { get; set; }
+        public int? edadPaciente { get; set; }
+        public decimal? PorcRef { get; set; }
+        public int esPagado { get; set; }               // 0/1
+    }
+    // Fila del grid de pagos (sp_PagoHonorario_List, RS2).
+    public class PagoHonorarioListRow
+    {
+        public int i_IdPago { get; set; }
+        public DateTime t_FechaPago { get; set; }
+        public string v_MedicoNombre { get; set; }
+        public int i_MedicoId { get; set; }
+        public DateTime t_PeriodoDesde { get; set; }
+        public DateTime t_PeriodoHasta { get; set; }
+        public decimal d_TotalPago { get; set; }
+        public decimal d_TotalServicios { get; set; }
+        public int NroConsultorios { get; set; }
+        public int NroServicios { get; set; }
+        public string v_Estado { get; set; }
+    }
+    // Cabecera del pago (sp_PagoHonorario_Get, RS1).
+    public class PagoHonorarioCabecera
+    {
+        public int i_IdPago { get; set; }
+        public int i_MedicoId { get; set; }
+        public string v_MedicoNombre { get; set; }
+        public int? i_IdEntidad { get; set; }
+        public string EntidadNombre { get; set; }
+        public DateTime t_PeriodoDesde { get; set; }
+        public DateTime t_PeriodoHasta { get; set; }
+        public decimal? d_PorcMedico { get; set; }
+        public decimal d_TotalServicios { get; set; }
+        public decimal d_TotalPago { get; set; }
+        public string v_Estado { get; set; }
+        public DateTime t_FechaPago { get; set; }
+        public int? i_IdFormaPago { get; set; }
+        public int? i_IdCuentaBancaria { get; set; }
+        public string v_Glosa { get; set; }
+        public string v_MotivoAnulacion { get; set; }
+        public int i_InsertaIdUsuario { get; set; }
+        public DateTime t_InsertaFecha { get; set; }
+        public int? i_ActualizaIdUsuario { get; set; }
+        public DateTime? t_ActualizaFecha { get; set; }
+    }
+    // Detalle por consultorio (Get RS2 + Insert RS2 -> mismos nombres; en Insert i_Id=0 y EgresoEstado=null).
+    public class PagoHonorarioConsultorioRow
+    {
+        public int i_Id { get; set; }
+        public int i_IdPago { get; set; }
+        public int i_IdConsultorio { get; set; }
+        public string v_ConsultorioNombre { get; set; }
+        public decimal d_MontoServicios { get; set; }
+        public decimal d_MontoPago { get; set; }
+        public int? i_IdEgreso { get; set; }
+        public string EgresoEstado { get; set; }
+    }
+    // Servicio pagado (sp_PagoHonorario_Get, RS3).
+    public class PagoHonorarioServicioRow
+    {
+        public int i_Id { get; set; }
+        public int i_IdPago { get; set; }
+        public string v_ServiceId { get; set; }
+        public int i_IdConsultorio { get; set; }
+        public decimal? d_Precio { get; set; }
+        public decimal? d_Porc { get; set; }
+        public decimal? d_Pagado { get; set; }
+        public bool b_Anulado { get; set; }
+    }
+    // Detalle completo del pago (respuesta de GET pagos/{id}).
+    public class PagoHonorarioDetalle
+    {
+        public PagoHonorarioCabecera Cabecera { get; set; }
+        public List<PagoHonorarioConsultorioRow> Consultorios { get; set; } = new();
+        public List<PagoHonorarioServicioRow> Servicios { get; set; } = new();
+    }
+    // Resultado de POST pagos (sp_PagoHonorario_Insert: RS1 id + RS2 consultorios/egresos).
+    public class PagoHonorarioCreateResult
+    {
+        public int i_IdPago { get; set; }
+        public List<PagoHonorarioConsultorioRow> Consultorios { get; set; } = new();
+    }
+    // Servicio de entrada del request de pago (fila de la TVP).
+    public class PagoHonorarioServicioInput
+    {
+        public string ServiceId { get; set; }
+        public int IdConsultorio { get; set; }
+        public decimal? Precio { get; set; }
+        public decimal? Porc { get; set; }
+        public decimal? Pagado { get; set; }
+    }
+    // Request de POST pagos.
+    public class PagoHonorarioCreateRequest
+    {
+        public int MedicoId { get; set; }
+        public string MedicoNombre { get; set; }
+        public DateTime Desde { get; set; }
+        public DateTime Hasta { get; set; }
+        public decimal? PorcMedico { get; set; }
+        public DateTime FechaPago { get; set; }
+        public int? IdFormaPago { get; set; }
+        public int? IdCuentaBancaria { get; set; }
+        public string Glosa { get; set; }
+        public decimal TotalServicios { get; set; }
+        public decimal TotalPago { get; set; }
+        public List<PagoHonorarioServicioInput> Servicios { get; set; } = new();
+    }
+    // Request de POST pagos/{id}/anular.
+    public class AnularRequest { public string Motivo { get; set; } }
 }

@@ -676,16 +676,27 @@ GO
 -- ---------------------------------------------------------------------
 IF OBJECT_ID('conta.sp_SaldoBanco_List','P') IS NOT NULL DROP PROCEDURE conta.sp_SaldoBanco_List;
 GO
+-- DEPRECADO conta.cuenta_bancaria (ver ddl/09_deprecate_cuenta_bancaria.sql): las cuentas
+-- se leen del catalogo legacy dbo.documento (solo bancos, i_Naturaleza=3). Contrato de
+-- columnas identico; i_IdCuentaBancaria = dbo.documento.i_CodigoDocumento. saldo_banco_mensual
+-- conserva su columna i_IdCuentaBancaria (ya sin FK). SELECT a dbo = lectura permitida.
 CREATE PROCEDURE conta.sp_SaldoBanco_List @Anio SMALLINT, @Mes TINYINT
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT sb.i_Id, sb.n_Anio, sb.n_Mes, sb.i_IdCuentaBancaria, cb.v_Banco, cb.v_NroCuenta, cb.v_Moneda,
+    SELECT sb.i_Id, sb.n_Anio, sb.n_Mes,
+           d.i_CodigoDocumento                                      AS i_IdCuentaBancaria,
+           LTRIM(RTRIM(d.v_Nombre))                                 AS v_Banco,
+           LTRIM(RTRIM(ISNULL(d.v_Siglas,'')))                      AS v_NroCuenta,
+           CASE WHEN d.v_Siglas LIKE '%$%' THEN 'USD' ELSE 'PEN' END AS v_Moneda,
            sb.d_SaldoSoles, sb.d_SaldoDolares
-    FROM conta.cuenta_bancaria cb
-    LEFT JOIN conta.saldo_banco_mensual sb ON sb.i_IdCuentaBancaria=cb.i_IdCuentaBancaria AND sb.n_Anio=@Anio AND sb.n_Mes=@Mes
-    WHERE cb.b_Activo=1
-    ORDER BY cb.v_Banco;
+    FROM dbo.documento d
+    LEFT JOIN conta.saldo_banco_mensual sb
+      ON sb.i_IdCuentaBancaria = d.i_CodigoDocumento AND sb.n_Anio = @Anio AND sb.n_Mes = @Mes
+    WHERE d.i_UsadoTesoreria = 1
+      AND ISNULL(d.i_Eliminado,0) = 0
+      AND d.i_Naturaleza = 3
+    ORDER BY d.v_Nombre;
 END
 GO
 

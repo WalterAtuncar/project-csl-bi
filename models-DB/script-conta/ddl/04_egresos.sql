@@ -21,7 +21,7 @@ CREATE TABLE conta.egreso (
     v_Estado             NVARCHAR(15) NOT NULL DEFAULT 'POR_PAGAR', -- POR_PAGAR|PAGADO|ANULADO
     t_FechaPago          DATE NULL,                     -- dispara caja
     i_IdFormaPago        INT NULL,                      -- datahierarchy grupo 46 (sin FK, es legacy)
-    i_IdCuentaBancaria   INT NULL REFERENCES conta.cuenta_bancaria(i_IdCuentaBancaria),
+    i_IdCuentaBancaria   INT NULL,                      -- dbo.documento.i_CodigoDocumento (catalogo legacy, sin FK; ver ddl/09)
     v_Glosa              NVARCHAR(300) NULL,
     i_IdCompra           INT NULL,                      -- link opcional a dbo.registro_compras
     i_InsertaIdUsuario   INT NOT NULL,

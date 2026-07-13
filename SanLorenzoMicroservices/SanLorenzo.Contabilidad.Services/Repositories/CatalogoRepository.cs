@@ -90,26 +90,12 @@ namespace Contabilidad.Repositories
                 commandType: CommandType.StoredProcedure);
         }
 
-        // ---- Cuenta bancaria ----
+        // ---- Cuenta bancaria (solo lectura: catalogo de tesoreria legacy dbo.documento) ----
         public IEnumerable<CuentaBancariaRow> CuentaList(bool soloActivos)
         {
             using var cn = _db.Open();
             return cn.Query<CuentaBancariaRow>("conta.sp_CuentaBancaria_List",
                 new { SoloActivos = soloActivos }, commandType: CommandType.StoredProcedure);
-        }
-        public int CuentaInsert(CuentaBancariaCreateRequest r, int idAccion)
-        {
-            using var cn = _db.Open();
-            return cn.QueryFirstOrDefault<int>("conta.sp_CuentaBancaria_Insert",
-                new { r.Banco, r.NroCuenta, r.Moneda, IdUsuarioAccion = idAccion },
-                commandType: CommandType.StoredProcedure);
-        }
-        public int CuentaUpdate(CuentaBancariaUpdateRequest r, int idAccion)
-        {
-            using var cn = _db.Open();
-            return cn.QueryFirstOrDefault<int>("conta.sp_CuentaBancaria_Update",
-                new { r.IdCuentaBancaria, r.Banco, r.NroCuenta, r.Moneda, r.Activo, IdUsuarioAccion = idAccion },
-                commandType: CommandType.StoredProcedure);
         }
 
         // ---- SISOL participacion ----

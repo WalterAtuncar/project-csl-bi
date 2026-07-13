@@ -46,6 +46,13 @@ BEGIN
     FROM SigesoftDesarrollo_2.dbo.systemuser su
     LEFT JOIN SigesoftDesarrollo_2.dbo.person p ON p.v_PersonId = su.v_PersonId
     WHERE su.i_IsDeleted = 0
+      AND EXISTS (
+            SELECT 1
+            FROM SigesoftDesarrollo_2.dbo.systemuserrolenode sur
+            WHERE sur.i_SystemUserId = su.i_SystemUserId
+              AND sur.i_NodeId    = 9      -- nodo operativo 'San Lorenzo - Cajamarca'
+              AND sur.i_IsDeleted = 0      -- asignacion de rol vigente (col NULLABLE -> comparar = 0)
+          )
       AND (su.v_UserName LIKE @f
         OR p.v_FirstName LIKE @f
         OR p.v_FirstLastName LIKE @f

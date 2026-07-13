@@ -5,6 +5,7 @@ export { default as CostosPersonal } from './CostosPersonal';
 export { default as CajaDiaria } from './CajaDiaria';
 export { default as FlujoConsolidado } from './FlujoConsolidado';
 export { default as Rentabilidad } from './Rentabilidad';
+export { default as Honorarios } from './Honorarios';
 export { default as RentabilidadUnidades } from './RentabilidadUnidades';
 export { default as Sisol } from './Sisol';
 export { default as Compras } from './Compras';

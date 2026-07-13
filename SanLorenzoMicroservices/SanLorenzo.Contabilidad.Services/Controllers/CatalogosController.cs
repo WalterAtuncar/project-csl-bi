@@ -61,17 +61,9 @@ namespace Contabilidad.Controllers
         public IActionResult ProveedorCrear([FromBody] ProveedorCreateRequest req)
             => Ok(_repo.ProveedorCrear(req.Ruc, req.RazonSocial, req.Direccion, req.Email, User.UserId()));
 
-        // ---- Cuentas bancarias ----
+        // ---- Cuentas bancarias (solo lectura: catalogo de tesoreria legacy dbo.documento) ----
         [HttpGet("cuentas-bancarias")]
         public IActionResult Cuentas([FromQuery] bool soloActivos = false) => Ok(_repo.CuentaList(soloActivos));
-
-        [HttpPost("cuentas-bancarias")]
-        [Authorize(Roles = ESCRITURA)]
-        public IActionResult CuentaCrear([FromBody] CuentaBancariaCreateRequest r) => Ok(new { i_IdCuentaBancaria = _repo.CuentaInsert(r, User.UserId()) });
-
-        [HttpPut("cuentas-bancarias")]
-        [Authorize(Roles = ESCRITURA)]
-        public IActionResult CuentaActualizar([FromBody] CuentaBancariaUpdateRequest r) => Ok(new { i_IdCuentaBancaria = _repo.CuentaUpdate(r, User.UserId()) });
 
         // ---- SISOL participacion ----
         [HttpGet("sisol/participacion")]

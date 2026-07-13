@@ -282,13 +282,17 @@ const Rentabilidad: React.FC = () => {
       <div className="mt-6">
         <div className="mb-3">
           <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Rentabilidad por Consultorio</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Distribución de ingresos por consultorio (sin costo ni margen).</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Ingresos y egresos por consultorio; Resultado = Ingresos − Egresos.</p>
         </div>
         {loadingConsultorio && !consultorio && <p className="text-sm text-slate-400">Cargando...</p>}
         {consultorio && (
           <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ConsultorioBloque titulo="Asistencial" rows={asistencial} />
+              <ConsultorioBloque
+                titulo="Asistencial"
+                rows={asistencial}
+                nota="Egresos por consultorio = pagos de honorarios registrados en el módulo. OCUPACIONAL y otras unidades no llevan egresos por consultorio."
+              />
               <ConsultorioBloque
                 titulo="Ocupacional"
                 rows={ocupacional}
@@ -354,11 +358,13 @@ const ConsultorioBloque: React.FC<{ titulo: string; rows: RentabilidadConsultori
           <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
             <th className="px-3 py-2">Consultorio</th>
             <th className="px-3 py-2 text-right">Ingresos</th>
+            <th className="px-3 py-2 text-right">Egresos</th>
+            <th className="px-3 py-2 text-right">Resultado</th>
             <th className="px-3 py-2 text-right">% del grupo</th>
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 && <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400 text-xs">Sin datos</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={5} className="px-3 py-4 text-center text-slate-400 text-xs">Sin datos</td></tr>}
           {rows.map((r, i) => {
             const rowStyle = r.EsTotal
               ? 'font-bold bg-sky-50 dark:bg-sky-900/20'
@@ -369,6 +375,8 @@ const ConsultorioBloque: React.FC<{ titulo: string; rows: RentabilidadConsultori
               <tr key={i} className={`border-b border-slate-100 dark:border-slate-700/50 ${rowStyle}`}>
                 <td className="px-3 py-2 font-medium">{r.Consultorio}</td>
                 <td className="px-3 py-2 text-right">{money(r.Ingresos)}</td>
+                <td className="px-3 py-2 text-right text-rose-500">{r.Egresos ? money(r.Egresos) : '—'}</td>
+                <td className={`px-3 py-2 text-right font-medium ${r.Resultado >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{money(r.Resultado)}</td>
                 <td className="px-3 py-2 text-right text-slate-500 dark:text-slate-400">{r.PorcDelGrupo}%</td>
               </tr>
             );

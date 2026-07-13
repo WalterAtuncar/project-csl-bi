@@ -12,7 +12,10 @@ CREATE PROCEDURE conta.sp_Egreso_Insert
     -- Estado inicial (PLAN_EGRESO_UNIFICADO D3/D4). Params opcionales AL FINAL: retrocompatibles.
     -- sp_Compra_Clasificar sigue llamando con params viejos (POR_PAGAR) sin cambios.
     @Estado NVARCHAR(15) = 'POR_PAGAR', @FechaPago DATE = NULL,
-    @IdFormaPago INT = NULL, @IdCuentaBancaria INT = NULL
+    @IdFormaPago INT = NULL, @IdCuentaBancaria INT = NULL,
+    -- v3 (PLAN_HONORARIOS): consultorio (403) opcional AL FINAL. sp_PagoHonorario_Insert lo usa;
+    -- el resto de llamadores (sp_Compra_Clasificar, carga manual) lo omiten (queda NULL).
+    @IdConsultorio INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -39,13 +42,14 @@ BEGIN
     INSERT INTO conta.egreso (i_IdProveedor, i_IdEntidad, t_FechaDocumento, v_TipoDocumento, v_SerieNumero,
         i_IdCentroCosto, i_IdTipoGasto, v_Condicion, v_Moneda, d_TipoCambio, d_MontoBruto, d_IGV, d_MontoNeto,
         v_Estado, v_Glosa, i_IdCompra, i_InsertaIdUsuario,
-        t_FechaPago, i_IdFormaPago, i_IdCuentaBancaria)
+        t_FechaPago, i_IdFormaPago, i_IdCuentaBancaria, i_IdConsultorio)
     VALUES (@IdProveedor, @IdEntidad, @FechaDocumento, @TipoDocumento, @SerieNumero,
         @IdCentroCosto, @IdTipoGasto, @Condicion, @Moneda, @TipoCambio, @MontoBruto, @IGV, @neto,
         @Estado, @Glosa, @IdCompra, @IdUsuario,
         CASE WHEN @Estado = 'PAGADO' THEN @FechaPago END,
         CASE WHEN @Estado = 'PAGADO' THEN @IdFormaPago END,
-        CASE WHEN @Estado = 'PAGADO' THEN @IdCuentaBancaria END);
+        CASE WHEN @Estado = 'PAGADO' THEN @IdCuentaBancaria END,
+        @IdConsultorio);
     SET @id = SCOPE_IDENTITY();
     -- Auditoria: un unico evento INSERT; si nace PAGADO el detalle lo registra con su fecha de pago.
     DECLARE @det NVARCHAR(100) = CASE WHEN @Estado = 'PAGADO'
@@ -139,7 +143,9 @@ CREATE PROCEDURE conta.sp_Egreso_List
     @FechaDocDesde DATE = NULL, @FechaDocHasta DATE = NULL,
     @FechaPagoDesde DATE = NULL, @FechaPagoHasta DATE = NULL,
     @Estado NVARCHAR(15) = NULL, @IdCentroCosto INT = NULL, @IdTipoGasto INT = NULL,
-    @IdProveedor INT = NULL, @Page INT = 1, @PageSize INT = 50
+    @IdProveedor INT = NULL, @Page INT = 1, @PageSize INT = 50,
+    -- v3 (PLAN_HONORARIOS): filtro opcional por consultorio (403) AL FINAL. Retrocompatible.
+    @IdConsultorio INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -151,6 +157,9 @@ BEGIN
            tg.v_Nombre AS TipoGasto, tgraiz.v_SeccionFlujo AS Seccion,
            e.v_Condicion, e.v_Moneda, e.d_TipoCambio, e.d_MontoBruto, e.d_IGV, e.d_MontoNeto,
            e.v_Estado, e.t_FechaPago, e.i_IdFormaPago, e.v_Glosa,
+           -- v3: columnas nuevas AL FINAL (Dapper mapea por nombre; catalogo 403 NULL-safe).
+           e.i_IdConsultorio,
+           cons.v_Value1 COLLATE DATABASE_DEFAULT AS Consultorio,
            COUNT(*) OVER() AS TotalRows
     FROM conta.egreso e
     LEFT JOIN dbo.proveedores p ON p.id_proveedor = e.i_IdProveedor
@@ -158,6 +167,8 @@ BEGIN
     LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = e.i_IdCentroCosto
     LEFT JOIN conta.tipo_gasto tg ON tg.i_IdTipoGasto = e.i_IdTipoGasto
     LEFT JOIN conta.tipo_gasto tgraiz ON tgraiz.i_IdTipoGasto = ISNULL(tg.i_IdPadre, tg.i_IdTipoGasto)
+    LEFT JOIN SigesoftDesarrollo_2.dbo.systemparameter cons
+           ON cons.i_GroupId = 403 AND cons.i_ParameterId = e.i_IdConsultorio
     WHERE (@FechaDocDesde IS NULL OR e.t_FechaDocumento >= @FechaDocDesde)
       AND (@FechaDocHasta IS NULL OR e.t_FechaDocumento <= @FechaDocHasta)
       AND (@FechaPagoDesde IS NULL OR e.t_FechaPago >= @FechaPagoDesde)
@@ -166,6 +177,7 @@ BEGIN
       AND (@IdCentroCosto IS NULL OR e.i_IdCentroCosto = @IdCentroCosto)
       AND (@IdTipoGasto IS NULL OR e.i_IdTipoGasto = @IdTipoGasto)
       AND (@IdProveedor IS NULL OR e.i_IdProveedor = @IdProveedor)
+      AND (@IdConsultorio IS NULL OR e.i_IdConsultorio = @IdConsultorio)
     ORDER BY e.t_FechaDocumento DESC, e.i_IdEgreso DESC
     OFFSET @off ROWS FETCH NEXT @PageSize ROWS ONLY;
 END

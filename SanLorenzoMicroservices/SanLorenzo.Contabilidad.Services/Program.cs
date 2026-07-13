@@ -66,6 +66,7 @@ builder.Services.AddScoped<CajaRepository>();
 builder.Services.AddScoped<RentabilidadRepository>();
 builder.Services.AddScoped<SisolRepository>();
 builder.Services.AddScoped<CompraRepository>();
+builder.Services.AddScoped<HonorariosRepository>();
 
 // Cliente legacy para el login unificado (server-to-server; la contrasena solo transita).
 builder.Services.AddHttpClient<LegacyAuthClient>((sp, client) =>

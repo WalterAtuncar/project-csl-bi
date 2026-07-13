@@ -426,6 +426,9 @@ export interface RentabilidadConsultorioRow {
   Grupo: 'ASISTENCIAL' | 'OCUPACIONAL' | 'OTRAS_UNIDADES' | string;
   Consultorio: string;
   Ingresos: number;
+  // Egresos por consultorio = pagos de honorarios registrados en el módulo (Rentabilidad v2, FASE 1).
+  Egresos: number;
+  Resultado: number; // Ingresos − Egresos
   PorcDelGrupo: number;
   EsNoClasificado: boolean;
   EsTotal: boolean;
@@ -480,8 +483,6 @@ export interface TipoGastoCreate { IdPadre?: number | null; Codigo: string; Nomb
 export interface TipoGastoUpdate { IdTipoGasto: number; Nombre: string; SeccionFlujo?: string | null; Activo: boolean; }
 export interface EntidadCreate { Nombre: string; Tipo: string; }
 export interface EntidadUpdate { IdEntidad: number; Nombre: string; Tipo: string; Activo: boolean; }
-export interface CuentaBancariaCreate { Banco: string; NroCuenta: string; Moneda: string; }
-export interface CuentaBancariaUpdate { IdCuentaBancaria: number; Banco: string; NroCuenta: string; Moneda: string; Activo: boolean; }
 export interface SisolParticipacion { i_IdParticipacion: number; d_PorcClinica: number; d_PorcHospital: number; t_VigenciaDesde: string; t_VigenciaHasta: string | null; }
 export interface SisolParticipacionCreate { PorcClinica: number; PorcHospital: number; VigenciaDesde: string; }
 export interface SisolParticipacionUpdate { IdParticipacion: number; PorcClinica: number; PorcHospital: number; VigenciaDesde: string; }
@@ -512,6 +513,157 @@ export interface LegacyUsuarioBusqueda {
 }
 export interface VincularRequest { SystemUserId: number; Username: string; Nombre: string; Roles: string; }
 export interface VinculoUpdateRequest { IdUsuario: number; Roles: string; Activo: boolean; }
+
+// ---- Honorarios médicos (API conta /honorarios) ----
+// Tipos calcados de los DTOs de FASE 2 (JSON sin camelCase; los nombres coinciden 1:1 con el backend).
+
+// GET /honorarios/consultorios (catálogo systemparameter grupo 403).
+export interface HonorarioConsultorio {
+  Id: number;
+  Nombre: string;
+  PorcMedico: number | null;
+}
+
+// GET /honorarios/medicos?consultorioId=
+export interface HonorarioMedico {
+  MedicoTratanteId: number;
+  userName: string;
+  name: string;
+  consultorioId: number;
+  consultorio: string;
+  i_RoleId: number;
+}
+
+// GET /honorarios/profesionales?texto= (mín 3 chars)
+export interface HonorarioProfesional {
+  systemUserId: number;
+  personId: string;
+  userName: string;
+  Name: string;
+}
+
+// GET /honorarios/analisis — fila plana (una por servicio). Claves de registro: v_ServiceId + consultorioId.
+export interface AnalisisHonorarioRow {
+  idVenta: number;
+  formaPagoName: string;
+  serie: string;
+  numero: string;
+  fechaPago: string;
+  monto: number;
+  precioServicio: number;
+  cantidad: number;
+  montoPagadoReal: number;
+  total: number;
+  nombreServicio: string;
+  v_ComprobantePago: string;
+  v_ServiceId: string;
+  docNumberPaciente: string;
+  apPaternoPaciente: string;
+  apMaternoPaciente: string;
+  nombresPaciente: string;
+  medicoId: number;
+  nombreMedico: string;
+  especialidadMedico: string;
+  consultorio: string;
+  consultorioId: number;
+  tipoServicio: string;
+  edadPaciente: number | string | null;
+  PorcRef: number | null;
+  esPagado: number; // 0 | 1
+}
+
+// GET /honorarios/pagos (paginado server-side).
+export interface HonorarioPagoListItem {
+  i_IdPago: number;
+  t_FechaPago: string;
+  v_MedicoNombre: string;
+  i_MedicoId: number;
+  t_PeriodoDesde: string;
+  t_PeriodoHasta: string;
+  d_TotalPago: number;
+  d_TotalServicios: number;
+  NroConsultorios: number;
+  NroServicios: number;
+  v_Estado: 'PAGADO' | 'ANULADO' | string;
+}
+export interface HonorarioPagosResponse {
+  Total: number;
+  Items: HonorarioPagoListItem[];
+  Page: number;
+  PageSize: number;
+}
+export interface HonorarioPagosFilters {
+  desde?: string;
+  hasta?: string;
+  medicoId?: number;
+  incluirAnulados?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+// GET /honorarios/pagos/{id}
+export interface HonorarioPagoConsultorio {
+  i_IdConsultorio: number;
+  v_ConsultorioNombre: string;
+  d_MontoServicios: number;
+  d_MontoPago: number;
+  i_IdEgreso: number | null;
+  EgresoEstado: string | null;
+}
+export interface HonorarioPagoServicio {
+  v_ServiceId: string;
+  i_IdConsultorio: number;
+  d_Precio: number | null;
+  d_Porc: number | null;
+  d_Pagado: number | null;
+  b_Anulado: boolean;
+}
+// Cabecera del detalle: campos del List + los opcionales que solo expone el Get.
+export interface HonorarioPagoCabecera extends HonorarioPagoListItem {
+  d_PorcMedico?: number | null;
+  i_IdFormaPago?: number | null;
+  i_IdCuentaBancaria?: number | null;
+  v_Glosa?: string | null;
+  v_MotivoAnulacion?: string | null;
+}
+export interface HonorarioPagoDetalle {
+  Cabecera: HonorarioPagoCabecera;
+  Consultorios: HonorarioPagoConsultorio[];
+  Servicios: HonorarioPagoServicio[];
+}
+
+// POST /honorarios/pagos — el IdUsuario NO se manda (sale del JWT).
+export interface HonorarioServicioInput {
+  ServiceId: string;
+  IdConsultorio: number;
+  Precio?: number | null;
+  Porc?: number | null;
+  Pagado?: number | null;
+}
+export interface HonorarioPagoCreate {
+  MedicoId: number;
+  MedicoNombre: string;
+  Desde: string;
+  Hasta: string;
+  PorcMedico?: number | null;
+  FechaPago: string;
+  IdFormaPago?: number | null;
+  IdCuentaBancaria?: number | null;
+  Glosa?: string | null;
+  TotalServicios: number;
+  TotalPago: number;
+  Servicios: HonorarioServicioInput[];
+}
+export interface HonorarioPagoCreateResult {
+  i_IdPago: number;
+  Consultorios: {
+    i_IdConsultorio: number;
+    v_ConsultorioNombre: string;
+    d_MontoServicios: number;
+    d_MontoPago: number;
+    i_IdEgreso: number;
+  }[];
+}
 
 // ---- Compras ----
 export interface CompraRow {

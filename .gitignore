@@ -62,3 +62,6 @@ project.lock.json
 *.nuget.targets
 publish/
 storybook-static/
+
+# Build artifact del BI (no versionar)
+react-project/bi-react.zip

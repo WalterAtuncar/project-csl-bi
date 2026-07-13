@@ -1,8 +1,12 @@
-import React from 'react';
-import { NavLink, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
-import { Receipt, Users, LogOut, Calculator, Wallet, TrendingUp, PieChart, HeartPulse, Settings, ShieldCheck } from 'lucide-react';
+import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
+import ContaSidebar from './components/ContaSidebar';
+import ContaHeader from './components/ContaHeader';
+import Footer from '../../components/Layout/Footer';
 
 // 'need' controla la visibilidad: undefined = todos; 'write' = SA/CONTABILIDAD; 'SA' = solo SA.
 const navItems: { to: string; label: string; icon: React.ComponentType<{ className?: string }>; need?: 'write' | 'SA' }[] = [
@@ -12,8 +16,12 @@ const navItems: { to: string; label: string; icon: React.ComponentType<{ classNa
   // [SOFT-DELETE 2026-07-12] "Rentabilidad x Unidad" (/conta/rentabilidad-unidades) absorbida por
   // Rentabilidad.tsx (seccion Por Unidad). Entrada retirada del menu. Para restaurar, re-agregar:
   // { to: '/conta/rentabilidad-unidades', label: 'Rentabilidad x Unidad', icon: Building2 }, (reimportar Building2)
-  { to: '/conta/sisol', label: 'Liquidación SISOL', icon: HeartPulse },
+  // [SOFT-DELETE 2026-07-13] "Liquidacion SISOL" (/conta/sisol) retirada del menu: no fue solicitada.
+  // Se conserva SOLO la config de porcentajes en Catalogos -> tab "% SISOL". Para restaurar, reimportar
+  // HeartPulse arriba y re-agregar: { to: '/conta/sisol', label: 'Liquidación SISOL', icon: HeartPulse },
   { to: '/conta/egresos', label: 'Egresos', icon: Receipt },
+  // Visible a todos; las acciones de escritura (generar/anular pago) van gated por canWrite en la página.
+  { to: '/conta/honorarios', label: 'Honorarios Médicos', icon: Stethoscope },
   { to: '/conta/personal', label: 'Costos de Personal', icon: Users },
   // [SOFT-DELETE 2026-07-13] "Registro de Compras" (/conta/compras) retirada del menu: el registro
   // de egresos (/conta/egresos) unifico compras (receptor PROVEEDOR) + entidades. La bandeja fiscal
@@ -29,55 +37,66 @@ const ContaLayout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Estado del sidebar: abierto en desktop (>=1024), cerrado en mobile.
+  // (Mismo patrón que MainLayout: listener de resize + colapso al cambiar de ruta en mobile.)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 1024);
+
+  useEffect(() => {
+    const handleResize = () => setIsSidebarOpen(window.innerWidth >= 1024);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
+    }
+  }, [location.pathname]);
+
+  // El guard de auth va DESPUES de los hooks (reglas de hooks: no return antes de los hooks).
   if (!isAuthenticated) {
     return <Navigate to="/conta/login" replace state={{ from: location.pathname }} />;
   }
 
+  const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
   const doLogout = () => { logout(); navigate('/conta/login', { replace: true }); };
-  const visibleNav = navItems.filter((n) => !n.need || (n.need === 'write' ? canWrite : hasRole(n.need)));
+
+  // Nav plana ya filtrada por rol -> se pasa a ContaSidebar.
+  const visibleNav = navItems
+    .filter((n) => !n.need || (n.need === 'write' ? canWrite : hasRole(n.need)))
+    .map(({ to, label, icon }) => ({ to, label, icon }));
 
   return (
-    <div className="min-h-screen flex bg-slate-100 dark:bg-slate-900">
-      <aside className="w-60 shrink-0 bg-slate-800 text-slate-100 flex flex-col">
-        <div className="h-16 flex items-center gap-2 px-5 border-b border-slate-700">
-          <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center">
-            <Calculator className="h-5 w-5" />
-          </div>
-          <div className="leading-tight">
-            <div className="font-bold text-sm">Gestion Financiera</div>
-            <div className="text-[11px] text-slate-400">San Lorenzo</div>
-          </div>
-        </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {visibleNav.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${
-                  isActive ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-700'
-                }`
-              }
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="p-3 border-t border-slate-700">
-          <div className="px-3 py-2 text-xs text-slate-400">
-            <div className="font-semibold text-slate-200">{user?.Nombre || user?.Username}</div>
-            <div>{user?.Roles.join(', ')}</div>
-          </div>
-          <button onClick={doLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-700">
-            <LogOut className="h-4 w-4" /> Cerrar sesion
-          </button>
-        </div>
-      </aside>
+    <div className="w-full h-screen flex bg-gray-50 dark:bg-gray-900 text-primary dark:text-white">
+      {/* Sidebar fijo a la izquierda (réplica visual del principal, nav propia del conta) */}
+      <ContaSidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} items={visibleNav} />
 
-      <main className="flex-1 overflow-x-auto">
-        <Outlet />
-      </main>
+      {/* Contenedor principal con scroll propio + offset según el sidebar */}
+      <div
+        className={`w-full h-screen flex flex-col ${isSidebarOpen ? 'lg:ml-64' : 'lg:ml-16'} transition-all duration-300 text-primary dark:text-white`}
+      >
+        {/* Header fijo (auth y logout PROPIOS del conta) */}
+        <ContaHeader toggleSidebar={toggleSidebar} user={user} onLogout={doLogout} />
+
+        {/* Contenido principal con scroll */}
+        <div className="flex-1 overflow-y-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              {/* NOTA: sin padding p-4 aquí; las páginas del conta ya traen su propio p-6. */}
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Footer integrado en el scroll del contenido */}
+          <Footer />
+        </div>
+      </div>
 
       <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
     </div>

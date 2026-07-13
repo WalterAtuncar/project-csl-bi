@@ -19,7 +19,7 @@ namespace Contabilidad.Repositories
                 r.IdCentroCosto, r.IdTipoGasto, r.Condicion, r.Moneda, r.TipoCambio,
                 r.MontoBruto, r.IGV, r.Glosa, r.IdCompra, IdUsuario = idUsuario,
                 Estado = string.IsNullOrWhiteSpace(r.Estado) ? "POR_PAGAR" : r.Estado,
-                r.FechaPago, r.IdFormaPago, r.IdCuentaBancaria
+                r.FechaPago, r.IdFormaPago, r.IdCuentaBancaria, r.IdConsultorio
             }, commandType: CommandType.StoredProcedure);
         }
 

@@ -47,11 +47,11 @@ vinculacion de usuarios del sistema legacy (`systemuser`, solo SELECT cross-DB).
 la resuelve el API conta contra `/Auth/Login` del legacy; la autorizacion (rol) la resuelve el
 vinculo. `sp/01` fue extendido (GetUsuario devuelve v_AuthOrigen; List devuelve origen/username legacy).
 
-## Inventario (17 tablas en `conta`)
+## Inventario (16 tablas en `conta`)
 
 | Bloque | Tablas |
 |---|---|
-| Catálogos | `centro_costo`, `tipo_gasto`, `entidad`, `cuenta_bancaria`, `sisol_participacion`, `config` |
+| Catálogos | `centro_costo`, `tipo_gasto`, `entidad`, `sisol_participacion`, `config` (cuentas bancarias = espejo de solo lectura del legacy `dbo.documento`, ver `ddl/09`) |
 | Identity/auditoría | `usuario`, `rol`, `usuario_rol`, `auditoria` |
 | Egresos | `egreso`, `costo_personal` |
 | Caja | `saldo_caja`, `saldo_banco_mensual` |

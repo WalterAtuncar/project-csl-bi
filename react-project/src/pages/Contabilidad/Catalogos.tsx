@@ -168,41 +168,23 @@ const EntidadesTab: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
   );
 };
 
-// ---- Cuentas bancarias ----
-const CuentasTab: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
+// ---- Cuentas bancarias (solo lectura: espejo del catálogo de tesorería legacy) ----
+const CuentasTab: React.FC<{ canWrite: boolean }> = () => {
   const [rows, setRows] = useState<CuentaBancaria[]>([]);
-  const [open, setOpen] = useState(false);
-  const [edit, setEdit] = useState<CuentaBancaria | null>(null);
-  const [form, setForm] = useState({ Banco: '', NroCuenta: '', Moneda: 'PEN' });
   const load = useCallback(async () => { try { setRows(await contabilidadService.cuentasBancarias(false)); } catch (e) { toast.error(String(e)); } }, []);
   useEffect(() => { load(); }, [load]);
-  const save = async () => {
-    try {
-      if (edit) await contabilidadService.cuentaActualizar({ IdCuentaBancaria: edit.i_IdCuentaBancaria, Banco: form.Banco, NroCuenta: form.NroCuenta, Moneda: form.Moneda, Activo: true });
-      else await contabilidadService.cuentaCrear({ Banco: form.Banco, NroCuenta: form.NroCuenta, Moneda: form.Moneda });
-      toast.success('Guardado'); setOpen(false); load();
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Error'); }
-  };
   return (
-    <Panel title="Cuentas bancarias" canWrite={canWrite} onNew={() => { setEdit(null); setForm({ Banco: '', NroCuenta: '', Moneda: 'PEN' }); setOpen(true); }}>
-      <Table head={['Banco', 'Nro. cuenta', 'Moneda', 'Activo', '']}>
+    <Panel title="Cuentas bancarias" subtitle="Catálogo de tesorería (legacy) · solo lectura" canWrite={false}>
+      <Table head={['Banco', 'Nro. cuenta', 'Moneda', 'Activo']}>
         {rows.map((r) => (
           <tr key={r.i_IdCuentaBancaria} className="border-b border-slate-100 dark:border-slate-700/50">
             <td className="px-3 py-1.5 font-medium">{r.v_Banco}</td>
             <td className="px-3 py-1.5">{r.v_NroCuenta}</td>
             <td className="px-3 py-1.5">{r.v_Moneda}</td>
             <td className="px-3 py-1.5">{r.b_Activo ? 'Sí' : 'No'}</td>
-            <td className="px-3 py-1.5 text-right">{canWrite && <IconBtn onClick={() => { setEdit(r); setForm({ Banco: r.v_Banco, NroCuenta: r.v_NroCuenta, Moneda: r.v_Moneda }); setOpen(true); }} />}</td>
           </tr>
         ))}
       </Table>
-      {open && (
-        <Modal title={edit ? 'Editar cuenta' : 'Nueva cuenta'} onClose={() => setOpen(false)} onSave={save}>
-          <Field label="Banco"><input value={form.Banco} onChange={(e) => setForm({ ...form, Banco: e.target.value })} className={inp} /></Field>
-          <Field label="Nro. cuenta"><input value={form.NroCuenta} onChange={(e) => setForm({ ...form, NroCuenta: e.target.value })} className={inp} /></Field>
-          <Field label="Moneda"><select value={form.Moneda} onChange={(e) => setForm({ ...form, Moneda: e.target.value })} className={inp}><option>PEN</option><option>USD</option></select></Field>
-        </Modal>
-      )}
     </Panel>
   );
 };
@@ -278,11 +260,14 @@ const ConfigTab: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
 };
 
 // ---- shared UI ----
-const Panel: React.FC<{ title: string; canWrite: boolean; onNew: () => void; children: React.ReactNode }> = ({ title, canWrite, onNew, children }) => (
+const Panel: React.FC<{ title: string; subtitle?: string; canWrite: boolean; onNew?: () => void; children: React.ReactNode }> = ({ title, subtitle, canWrite, onNew, children }) => (
   <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
     <div className="flex items-center justify-between mb-3">
-      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
-      {canWrite && <button onClick={onNew} className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700"><Plus className="h-4 w-4" /> Nuevo</button>}
+      <div>
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
+        {subtitle && <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{subtitle}</p>}
+      </div>
+      {canWrite && onNew && <button onClick={onNew} className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700"><Plus className="h-4 w-4" /> Nuevo</button>}
     </div>
     <div className="overflow-x-auto">{children}</div>
   </div>

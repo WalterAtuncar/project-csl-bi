@@ -129,10 +129,9 @@ JOIN conta.tipo_gasto p ON p.v_Codigo = s.padcod
 WHERE NOT EXISTS (SELECT 1 FROM conta.tipo_gasto tg WHERE tg.v_Codigo = s.cod);
 
 -- ---------- Cuentas bancarias ----------
-INSERT INTO conta.cuenta_bancaria (v_Banco, v_NroCuenta, v_Moneda, i_InsertaIdUsuario)
-SELECT b, 'POR-DEFINIR', 'PEN', 1
-FROM (VALUES ('INTERBANK'),('BCP'),('BBVA')) s(b)
-WHERE NOT EXISTS (SELECT 1 FROM conta.cuenta_bancaria cb WHERE cb.v_Banco = s.b);
+-- DEPRECADO (2026-07-13): ya no se siembra un catalogo paralelo. Las cuentas
+-- bancarias son un espejo de solo lectura del legacy dbo.documento (i_Naturaleza=3),
+-- servido por conta.sp_CuentaBancaria_List. Ver ddl/09_deprecate_cuenta_bancaria.sql.
 
 -- ---------- Entidades (asociados y convenios) ----------
 INSERT INTO conta.entidad (v_Nombre, v_Tipo, i_InsertaIdUsuario)

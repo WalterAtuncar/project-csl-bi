@@ -1,3 +1,6 @@
+// [SOFT-DELETE 2026-07-13] Pagina "Liquidacion SISOL" retirada del routing/menu: no fue solicitada.
+// La ruta /conta/sisol redirige a /conta/catalogos. Se CONSERVA la configuracion de porcentajes en
+// Catalogos -> tab "% SISOL". Este componente permanece en disco para restauracion futura.
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Calculator, CreditCard, Plus, Trash2, Building2, HeartPulse, RefreshCw } from 'lucide-react';
