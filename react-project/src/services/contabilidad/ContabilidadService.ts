@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { loaderService } from '../LoaderService';
 import type {
   ContaLoginResponse, CentroCosto, TipoGasto, Entidad, CuentaBancaria,
   Egreso, EgresoListResponse, EgresoCreate, EgresoUpdate, EgresoPagar,
@@ -17,26 +18,54 @@ export interface EgresoFilters {
   page?: number; pageSize?: number;
 }
 
+// Config de axios extendida: cualquier request puede desactivar el loader global con
+// { skipLoader: true } (p.ej. sondeos silenciosos). Estructural para no importar tipos de axios.
+type ContaRequestConfig = { skipLoader?: boolean; method?: string; url?: string };
+
+// Mensaje del loader segun metodo/endpoint (paridad con el interceptor del legacy, BaseApiService).
+const mensajeLoader = (method?: string, url?: string): string => {
+  const u = (url || '').toLowerCase();
+  const m = (method || 'get').toLowerCase();
+  if (u.includes('/auth/login')) return 'Iniciando sesión...';
+  if (u.includes('/auth/logout')) return 'Cerrando sesión...';
+  if (m === 'post') return 'Guardando datos...';
+  if (m === 'put' || m === 'patch') return 'Actualizando información...';
+  if (m === 'delete') return 'Eliminando registro...';
+  return 'Cargando información...';
+};
+
 class ContabilidadService {
   private http: AxiosInstance;
 
   constructor() {
     this.http = axios.create({ baseURL: CONTA_BASE, timeout: 30000 });
 
-    // Interceptor: inyecta el JWT del modulo de contabilidad.
-    this.http.interceptors.request.use((config) => {
-      const token = this.getToken();
-      if (token) {
-        config.headers = config.headers || {};
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      return config;
-    });
+    // Interceptor de request: dispara el loader global (el MISMO del legacy, HeartBeatLoader via
+    // loaderService) e inyecta el JWT. El requestCount del loaderService balancea las llamadas
+    // concurrentes (p.ej. los Promise.all de las pantallas). Se puede saltar con { skipLoader: true }.
+    this.http.interceptors.request.use(
+      (config) => {
+        if (!(config as ContaRequestConfig).skipLoader) {
+          loaderService.show(mensajeLoader(config.method, config.url));
+        }
+        const token = this.getToken();
+        if (token) {
+          config.headers = config.headers || {};
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => { loaderService.hide(); return Promise.reject(error); },
+    );
 
-    // Interceptor de respuesta: 401 -> limpia sesion; normaliza mensaje de error.
+    // Interceptor de respuesta: oculta el loader (exito y error); 401 -> limpia sesion; normaliza mensaje.
     this.http.interceptors.response.use(
-      (r) => r,
+      (r) => {
+        if (!(r.config as ContaRequestConfig).skipLoader) loaderService.hide();
+        return r;
+      },
       (error: AxiosError) => {
+        if (!(error.config as ContaRequestConfig | undefined)?.skipLoader) loaderService.hide();
         if (error.response?.status === 401) {
           this.clearToken();
           window.dispatchEvent(new CustomEvent('conta:logout'));
