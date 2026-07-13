@@ -165,6 +165,13 @@ namespace Contabilidad.Models
         public string Ruc { get; set; }
         public string RazonSocial { get; set; }
     }
+    public class ProveedorCreateRequest
+    {
+        public string Ruc { get; set; }
+        public string RazonSocial { get; set; }
+        public string Direccion { get; set; }
+        public string Email { get; set; }
+    }
 
     public class CuentaBancariaRow
     {

@@ -8,7 +8,7 @@ import contabilidadService from '../../services/contabilidad/ContabilidadService
 import { useContaAuth } from '../../context/ContaAuthContext';
 import SearchableSelect from './components/SearchableSelect';
 import type {
-  Egreso, CentroCosto, TipoGasto, Entidad, CuentaBancaria, ProveedorRow,
+  Egreso, CentroCosto, TipoGasto, Entidad, CuentaBancaria, ProveedorRow, ProveedorCreate,
   EgresoCreate, EgresoCargaFila, EgresoCargaResultado, EstadoEgreso,
 } from '../../services/contabilidad/contaTypes';
 
@@ -87,6 +87,13 @@ const Egresos: React.FC = () => {
   const [pago, setPago] = useState({ FechaPago: today(), IdFormaPago: 1, IdCuentaBancaria: 0 });
   const [cargaResult, setCargaResult] = useState<EgresoCargaResultado | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // --- alta IN-LIVE de proveedor desde el modal de egreso (modal anidado sobre el de egreso) ---
+  const [nuevoProvOpen, setNuevoProvOpen] = useState(false);
+  const [nuevoProv, setNuevoProv] = useState<ProveedorCreate>({ Ruc: '', RazonSocial: '', Direccion: '', Email: '' });
+  const [savingProv, setSavingProv] = useState(false);
+  // RUC de 11 digitos + razon social no vacia (valida en front antes del POST; el backend re-valida).
+  const provValido = /^\d{11}$/.test(nuevoProv.Ruc.trim()) && nuevoProv.RazonSocial.trim().length > 0;
 
   // Rango del periodo elegido: gobierna min/max del date-input de FechaDocumento (D2).
   const periodoMin = firstDayOfMonth(periodo.anio, periodo.mes);
@@ -228,6 +235,32 @@ const Egresos: React.FC = () => {
       }
       setFormOpen(false); setPage(1); load();
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Error al guardar'); }
+  };
+
+  // ---- alta IN-LIVE de proveedor ----
+  // Crea el proveedor sin salir del modal de egreso: actualiza el catalogo local con el row que
+  // devuelve el backend (sin re-fetch), lo auto-selecciona en el egreso y cierra SOLO el anidado.
+  // Ante un 400 de negocio (RUC duplicado/invalido) muestra el mensaje y NO cierra para que corrija.
+  const saveProveedor = async () => {
+    setSavingProv(true);
+    try {
+      const nuevo = await contabilidadService.proveedorCrear({
+        Ruc: nuevoProv.Ruc.trim(),
+        RazonSocial: nuevoProv.RazonSocial.trim(),
+        Direccion: nuevoProv.Direccion?.trim() || null,
+        Email: nuevoProv.Email?.trim() || null,
+      });
+      setProveedores((prev) => [...prev, nuevo].sort((a, b) => a.RazonSocial.localeCompare(b.RazonSocial)));
+      setTipoReceptor('PROVEEDOR');
+      setForm((f) => ({ ...f, IdProveedor: nuevo.i_IdProveedor, IdEntidad: null }));
+      toast.success('Proveedor creado');
+      setNuevoProvOpen(false);
+      setNuevoProv({ Ruc: '', RazonSocial: '', Direccion: '', Email: '' });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al crear proveedor');
+    } finally {
+      setSavingProv(false);
+    }
   };
 
   // ---- pagar / anular ----
@@ -438,13 +471,26 @@ const Egresos: React.FC = () => {
             </Field>
             <Field label={tipoReceptor === 'PROVEEDOR' ? 'Proveedor' : 'Entidad'} full required>
               {tipoReceptor === 'PROVEEDOR' ? (
-                <SearchableSelect
-                  value={form.IdProveedor ?? null}
-                  options={proveedores.map((p) => ({ value: p.i_IdProveedor, label: p.Ruc ? `${p.RazonSocial} · ${p.Ruc}` : p.RazonSocial }))}
-                  onChange={(v) => setForm({ ...form, IdProveedor: v, IdEntidad: null })}
-                  placeholder="Seleccione proveedor..."
-                  className={selCls}
-                />
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <SearchableSelect
+                      value={form.IdProveedor ?? null}
+                      options={proveedores.map((p) => ({ value: p.i_IdProveedor, label: p.Ruc ? `${p.RazonSocial} · ${p.Ruc}` : p.RazonSocial }))}
+                      onChange={(v) => setForm({ ...form, IdProveedor: v, IdEntidad: null })}
+                      placeholder="Seleccione proveedor..."
+                      className={selCls}
+                    />
+                  </div>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      onClick={() => { setNuevoProv({ Ruc: '', RazonSocial: '', Direccion: '', Email: '' }); setNuevoProvOpen(true); }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 whitespace-nowrap shrink-0"
+                    >
+                      <Plus className="h-4 w-4" /> Nuevo
+                    </button>
+                  )}
+                </div>
               ) : (
                 <SearchableSelect
                   value={form.IdEntidad ?? null}
@@ -544,6 +590,45 @@ const Egresos: React.FC = () => {
         </Modal>
       )}
 
+      {/* modal anidado: nuevo proveedor (se pinta DESPUES del de egreso -> queda encima; su click-fuera
+          solo cierra el anidado, el modal de egreso sigue abierto con su estado intacto). */}
+      {nuevoProvOpen && (
+        <Modal
+          title="Nuevo proveedor"
+          onClose={() => setNuevoProvOpen(false)}
+          onSave={saveProveedor}
+          saveDisabled={!provValido || savingProv}
+          zClass="z-[60]"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="RUC" required>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={11}
+                value={nuevoProv.Ruc}
+                onChange={(e) => setNuevoProv({ ...nuevoProv, Ruc: e.target.value.replace(/\D/g, '') })}
+                placeholder="11 digitos"
+                className={selCls}
+              />
+            </Field>
+            <Field label="Razon social" required>
+              <input type="text" value={nuevoProv.RazonSocial} onChange={(e) => setNuevoProv({ ...nuevoProv, RazonSocial: e.target.value })} className={selCls} />
+            </Field>
+            <Field label="Direccion" full>
+              <input type="text" value={nuevoProv.Direccion ?? ''} onChange={(e) => setNuevoProv({ ...nuevoProv, Direccion: e.target.value })} className={selCls} />
+            </Field>
+            <Field label="Email" full>
+              <input type="email" value={nuevoProv.Email ?? ''} onChange={(e) => setNuevoProv({ ...nuevoProv, Email: e.target.value })} className={selCls} />
+            </Field>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-2">
+            <span className="text-rose-500">*</span> RUC (11 digitos) y razon social son obligatorios.
+            {!provValido && ' Complete los obligatorios para habilitar Guardar.'}
+          </p>
+        </Modal>
+      )}
+
       {/* modal pagar */}
       {pagarFor && (
         <Modal title={`Pagar egreso #${pagarFor.i_IdEgreso}`} onClose={() => setPagarFor(null)} onSave={doPagar} saveLabel="Confirmar pago">
@@ -630,8 +715,8 @@ const Segmented: React.FC<{ value: string; onChange: (v: string) => void; option
   </div>
 );
 
-const Modal: React.FC<{ title: string; onClose: () => void; onSave?: () => void; saveLabel?: string; hideSave?: boolean; saveDisabled?: boolean; children: React.ReactNode }> = ({ title, onClose, onSave, saveLabel = 'Guardar', hideSave, saveDisabled, children }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+const Modal: React.FC<{ title: string; onClose: () => void; onSave?: () => void; saveLabel?: string; hideSave?: boolean; saveDisabled?: boolean; zClass?: string; children: React.ReactNode }> = ({ title, onClose, onSave, saveLabel = 'Guardar', hideSave, saveDisabled, zClass = 'z-50', children }) => (
+  <div className={`fixed inset-0 ${zClass} flex items-center justify-center bg-black/40 p-4`} onClick={onClose}>
     <div className="w-full max-w-2xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700">
         <h3 className="font-semibold text-slate-800 dark:text-slate-100">{title}</h3>

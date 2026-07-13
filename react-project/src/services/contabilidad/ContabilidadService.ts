@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { loaderService } from '../LoaderService';
 import type {
-  ContaLoginResponse, CentroCosto, TipoGasto, Entidad, CuentaBancaria, ProveedorRow,
+  ContaLoginResponse, CentroCosto, TipoGasto, Entidad, CuentaBancaria, ProveedorRow, ProveedorCreate,
   Egreso, EgresoListResponse, EgresoCreate, EgresoUpdate, EgresoPagar,
   EgresoCargaFila, EgresoCargaResultado, CostoPersonal, CostoPersonalUpsert,
   CajaDiaRow, FlujoConsolidado, FlujoDetallado, CerrarMesResultado, FormaPagoRow,
@@ -121,6 +121,13 @@ class ContabilidadService {
   // Catalogo de proveedores (dbo.proveedores) para el toggle receptor del egreso unificado.
   async proveedores(soloActivos = true): Promise<ProveedorRow[]> {
     const { data } = await this.http.get<ProveedorRow[]>('/proveedores', { params: { soloActivos } });
+    return data;
+  }
+  // Alta de proveedor IN-LIVE (POST /proveedores) desde el modal de egreso. Devuelve el ProveedorRow
+  // creado (i_IdProveedor/Ruc/RazonSocial) para actualizar el catalogo y auto-seleccionarlo. El
+  // interceptor ya inyecta el token y normaliza los 400 de negocio a Error(message).
+  async proveedorCrear(r: ProveedorCreate): Promise<ProveedorRow> {
+    const { data } = await this.http.post<ProveedorRow>('/proveedores', r);
     return data;
   }
 

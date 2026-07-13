@@ -294,3 +294,37 @@ BEGIN
     ORDER BY p.razon_social;
 END
 GO
+
+-- Alta de proveedor nuevo desde el modulo de egresos.
+-- INSERT en dbo.proveedores PERMITIDO (es DML, no ALTER; tabla creada por el BI). Ver seed 03_seeds.sql.
+-- Solo escribe la fila; jamas altera estructura ni toca las otras filas. Auditoria en conta.auditoria.
+-- Devuelve el contrato que el backend mapea a ProveedorDto: i_IdProveedor / Ruc / RazonSocial.
+IF OBJECT_ID('conta.sp_Proveedor_Insert','P') IS NOT NULL DROP PROCEDURE conta.sp_Proveedor_Insert;
+GO
+CREATE PROCEDURE conta.sp_Proveedor_Insert
+    @Ruc NVARCHAR(30), @RazonSocial NVARCHAR(400), @Direccion NVARCHAR(600) = NULL,
+    @Email NVARCHAR(200) = NULL, @IdUsuario INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET @Ruc = LTRIM(RTRIM(@Ruc));
+    SET @RazonSocial = LTRIM(RTRIM(@RazonSocial));
+
+    IF @Ruc IS NULL OR LEN(@Ruc) = 0
+    BEGIN RAISERROR('El RUC es obligatorio.', 16, 1); RETURN; END
+    IF NOT (LEN(@Ruc) = 11 AND @Ruc NOT LIKE '%[^0-9]%')
+    BEGIN RAISERROR('El RUC debe tener 11 digitos numericos.', 16, 1); RETURN; END
+    IF @RazonSocial IS NULL OR LEN(@RazonSocial) = 0
+    BEGIN RAISERROR('La razon social es obligatoria.', 16, 1); RETURN; END
+    IF EXISTS (SELECT 1 FROM dbo.proveedores WHERE ruc = @Ruc)
+    BEGIN RAISERROR('Ya existe un proveedor con ese RUC.', 16, 1); RETURN; END
+
+    INSERT INTO dbo.proveedores (ruc, razon_social, direccion, email, activo, fecha_registro)
+    VALUES (@Ruc, @RazonSocial, NULLIF(LTRIM(RTRIM(@Direccion)), ''), NULLIF(LTRIM(RTRIM(@Email)), ''), 1, GETDATE());
+    DECLARE @id INT = SCOPE_IDENTITY();
+
+    EXEC conta.sp_Auditoria_Insert 'dbo.proveedores', @id, 'INSERT', @RazonSocial, @IdUsuario;
+
+    SELECT @id AS i_IdProveedor, @Ruc AS Ruc, @RazonSocial AS RazonSocial;
+END
+GO

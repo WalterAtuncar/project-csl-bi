@@ -67,6 +67,15 @@ export interface ProveedorRow {
   RazonSocial: string;
 }
 
+// Alta de proveedor IN-LIVE desde el modal de egreso (POST /proveedores -> devuelve ProveedorRow).
+// Calca el ProveedorCreateDto del backend (JSON sin camelCase). Direccion/Email opcionales.
+export interface ProveedorCreate {
+  Ruc: string;
+  RazonSocial: string;
+  Direccion?: string | null;
+  Email?: string | null;
+}
+
 export type EstadoEgreso = 'POR_PAGAR' | 'PAGADO' | 'ANULADO';
 
 export interface Egreso {

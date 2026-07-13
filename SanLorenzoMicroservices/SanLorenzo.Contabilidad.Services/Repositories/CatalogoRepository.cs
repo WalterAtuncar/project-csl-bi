@@ -75,12 +75,19 @@ namespace Contabilidad.Repositories
                 commandType: CommandType.StoredProcedure);
         }
 
-        // ---- Proveedor (dbo.proveedores, solo lectura) ----
+        // ---- Proveedor (dbo.proveedores) ----
         public IEnumerable<ProveedorDto> Proveedores(bool soloActivos)
         {
             using var cn = _db.Open();
             return cn.Query<ProveedorDto>("conta.sp_Proveedor_List",
                 new { SoloActivos = soloActivos }, commandType: CommandType.StoredProcedure);
+        }
+        public ProveedorDto ProveedorCrear(string ruc, string razonSocial, string direccion, string email, int idUsuario)
+        {
+            using var cn = _db.Open();
+            return cn.QueryFirst<ProveedorDto>("conta.sp_Proveedor_Insert",
+                new { Ruc = ruc, RazonSocial = razonSocial, Direccion = direccion, Email = email, IdUsuario = idUsuario },
+                commandType: CommandType.StoredProcedure);
         }
 
         // ---- Cuenta bancaria ----
