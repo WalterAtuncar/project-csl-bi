@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { Wallet, TrendingUp, TrendingDown, RefreshCw, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 import type { CajaDiaRow, CajaIndicadores, FormaPagoRow, CuadreDiaResponse } from '../../services/contabilidad/contaTypes';
 import MediosPagoFilterCard from './components/MediosPagoFilterCard';
+import ReconciliacionCajaMayorCard from './components/ReconciliacionCajaMayorCard';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -99,6 +101,20 @@ const CajaDiaria: React.FC = () => {
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [cuadre]);
 
+  // Cuadre agrupado por TIPO DE CAJA (unidad: asistencial, ocupacional, farmacia, ...).
+  // GroupBy client-side sobre los Ingresos del cuadre (el detalle ya trae Unidad, D5), orden desc.
+  const totalesPorTipoCaja = useMemo(() => {
+    if (!cuadre) return [] as [string, number][];
+    const map = new Map<string, number>();
+    cuadre.Ingresos.forEach((i) => {
+      const k = i.Unidad || 'SIN TIPO DE CAJA';
+      map.set(k, (map.get(k) || 0) + i.Monto);
+    });
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [cuadre]);
+  const maxTipoCaja = totalesPorTipoCaja.length ? totalesPorTipoCaja[0][1] : 0;
+  const maxFormaPago = totalesPorFormaPago.length ? totalesPorFormaPago[0][1] : 0;
+
   const totalIngresosCuadre = useMemo(() => (cuadre ? cuadre.Ingresos.reduce((s, i) => s + i.Monto, 0) : 0), [cuadre]);
   const totalEgresosCuadre = useMemo(() => (cuadre ? cuadre.Egresos.reduce((s, e) => s + e.Monto, 0) : 0), [cuadre]);
   const netoDia = totalIngresosCuadre - totalEgresosCuadre;
@@ -123,6 +139,9 @@ const CajaDiaria: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* indicador de la reconciliación de la CAJA MAYOR LEGACY (tubería distinta de esta Caja Diaria) */}
+      <ReconciliacionCajaMayorCard />
 
       {/* filtro por medio de pago (liquidez) */}
       <MediosPagoFilterCard
@@ -252,12 +271,26 @@ const CajaDiaria: React.FC = () => {
               {/* bloque fijo: separadores + *****TOTAL***** por forma de pago + pie */}
               <div className="mt-2 font-mono text-xs tabular-nums">
                 <div className="text-slate-300 dark:text-slate-600 overflow-hidden whitespace-nowrap select-none leading-none">{RULE}</div>
-                {totalesPorFormaPago.map(([fp, monto]) => (
-                  <div key={fp} className="flex justify-between gap-2 py-0.5 text-slate-600 dark:text-slate-300">
-                    <span className="whitespace-nowrap"><span className="text-emerald-600 dark:text-emerald-400">*****TOTAL*****</span> {fp}</span>
-                    <span className="whitespace-nowrap">S/ {money(monto)}</span>
-                  </div>
-                ))}
+                {totalesPorFormaPago.map(([fp, monto], idx) => {
+                  const barPct = maxFormaPago > 0 ? (monto / maxFormaPago) * 100 : 0;
+                  const pct = totalIngresosCuadre > 0 ? (monto / totalIngresosCuadre) * 100 : 0;
+                  return (
+                    // key incluye el dia => re-dispara la animacion de llenado al cambiar de dia
+                    <div key={`${diaSeleccionado}-fp-${fp}`} className="relative overflow-hidden rounded">
+                      <motion.div
+                        className="absolute inset-y-0 left-0 rounded bg-secondary/10 dark:bg-secondary/20"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${barPct}%` }}
+                        transition={{ duration: 0.9, ease: 'easeOut', delay: idx * 0.12 }}
+                      />
+                      <div className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-0.5 px-1.5 text-slate-600 dark:text-slate-300">
+                        <span className="truncate"><span className="font-semibold text-secondary dark:text-red-400">*****TOTAL*****</span> {fp}</span>
+                        <span className="font-sans text-[11px] font-semibold text-center text-secondary dark:text-red-400 tabular-nums">{pct.toFixed(1)}%</span>
+                        <span className="text-right whitespace-nowrap">S/ {money(monto)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
                 <div className="text-slate-300 dark:text-slate-600 overflow-hidden whitespace-nowrap select-none leading-none">{RULE}</div>
                 <div className="flex justify-between py-0.5">
                   <span className="text-slate-500 dark:text-slate-400">Total ingresos</span>
@@ -271,6 +304,42 @@ const CajaDiaria: React.FC = () => {
                   <span className="font-bold text-slate-700 dark:text-slate-100">NETO DEL DÍA</span>
                   <span className={`font-bold ${netoDia >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>S/ {money(netoDia)}</span>
                 </div>
+
+                {/* Cuadre por tipo de caja: ingresos del dia agrupados por unidad, mayor a menor */}
+                {totalesPorTipoCaja.length > 0 && (
+                  <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <div className="mb-1.5 flex items-baseline justify-between font-sans">
+                      <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
+                        Cuadre por tipo de caja
+                        {filtroActivo && <span className="ml-1 normal-case font-normal text-amber-500">(ingresos filtrados)</span>}
+                      </span>
+                      <span className="text-[10px] text-slate-400">ingresos por unidad</span>
+                    </div>
+                    <div className="space-y-1">
+                      {totalesPorTipoCaja.map(([unidad, monto], idx) => {
+                        const pct = totalIngresosCuadre > 0 ? (monto / totalIngresosCuadre) * 100 : 0;
+                        const barPct = maxTipoCaja > 0 ? (monto / maxTipoCaja) * 100 : 0;
+                        return (
+                          // key incluye el dia => remonta y re-dispara la animacion de llenado al cambiar de dia
+                          <div key={`${diaSeleccionado}-${unidad}`} className="relative overflow-hidden rounded">
+                            <motion.div
+                              className="absolute inset-y-0 left-0 rounded bg-indigo-100 dark:bg-indigo-500/20"
+                              initial={{ width: 0 }}
+                              animate={{ width: `${barPct}%` }}
+                              transition={{ duration: 0.9, ease: 'easeOut', delay: idx * 0.12 }}
+                            />
+                            <div className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-1.5 py-0.5">
+                              <span className="font-sans text-[11px] text-slate-600 dark:text-slate-300 truncate">{unidad}</span>
+                              <span className="font-sans text-[11px] font-semibold text-center text-primary dark:text-blue-300 tabular-nums">{pct.toFixed(1)}%</span>
+                              <span className="text-right text-slate-700 dark:text-slate-200 whitespace-nowrap">S/ {money(monto)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-2 text-[10px] font-sans text-slate-400 dark:text-slate-500">Dinero en caja: — · Depósito día ant.: — · Nro. operación: —</div>
               </div>
             </>
