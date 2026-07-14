@@ -88,6 +88,32 @@ BEGIN
         RAISERROR(@msg, 16, 1); RETURN;
     END
 
+    -- 2b) Un mismo servicio no puede llegar bajo DOS consultorios distintos: el indice unico
+    --     UX_pago_hon_serv_activo es SOLO sobre v_ServiceId (sin consultorio), asi que tras la
+    --     deduplicacion por (v_ServiceId,i_IdConsultorio) del paso 7 seguirian siendo 2 filas activas
+    --     y colisionarian igual. Defensivo: el analisis asigna UN solo consultorio por servicio
+    --     (protocol.i_Consultorio), por lo que esto NO deberia dispararse en operacion normal; atrapa
+    --     TVPs malformadas y las convierte en el RAISERROR amistoso (front: /ya pagad/i) en lugar del
+    --     error crudo del indice.
+    DECLARE @multiCons NVARCHAR(MAX) =
+    (
+        SELECT STUFF((
+            SELECT ', ' + x.v_ServiceId
+            FROM (
+                SELECT s.v_ServiceId
+                FROM @Servicios s
+                GROUP BY s.v_ServiceId
+                HAVING COUNT(DISTINCT s.i_IdConsultorio) > 1
+            ) x
+            ORDER BY x.v_ServiceId
+            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    );
+    IF @multiCons IS NOT NULL AND LEN(@multiCons) > 0
+    BEGIN
+        DECLARE @msg2 NVARCHAR(2048) = LEFT('Servicios ya pagados o duplicados en mas de un consultorio (no se pueden pagar dos veces): ' + @multiCons, 2000);
+        RAISERROR(@msg2, 16, 1); RETURN;
+    END
+
     BEGIN TRY
         BEGIN TRAN;
 
@@ -180,11 +206,19 @@ BEGIN
             SET @i = @i + 1;
         END
 
-        -- 7) Servicios pagados desde la TVP (dispara UX filtrado anti-doble-pago).
+        -- 7) Servicios pagados desde la TVP, DEDUPLICADOS por (v_ServiceId, i_IdConsultorio).
+        --    El analisis emite el mismo servicio en varias filas (fan-out por ventadetalle: N items
+        --    de la MISMA atencion). Se colapsa a 1 fila por servicio SUMANDO d_Precio y d_Pagado (los
+        --    items suman el valor real del servicio, consistente con @TotalServicios/@TotalPago del
+        --    front y con d_MontoServicios por consultorio del paso 5) -> respeta el UNIQUE filtrado
+        --    UX_pago_hon_serv_activo (v_ServiceId, WHERE b_Anulado=0). d_Porc es constante por
+        --    (servicio,consultorio) -> MAX (SUM ignora NULLs; 1 sola linea conserva su valor/NULL).
         INSERT INTO conta.pago_honorario_servicio
             (i_IdPago, v_ServiceId, i_IdConsultorio, d_Precio, d_Porc, d_Pagado, b_Anulado)
-        SELECT @IdPago, s.v_ServiceId, s.i_IdConsultorio, s.d_Precio, s.d_Porc, s.d_Pagado, 0
-        FROM @Servicios s;
+        SELECT @IdPago, s.v_ServiceId, s.i_IdConsultorio,
+               SUM(s.d_Precio), MAX(s.d_Porc), SUM(s.d_Pagado), 0
+        FROM @Servicios s
+        GROUP BY s.v_ServiceId, s.i_IdConsultorio;
 
         EXEC conta.sp_Auditoria_Insert 'conta.pago_honorario', @IdPago, 'INSERT', @serie, @IdUsuario;
 

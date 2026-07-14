@@ -1,4 +1,6 @@
 using System.Data;
+using System.Data.SqlClient;
+using System.Text.RegularExpressions;
 using Dapper;
 using Contabilidad.Infrastructure;
 using Contabilidad.Models;
@@ -108,11 +110,49 @@ namespace Contabilidad.Repositories
             p.Add("@IdUsuario", idUsuario);
 
             using var cn = _db.Open();
-            using var multi = cn.QueryMultiple("conta.sp_PagoHonorario_Insert", p,
-                commandType: CommandType.StoredProcedure);
-            var idPago = multi.ReadFirst<int>();                                  // RS1 {i_IdPago}
-            var consultorios = multi.Read<PagoHonorarioConsultorioRow>().AsList(); // RS2 consultorios + egresos
-            return new PagoHonorarioCreateResult { i_IdPago = idPago, Consultorios = consultorios };
+            try
+            {
+                using var multi = cn.QueryMultiple("conta.sp_PagoHonorario_Insert", p,
+                    commandType: CommandType.StoredProcedure);
+                var idPago = multi.ReadFirst<int>();                                  // RS1 {i_IdPago}
+                var consultorios = multi.Read<PagoHonorarioConsultorioRow>().AsList(); // RS2 consultorios + egresos
+                return new PagoHonorarioCreateResult { i_IdPago = idPago, Consultorios = consultorios };
+            }
+            // Red de seguridad: si el SP no dedupea y el indice unico rechaza un servicio ya pagado,
+            // el error crudo de SQL sube ininteligible. El 'when' filtra SOLO ese caso: cualquier otro
+            // SqlException (incluido el RAISERROR amistoso "Servicios ya pagados..." con Number 50000)
+            // propaga sin tocar y lo maneja el middleware global como hasta ahora.
+            catch (SqlException ex) when (EsDuplicadoServicioActivo(ex))
+            {
+                throw new ContaBusinessException(MensajeServiciosYaPagados(ex));
+            }
+        }
+
+        // El indice unico conta.pago_honorario_servicio.UX_pago_hon_serv_activo impide pagar
+        // dos veces el mismo servicio activo. 2601 = violacion de indice unico, 2627 = de constraint unico.
+        private static bool EsDuplicadoServicioActivo(SqlException ex)
+        {
+            if (ex.Number != 2601 && ex.Number != 2627) return false;
+            var msg = ex.Message ?? string.Empty;
+            return msg.IndexOf("UX_pago_hon_serv_activo", StringComparison.OrdinalIgnoreCase) >= 0
+                || msg.IndexOf("pago_honorario_servicio", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        // Construye el mensaje que el front espera: contiene "ya pagad" (matchea /ya pagad/i) y
+        // termina en ": id1, id2" con los serviceIds ofensores extraidos de los parentesis del SqlException
+        // ("... El valor de la clave duplicada es (N009-SR000795019)."). Si no logra parsear, mensaje claro igual.
+        private static string MensajeServiciosYaPagados(SqlException ex)
+        {
+            var ids = Regex.Matches(ex.Message ?? string.Empty, @"\(([^)]+)\)")
+                .Cast<Match>()
+                .Select(m => m.Groups[1].Value.Trim())
+                .Where(v => v.Length > 0)
+                .Distinct()
+                .ToList();
+
+            return ids.Count > 0
+                ? "Servicios ya pagados: " + string.Join(", ", ids)
+                : "Uno o mas servicios ya pagados no pueden registrarse nuevamente.";
         }
 
         public int AnularPago(int idPago, string motivo, int idUsuario)
