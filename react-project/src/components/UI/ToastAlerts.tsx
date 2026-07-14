@@ -374,11 +374,17 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toastOptions={{
           className: '',
           duration: 4000,
-          style: {
-            background: 'transparent',
-            boxShadow: 'none',
-            padding: 0,
-            margin: 0,
+          // OJO: el estilo "transparente" es SOLO para los toasts custom de ToastAlerts
+          // (renderizan su propia tarjeta). Antes estaba en el nivel raiz y volvia
+          // "fantasma" a los toasts planos (toast.error/success) del modulo conta y ContaLogin.
+          // Scopeado a `custom` para no afectarlos (rinden con la tarjeta por defecto).
+          custom: {
+            style: {
+              background: 'transparent',
+              boxShadow: 'none',
+              padding: 0,
+              margin: 0,
+            },
           },
         }}
       />

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Toaster } from 'react-hot-toast';
 import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
 import ContaSidebar from './components/ContaSidebar';
@@ -97,8 +96,8 @@ const ContaLayout: React.FC = () => {
           <Footer />
         </div>
       </div>
-
-      <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
+      {/* El Toaster es unico y global (ToastProvider en App.tsx). No montar otro aqui:
+          react-hot-toast pinta cada toast en TODOS los <Toaster> montados => se duplicaria. */}
     </div>
   );
 };
