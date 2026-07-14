@@ -838,4 +838,80 @@ namespace Contabilidad.Models
     }
     // Request de POST pagos/{id}/anular.
     public class AnularRequest { public string Motivo { get; set; } }
+
+    // ---------- Reconciliacion de caja legacy (poller conta) ----------
+    // Body de POST /api/conta/caja/reconciliar (todos opcionales).
+    //  - Fecha null       => Tick completo (conta.sp_CajaRecon_Tick).
+    //  - Fecha con valor  => reconciliar UNA fecha (conta.sp_CajaRecon_ReconciliarDia).
+    //  - Modo             => override SOLO hacia Observacion; jamas fuerza Escritura si config=Observacion.
+    //  - BarridoProfundo  => solo aplica al Tick.
+    public class ReconciliarRequest
+    {
+        public DateTime? Fecha { get; set; }
+        public bool BarridoProfundo { get; set; }
+        public string Modo { get; set; }
+    }
+
+    // Fila de conta.caja_reconciliacion_log (nombres = columnas del SP; PascalCase legacy, no camelCase).
+    public class ReconLogRow
+    {
+        public int i_IdLog { get; set; }
+        public DateTime t_Inicio { get; set; }
+        public DateTime? t_Fin { get; set; }
+        public string v_Origen { get; set; }
+        public string v_Modo { get; set; }
+        public string v_Accion { get; set; }
+        public DateTime? d_Fecha { get; set; }
+        public string v_Resultado { get; set; }
+        public string v_Detalle { get; set; }
+        public int? i_IdUsuario { get; set; }
+    }
+
+    // Fila de conta.caja_reconciliacion_dia (nombres = columnas de la tabla).
+    public class ReconDiaRow
+    {
+        public DateTime d_Fecha { get; set; }
+        public string v_Estado { get; set; }
+        public int n_Version { get; set; }
+        public int? i_IdCajaMayorCierre { get; set; }
+        public decimal d_TotalIngresos { get; set; }
+        public decimal d_TotalEgresos { get; set; }
+        public int i_CntIngresos { get; set; }
+        public int i_CntEgresos { get; set; }
+        public int? hf_Cnt { get; set; }
+        public decimal? hf_Sum { get; set; }
+        public int? hf_Chk { get; set; }
+        public DateTime? t_UltimaReconciliacion { get; set; }
+        public DateTime? t_UltimoCierre { get; set; }
+        public DateTime? t_UltimaVerificacion { get; set; }
+    }
+
+    // Estado efectivo del poller (para el indicador del front).
+    public class ReconConfigDto
+    {
+        public bool Enabled { get; set; }
+        public string Modo { get; set; }              // OBSERVACION | ESCRITURA (efectivo, normalizado)
+        public string PisoFecha { get; set; }
+        public string[] Horarios { get; set; }
+        public string TimeZone { get; set; }
+        public DateTimeOffset? ProximoHorarioUtc { get; set; }  // null si Enabled=false
+    }
+
+    // Respuesta de POST /api/conta/caja/reconciliar.
+    public class ReconciliacionCorridaResponse
+    {
+        public string Modo { get; set; }              // modo efectivo aplicado
+        public string Origen { get; set; }            // MANUAL
+        public DateTime? Fecha { get; set; }          // no null si fue ReconciliarDia
+        public bool BarridoProfundo { get; set; }
+        public List<ReconLogRow> Corrida { get; set; } = new();  // filas de log producidas por esta corrida
+    }
+
+    // Respuesta de GET /api/conta/caja/reconciliacion/estado.
+    public class ReconEstadoResponse
+    {
+        public ReconConfigDto Config { get; set; }
+        public List<ReconLogRow> Corridas { get; set; } = new();  // ultimas N del log
+        public List<ReconDiaRow> Dias { get; set; } = new();      // ultimos ~35 dias
+    }
 }

@@ -17,6 +17,12 @@ import RegistroComprasModal from '../../components/CajaMayor/RegistroComprasModa
 // En esta nueva vista el backend está habilitado
 const BACKEND_DISABLED = false;
 
+// [RECONCILIACION 2026-07] Piso de la reconciliación automática (anio*100+mes). Los cierres del
+// periodo >= 2026-07 los mantiene el poller conta (PLAN_RECONCILIACION_CIERRE_DIARIO §8): el camino
+// manual de generar/recrear cierre queda neutralizado para esos periodos (< piso sigue operativo
+// para la carga histórica).
+const PERIODO_PISO_RECONCILIACION = 202607;
+
 interface FilterState {
   anio?: number;
   mes?: number; // 1-12
@@ -574,6 +580,18 @@ const CajaMayorNew: React.FC = () => {
         return;
       }
 
+      // [RECONCILIACION 2026-07] Los cierres del periodo >= jul-2026 los mantiene el poller conta
+      // (PLAN_RECONCILIACION_CIERRE_DIARIO §8). Este camino manual borra fisicamente el cierre y
+      // regenera (destructivo con manuales/registro de compras) y quedaria pisado por la reconciliacion
+      // automatica -> se bloquea. Los periodos < 2026-07 quedan operativos para la carga historica.
+      if (selectedPeriod >= PERIODO_PISO_RECONCILIACION) {
+        ToastAlerts.warning({
+          title: 'Cierre automatizado',
+          message: 'Los cierres desde jul-2026 se reconcilian automáticamente. Este período no se genera manualmente.'
+        });
+        return;
+      }
+
       // Usuario
       const userId = getInsertaIdUsuario();
       if (!userId) {
@@ -712,6 +730,10 @@ const CajaMayorNew: React.FC = () => {
       });
     }
   };
+
+  // [RECONCILIACION 2026-07] El periodo elegido en el modal (>= jul-2026) lo reconcilia el poller conta.
+  const periodoCreacion = (Number(createForm.anio) * 100) + Number(createForm.mes);
+  const esPeriodoReconciliado = periodoCreacion >= PERIODO_PISO_RECONCILIACION;
 
   return (
     <div className="space-y-6 p-6">
@@ -1464,6 +1486,13 @@ const CajaMayorNew: React.FC = () => {
                 <input type="hidden" value={createForm.fechaInicio} readOnly />
                 <input type="hidden" value={createForm.fechaFin} readOnly />
 
+                {/* [RECONCILIACION 2026-07] Aviso: los periodos >= jul-2026 los reconcilia el poller conta */}
+                {esPeriodoReconciliado && (
+                  <div className="text-sm px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    Los cierres desde jul-2026 se reconcilian automáticamente. Este período no se genera manualmente.
+                  </div>
+                )}
+
                 {/* Observaciones */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Observaciones</label>
@@ -1492,10 +1521,11 @@ const CajaMayorNew: React.FC = () => {
                 </motion.button>
                 <motion.button
                   onClick={handleSubmitCreate}
-                  className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  disabled={createLoading}
+                  disabled={createLoading || esPeriodoReconciliado}
+                  title={esPeriodoReconciliado ? 'Los cierres desde jul-2026 se reconcilian automáticamente' : undefined}
                 >
                   {createLoading ? (
                     <span className="inline-flex items-center">

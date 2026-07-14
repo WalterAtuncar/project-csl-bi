@@ -383,6 +383,21 @@ class ContabilidadService {
     const { data } = await this.http.post<{ i_IdPago: number }>(`/honorarios/pagos/${id}/anular`, { Motivo: motivo });
     return data;
   }
+
+  // ---- Reconciliación de caja mayor legacy (poller conta; base /caja) ----
+  // TUBERÍA DISTINTA de la Caja Diaria: reconcilia por día los cierres del legacy (dbo.cajamayor_*)
+  // que mantiene el BackgroundService del API conta (PLAN_RECONCILIACION_CIERRE_DIARIO — FASE 2).
+  // Estado (últimas corridas del log + estados de los últimos días + config del scheduler).
+  async reconciliacionEstado(corridas = 25, dias = 35): Promise<import('./contaTypes').ReconEstadoResponse> {
+    const { data } = await this.http.get<import('./contaTypes').ReconEstadoResponse>('/caja/reconciliacion/estado', { params: { corridas, dias } });
+    return data;
+  }
+  // Disparo manual [Roles=SA]. El back decide el Modo: si config=Observación la corrida será
+  // observación aunque se pida Escritura (nunca se puede forzar Escritura por request). Sin fecha => Tick.
+  async reconciliarCaja(body: import('./contaTypes').ReconciliarBody = {}): Promise<import('./contaTypes').ReconciliacionCorridaResponse> {
+    const { data } = await this.http.post<import('./contaTypes').ReconciliacionCorridaResponse>('/caja/reconciliar', body);
+    return data;
+  }
 }
 
 export const contabilidadService = new ContabilidadService();

@@ -67,6 +67,12 @@ builder.Services.AddScoped<RentabilidadRepository>();
 builder.Services.AddScoped<SisolRepository>();
 builder.Services.AddScoped<CompraRepository>();
 builder.Services.AddScoped<HonorariosRepository>();
+builder.Services.AddScoped<ReconciliacionRepository>();
+
+// Poller de reconciliacion de caja legacy (BackgroundService). KILL SWITCH: Reconciliacion:Enabled.
+builder.Services.Configure<ReconciliacionOptions>(builder.Configuration.GetSection("Reconciliacion"));
+builder.Services.AddSingleton<ReconciliacionRunner>();
+builder.Services.AddHostedService<ReconciliacionHostedService>();
 
 // Cliente legacy para el login unificado (server-to-server; la contrasena solo transita).
 builder.Services.AddHttpClient<LegacyAuthClient>((sp, client) =>
@@ -84,6 +90,12 @@ var app = builder.Build();
 app.Use(async (ctx, next) =>
 {
     try { await next(); }
+    catch (Contabilidad.Infrastructure.ContaBusinessException ex)
+    {
+        // Error de negocio ya traducido a texto para el usuario (mismo shape que un RAISERROR).
+        ctx.Response.StatusCode = 400;
+        await ctx.Response.WriteAsJsonAsync(new { message = ex.Message });
+    }
     catch (System.Data.SqlClient.SqlException ex)
     {
         ctx.Response.StatusCode = 400;

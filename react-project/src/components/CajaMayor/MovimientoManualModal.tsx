@@ -122,7 +122,20 @@ const MovimientoManualModal: React.FC<MovimientoManualModalProps> = ({
   const headerBg = tipoMovimiento === 'I' ? 'bg-green-600' : 'bg-red-600';
   const headerHover = tipoMovimiento === 'I' ? 'hover:bg-green-700' : 'hover:bg-red-700';
 
+  // [RECONCILIACION 2026-07] Blindaje refin.7 (PLAN_RECONCILIACION_CIERRE_DIARIO §refin.7 y
+  // RESULTADOS FASE 0-A refin.1): la vía manual jamás debe emitir los orígenes reservados del poller
+  // conta ('recon-cobranzas'/'recon-egreso'). Es defensivo (hoy origenDefault='manual').
+  const ORIGENES_RESERVADOS = ['recon-cobranzas', 'recon-egreso'];
+
   const handleSubmit = async () => {
+    // Blindaje: bloquear orígenes reservados del poller (case-insensitive) antes de cualquier envío.
+    if (ORIGENES_RESERVADOS.includes((origenDefault || '').trim().toLowerCase())) {
+      ToastAlerts.error({
+        title: 'Origen reservado',
+        message: `El origen "${origenDefault}" está reservado para la reconciliación automática y no puede usarse manualmente.`,
+      });
+      return;
+    }
     // Campos requeridos del modal: concepto, total, fecha, observaciones
     if (!concepto?.trim() || !fecha?.trim() || !observaciones?.trim()) {
       ToastAlerts.warning({ title: 'Campos requeridos', message: 'Complete concepto, fecha y observaciones.' });

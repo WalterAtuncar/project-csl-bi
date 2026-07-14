@@ -665,6 +665,77 @@ export interface HonorarioPagoCreateResult {
   }[];
 }
 
+// ---- Reconciliación de caja mayor legacy (poller conta) ----
+// TUBERÍA DISTINTA de la Caja Diaria del módulo conta: este bloque reconcilia por DÍA los cierres
+// del legacy (dbo.cajamayor_*) que mantiene el BackgroundService del API conta
+// (PLAN_RECONCILIACION_CIERRE_DIARIO — RESULTADOS FASE 2). JSON sin camelCase (calca los DTOs C#).
+
+// Config del BackgroundService (§7.1). ProximoHorarioUtc viene en UTC -> convertir a hora local en el front.
+export interface ReconConfigDto {
+  Enabled: boolean;
+  Modo: string;                       // 'Observacion' | 'Escritura'
+  PisoFecha: string;                  // 'yyyy-MM-dd'
+  Horarios: string[];                 // ['09:00','13:00','17:00','21:00','00:00']
+  TimeZone: string;                   // 'SA Pacific Standard Time'
+  ProximoHorarioUtc: string | null;   // ISO UTC; null si Enabled=false
+}
+
+// Una fila del log de auditoría (conta.caja_reconciliacion_log). v_Detalle = texto JSON-like -> JSON.parse en el front.
+export interface ReconLogRow {
+  i_IdLog: number;
+  t_Inicio: string;
+  t_Fin: string | null;
+  v_Origen: string;                   // POLLER | MANUAL | STARTUP_CATCHUP
+  v_Modo: string;                     // OBSERVACION | ESCRITURA
+  v_Accion: string;                   // TICK | RECONCILIAR_DIA | CIERRE_DIA | REAPERTURA_AUTO | BARRIDO_CORTO | BARRIDO_PROFUNDO
+  d_Fecha: string | null;
+  v_Resultado: string;                // OK | OK_SIN_CAMBIOS | DERIVA_DETECTADA | ERROR | SKIPPED_LOCK
+  v_Detalle: string | null;           // JSON-like en texto plano (SQL 2012 sin OPENJSON) -> JSON.parse en el front
+  i_IdUsuario: number | null;
+}
+
+// Estado por FECHA (conta.caja_reconciliacion_dia).
+export interface ReconDiaRow {
+  d_Fecha: string;
+  v_Estado: string;                   // PENDIENTE | RECONCILIADO | CERRADO | REABIERTO_AUTO
+  n_Version: number;
+  i_IdCajaMayorCierre: number | null;
+  d_TotalIngresos: number;
+  d_TotalEgresos: number;
+  i_CntIngresos: number;
+  i_CntEgresos: number;
+  hf_Cnt: number | null;
+  hf_Sum: number | null;
+  hf_Chk: number | null;
+  t_UltimaReconciliacion: string | null;
+  t_UltimoCierre: string | null;
+  t_UltimaVerificacion: string | null;
+}
+
+// GET /caja/reconciliacion/estado
+export interface ReconEstadoResponse {
+  Config: ReconConfigDto;
+  Corridas: ReconLogRow[];            // últimas N corridas del log (más reciente primero)
+  Dias: ReconDiaRow[];                // estados de los últimos ~35 días
+}
+
+// POST /caja/reconciliar (body). Sin fecha => Tick completo; con fecha => ReconciliarDia de esa fecha.
+// El back decide el Modo: 'modo' solo puede DEGRADAR a Observación; nunca fuerza Escritura por request.
+export interface ReconciliarBody {
+  fecha?: string | null;              // 'yyyy-MM-dd'
+  barridoProfundo?: boolean;
+  modo?: 'Observacion' | 'Escritura';
+}
+
+// POST /caja/reconciliar (respuesta).
+export interface ReconciliacionCorridaResponse {
+  Modo: string;
+  Origen: string;
+  Fecha: string | null;
+  BarridoProfundo: boolean;
+  Corrida: ReconLogRow[];
+}
+
 // ---- Compras ----
 export interface CompraRow {
   i_IdCompra: number;

@@ -296,6 +296,17 @@ const CajaMayor: React.FC = () => {
 
   // Crear ingreso mensual
   const handleCreateIngreso = async () => {
+    // [RECONCILIACION 2026-07] Blindaje refin.7 (PLAN_RECONCILIACION_CIERRE_DIARIO §refin.7): el input
+    // de origen es editable (default '') -> jamás debe emitir los orígenes reservados del poller conta
+    // ('recon-cobranzas'/'recon-egreso'). Defensivo: hoy nadie los usa.
+    const origenNorm = (ingresoEgresoForm.origen || '').trim().toLowerCase();
+    if (origenNorm === 'recon-cobranzas' || origenNorm === 'recon-egreso') {
+      ToastAlerts.error({
+        title: 'Origen reservado',
+        message: 'El origen ingresado está reservado para la reconciliación automática. Use otro valor.'
+      });
+      return;
+    }
     try {
       setIngresoEgresoLoading(true);
       
