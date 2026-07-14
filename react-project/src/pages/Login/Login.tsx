@@ -34,13 +34,11 @@ const Login: React.FC = () => {
       const res = await contabilidadService.loginBi(username, password);
 
       if (res.LegacyUser) {
-        // Usuario del sistema: puebla el userData legacy (pantallas del BI) y entra al dashboard.
+        // Usuario del sistema: puebla el userData legacy (pantallas del BI siguen disponibles).
         authService.saveUserDataFromLegacy(res.LegacyUser);
-        setTimeout(() => navigate('/dashboards/general'), 100);
-      } else {
-        // Login LOCAL (breakglass del administrador): entra al modulo de contabilidad.
-        setTimeout(() => navigate('/conta'), 100);
       }
+      // Login correcto (legacy o breakglass): entra directo al modulo de Contabilidad.
+      setTimeout(() => navigate('/conta'), 100);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Error al iniciar sesión. Verifique sus credenciales.';
       setError(errorMessage);
