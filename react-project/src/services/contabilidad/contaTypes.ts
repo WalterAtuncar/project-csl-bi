@@ -757,3 +757,122 @@ export interface CompraRow {
   i_IdEgreso: number | null;
   Clasificada: boolean;
 }
+
+// ================= Epidemiología (módulo /conta/epidemiologia) =================
+// Contratos del EpidemiologiaController (API conta). Las CLAVES JSON de nivel superior vienen en
+// minúscula/camelCase (items, totalFilas, kpis, porConsultorio...); los campos internos de cada fila
+// son PascalCase (columnas del SP). NO tocar los nombres — el front lee por posición/clave exacta.
+
+export type EpiAmbito = 'TODOS' | 'ASISTENCIAL' | 'OCUPACIONAL' | 'HOSPITALIZACION';
+
+// ---- TAB 1: Ficha Individual EPI (25 columnas del formato DIRESA + TotalFilas) ----
+export interface EpiFichaRow {
+  CodigoUnico: string;
+  FechaAtencion: string;
+  ApellidoPaterno: string | null;
+  ApellidoMaterno: string | null;
+  Nombres: string | null;
+  Red: string;
+  TipoDocumento: string | null;
+  NumeroDocumento: string | null;
+  FechaNacimiento: string | null;
+  Sexo: string | null;
+  Nacionalidad: string | null;
+  Etnia: string | null;
+  HistoriaClinica: string | null;
+  FechaHospitalizacion: string | null;
+  Edad: number | null;
+  Pais: string;
+  Departamento: string | null;
+  Provincia: string | null;
+  Distrito: string | null;
+  Procedencia: string | null;
+  DireccionExacta: string | null;
+  Referencia: string | null;
+  Diagnostico: string | null;
+  InicioSintomas: string | null;
+  InicioSintomasDup: string | null;
+  TotalFilas: number;
+}
+
+export interface EpiFichaResponse {
+  items: EpiFichaRow[];
+  totalFilas: number;
+  page: number;
+  pageSize: number;
+}
+export interface EpiFichaExportResponse {
+  items: EpiFichaRow[];
+  totalFilas: number;
+}
+export interface EpiFichaFilters {
+  desde: string;
+  hasta: string;
+  ambito?: EpiAmbito;
+  page?: number;
+  pageSize?: number;
+  soloConDx?: boolean;
+  incluirDescartados?: boolean;
+  red?: string;
+}
+
+// ---- TAB 2: Dashboard (multi-resultset, un solo fetch) ----
+export interface EpiKpis {
+  TotalAtenciones: number;
+  AtencionesConDx: number;
+  PacientesUnicos: number;
+  TotalDx: number;
+  CasosNuevos: number;
+  CasosRecurrentes: number;
+  PctConDx: number;
+  ConsultoriosActivos: number;
+}
+export interface EpiConsultorioRow { ConsultorioNombre: string; NumDx: number; NumAtenciones: number; NumPacientes: number; }
+export interface EpiMorbilidadRow { CIE10: string; DiseaseName: string; NumDx: number; NumPacientes: number; PctDelTotal: number; }
+export interface EpiCapituloRow { CapNum: number | null; CapNombre: string; NumDx: number; NumPacientes: number; }
+export interface EpiPiramideRow { GrupoEtario: string; SexoNombre: string; NumPacientes: number; }
+export interface EpiMorbilidadSexoRow { CIE10: string; DiseaseName: string; NumMasculino: number; NumFemenino: number; Total: number; }
+export interface EpiHeatmapRow { ConsultorioNombre: string; CapNum: number | null; CapNombre: string; NumDx: number; }
+export interface EpiTendenciaRow { AnioISO: number; SemanaISO: number; FechaInicioSemana: string; NumDx: number; NumAtenciones: number; NumCasosNuevos: number; }
+export interface EpiMedicoRow { MedicoNombre: string; NumDx: number; NumPacientes: number; }
+export interface EpiComorbilidadRow { Cie10A: string; NombreA: string; Cie10B: string; NombreB: string; NumAtenciones: number; }
+export interface EpiGeografiaRow { DistritoNombre: string; ProvinciaNombre: string; NumPacientes: number; NumDx: number; }
+
+export interface EpiDashboardResponse {
+  kpis: EpiKpis;
+  porConsultorio: EpiConsultorioRow[];
+  topMorbilidad: EpiMorbilidadRow[];
+  porCapitulo: EpiCapituloRow[];
+  piramide: EpiPiramideRow[];
+  morbilidadSexo: EpiMorbilidadSexoRow[];
+  heatmap: EpiHeatmapRow[];
+  tendencia: EpiTendenciaRow[];
+  medicos: EpiMedicoRow[];
+  comorbilidad: EpiComorbilidadRow[];
+  geografia: EpiGeografiaRow[];
+}
+export interface EpiDashboardFilters {
+  desde: string;
+  hasta: string;
+  ambito?: EpiAmbito;
+  incluirDescartados?: boolean;
+  topN?: number;
+}
+
+// ---- TAB 2: Canal endémico (lazy, endpoint aparte) ----
+export type EpiCanalZona = 'Exito' | 'Seguridad' | 'Alarma' | 'Epidemia';
+export interface EpiCanalRow {
+  SemanaISO: number;
+  Q1: number;
+  Mediana: number;
+  Q3: number;
+  CasosActual: number | null;
+  Zona: EpiCanalZona | null;
+}
+export interface EpiCanalFilters {
+  anio: number;
+  hastaSemana?: number;
+  ambito?: EpiAmbito;
+  capitulo?: number;
+  cie10?: string;
+}

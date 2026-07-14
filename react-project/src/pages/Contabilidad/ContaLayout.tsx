@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope } from 'lucide-react';
+import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope, Activity } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
 import ContaSidebar from './components/ContaSidebar';
 import ContaHeader from './components/ContaHeader';
@@ -22,6 +22,8 @@ const navItems: { to: string; label: string; icon: React.ComponentType<{ classNa
   // Visible a todos; las acciones de escritura (generar/anular pago) van gated por canWrite en la página.
   { to: '/conta/honorarios', label: 'Honorarios Médicos', icon: Stethoscope },
   { to: '/conta/personal', label: 'Costos de Personal', icon: Users },
+  // Módulo clínico (no financiero) -> visible a todo usuario conta autenticado (decisión B del plan; sin 'need').
+  { to: '/conta/epidemiologia', label: 'Epidemiología', icon: Activity },
   // [SOFT-DELETE 2026-07-13] "Registro de Compras" (/conta/compras) retirada del menu: el registro
   // de egresos (/conta/egresos) unifico compras (receptor PROVEEDOR) + entidades. La bandeja fiscal
   // no tiene feed (dbo.registro_compras=0). Para restaurar cuando exista el feed PLE/SUNAT: re-agregar

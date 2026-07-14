@@ -914,4 +914,176 @@ namespace Contabilidad.Models
         public List<ReconLogRow> Corridas { get; set; } = new();  // ultimas N del log
         public List<ReconDiaRow> Dias { get; set; } = new();      // ultimos ~35 dias
     }
+
+    // ==================== EPIDEMIOLOGIA ====================
+    // Modulo Epidemiologia (cross-DB SELECT a SigesoftDesarrollo_2). Todas las propiedades = columnas
+    // EXACTAS de los SP conta.sp_Epidemiologia_* (PascalCase, mismo orden). JSON sin camelCase.
+
+    // ---- TAB 1: Ficha Individual EPI (conta.sp_Epidemiologia_FichaIndividual) ----
+    // 25 columnas del formato DIRESA + TotalFilas (COUNT(*) OVER()).
+    public class EpiFichaRow
+    {
+        public string CodigoUnico { get; set; }            // 1
+        public DateTime FechaAtencion { get; set; }        // 2  (date)
+        public string ApellidoPaterno { get; set; }        // 3
+        public string ApellidoMaterno { get; set; }        // 4
+        public string Nombres { get; set; }                // 5
+        public string Red { get; set; }                    // 6
+        public string TipoDocumento { get; set; }          // 7
+        public string NumeroDocumento { get; set; }        // 8
+        public DateTime FechaNacimiento { get; set; }      // 9  (date)
+        public string Sexo { get; set; }                   // 10
+        public string Nacionalidad { get; set; }           // 11
+        public string Etnia { get; set; }                  // 12
+        public string HistoriaClinica { get; set; }        // 13
+        public DateTime? FechaHospitalizacion { get; set; }// 14 (datetime?, NULL si no hospitalizada)
+        public int? Edad { get; set; }                     // 15
+        public string Pais { get; set; }                   // 16
+        public string Departamento { get; set; }           // 17
+        public string Provincia { get; set; }              // 18
+        public string Distrito { get; set; }               // 19
+        public string Procedencia { get; set; }            // 20
+        public string DireccionExacta { get; set; }        // 21
+        public string Referencia { get; set; }             // 22
+        public string Diagnostico { get; set; }            // 23 (dx concatenado ' | ', puede ser NULL)
+        public string InicioSintomas { get; set; }         // 24 (texto tiempo de enfermedad, puede ser NULL)
+        public string InicioSintomasDup { get; set; }      // 25 (vacio)
+        public int TotalFilas { get; set; }                // COUNT(*) OVER() del universo filtrado
+    }
+
+    // ---- TAB 2: Dashboard Epidemiologico (conta.sp_Epidemiologia_Dashboard, multi-RS RS0..RS10) ----
+
+    // RS0 - KPIs (1 fila)
+    public class EpiKpisRow
+    {
+        public int TotalAtenciones { get; set; }
+        public int AtencionesConDx { get; set; }
+        public int PacientesUnicos { get; set; }
+        public int TotalDx { get; set; }
+        public int CasosNuevos { get; set; }
+        public int CasosRecurrentes { get; set; }
+        public decimal PctConDx { get; set; }
+        public int ConsultoriosActivos { get; set; }
+    }
+
+    // RS1 - Incidencia por consultorio
+    public class EpiPorConsultorioRow
+    {
+        public string ConsultorioNombre { get; set; }
+        public int NumDx { get; set; }
+        public int NumAtenciones { get; set; }
+        public int NumPacientes { get; set; }
+    }
+
+    // RS2 - Top-N morbilidad
+    public class EpiMorbilidadRow
+    {
+        public string CIE10 { get; set; }
+        public string DiseaseName { get; set; }
+        public int NumDx { get; set; }
+        public int NumPacientes { get; set; }
+        public decimal PctDelTotal { get; set; }
+    }
+
+    // RS3 - Capitulos CIE-10
+    public class EpiCapituloRow
+    {
+        public int? CapNum { get; set; }
+        public string CapNombre { get; set; }
+        public int NumDx { get; set; }
+        public int NumPacientes { get; set; }
+    }
+
+    // RS4 - Piramide sexo x etapa de vida
+    public class EpiPiramideRow
+    {
+        public string GrupoEtario { get; set; }
+        public string SexoNombre { get; set; }
+        public int NumPacientes { get; set; }
+    }
+
+    // RS5 - Morbilidad por sexo
+    public class EpiMorbilidadSexoRow
+    {
+        public string CIE10 { get; set; }
+        public string DiseaseName { get; set; }
+        public int NumMasculino { get; set; }
+        public int NumFemenino { get; set; }
+        public int Total { get; set; }
+    }
+
+    // RS6 - Heatmap consultorio x capitulo
+    public class EpiHeatmapRow
+    {
+        public string ConsultorioNombre { get; set; }
+        public int? CapNum { get; set; }
+        public string CapNombre { get; set; }
+        public int NumDx { get; set; }
+    }
+
+    // RS7 - Tendencia semanal
+    public class EpiTendenciaRow
+    {
+        public int AnioISO { get; set; }
+        public int SemanaISO { get; set; }
+        public DateTime FechaInicioSemana { get; set; }   // (date)
+        public int NumDx { get; set; }
+        public int NumAtenciones { get; set; }
+        public int NumCasosNuevos { get; set; }
+    }
+
+    // RS8 - Top medicos
+    public class EpiMedicoRow
+    {
+        public string MedicoNombre { get; set; }
+        public int NumDx { get; set; }
+        public int NumPacientes { get; set; }
+    }
+
+    // RS9 - Comorbilidad (pares de dx)
+    public class EpiComorbilidadRow
+    {
+        public string Cie10A { get; set; }
+        public string NombreA { get; set; }
+        public string Cie10B { get; set; }
+        public string NombreB { get; set; }
+        public int NumAtenciones { get; set; }
+    }
+
+    // RS10 - Geografia
+    public class EpiGeografiaRow
+    {
+        public string DistritoNombre { get; set; }
+        public string ProvinciaNombre { get; set; }
+        public int NumPacientes { get; set; }
+        public int NumDx { get; set; }
+    }
+
+    // Contenedor tipado que arma el repositorio (el controller lo proyecta a JSON con las claves
+    // exactas kpis/porConsultorio/... que espera el front).
+    public class EpiDashboardData
+    {
+        public EpiKpisRow Kpis { get; set; }
+        public List<EpiPorConsultorioRow> PorConsultorio { get; set; } = new();
+        public List<EpiMorbilidadRow> TopMorbilidad { get; set; } = new();
+        public List<EpiCapituloRow> PorCapitulo { get; set; } = new();
+        public List<EpiPiramideRow> Piramide { get; set; } = new();
+        public List<EpiMorbilidadSexoRow> MorbilidadSexo { get; set; } = new();
+        public List<EpiHeatmapRow> Heatmap { get; set; } = new();
+        public List<EpiTendenciaRow> Tendencia { get; set; } = new();
+        public List<EpiMedicoRow> Medicos { get; set; } = new();
+        public List<EpiComorbilidadRow> Comorbilidad { get; set; } = new();
+        public List<EpiGeografiaRow> Geografia { get; set; } = new();
+    }
+
+    // ---- TAB 2: Canal endemico (conta.sp_Epidemiologia_CanalEndemico) ----
+    public class EpiCanalEndemicoRow
+    {
+        public int SemanaISO { get; set; }
+        public decimal Q1 { get; set; }
+        public decimal Mediana { get; set; }
+        public decimal Q3 { get; set; }
+        public int CasosActual { get; set; }
+        public string Zona { get; set; }
+    }
 }

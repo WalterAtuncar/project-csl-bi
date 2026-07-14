@@ -5,6 +5,8 @@ import type {
   Egreso, EgresoListResponse, EgresoCreate, EgresoUpdate, EgresoPagar,
   EgresoCargaFila, EgresoCargaResultado, CostoPersonal, CostoPersonalUpsert,
   CajaDiaRow, FlujoConsolidado, FlujoDetallado, CerrarMesResultado, FormaPagoRow,
+  EpiFichaFilters, EpiFichaResponse, EpiFichaExportResponse,
+  EpiDashboardFilters, EpiDashboardResponse, EpiCanalFilters, EpiCanalRow,
 } from './contaTypes';
 
 // Base URL de la API dedicada de Contabilidad. Configurable por env; dev por defecto.
@@ -396,6 +398,53 @@ class ContabilidadService {
   // observación aunque se pida Escritura (nunca se puede forzar Escritura por request). Sin fecha => Tick.
   async reconciliarCaja(body: import('./contaTypes').ReconciliarBody = {}): Promise<import('./contaTypes').ReconciliacionCorridaResponse> {
     const { data } = await this.http.post<import('./contaTypes').ReconciliacionCorridaResponse>('/caja/reconciliar', body);
+    return data;
+  }
+
+  // ---- Epidemiología (base /epidemiologia; JWT conta; visible a todo usuario autenticado) ----
+  // TAB 1: grid paginado (50) con las 25 columnas del formato DIRESA. Usa skipLoader para que la
+  // tabla muestre su propio estado de carga (no el loader global). soloConDx/incluirDescartados se
+  // envían solo cuando son true (el SP repone sus defaults false).
+  async epiFicha(f: EpiFichaFilters): Promise<EpiFichaResponse> {
+    const params: Record<string, unknown> = { desde: f.desde, hasta: f.hasta };
+    if (f.ambito) params.ambito = f.ambito;
+    if (f.page) params.page = f.page;
+    if (f.pageSize) params.pageSize = f.pageSize;
+    if (f.soloConDx) params.soloConDx = true;
+    if (f.incluirDescartados) params.incluirDescartados = true;
+    if (f.red) params.red = f.red;
+    const { data } = await this.http.get<EpiFichaResponse>('/epidemiologia/ficha', { params, skipLoader: true } as never);
+    return data;
+  }
+  // Export a Excel: mismos filtros sin paginación (cap ~100k en el back). timeout largo (SQL remoto).
+  // El API responde 413 si totalFilas>100000; el interceptor lo normaliza a Error(message) ("acota el rango").
+  async epiFichaExport(f: EpiFichaFilters): Promise<EpiFichaExportResponse> {
+    const params: Record<string, unknown> = { desde: f.desde, hasta: f.hasta };
+    if (f.ambito) params.ambito = f.ambito;
+    if (f.soloConDx) params.soloConDx = true;
+    if (f.incluirDescartados) params.incluirDescartados = true;
+    if (f.red) params.red = f.red;
+    const { data } = await this.http.get<EpiFichaExportResponse>('/epidemiologia/ficha/export', { params, timeout: 120000, skipLoader: true } as never);
+    return data;
+  }
+  // TAB 2: dashboard multi-resultset en un solo fetch. Puede tardar ~15s (SQL remoto) -> skipLoader +
+  // timeout 60s; la pantalla muestra skeletons por card.
+  async epiDashboard(f: EpiDashboardFilters): Promise<EpiDashboardResponse> {
+    const params: Record<string, unknown> = { desde: f.desde, hasta: f.hasta };
+    if (f.ambito) params.ambito = f.ambito;
+    if (f.incluirDescartados) params.incluirDescartados = true;
+    if (f.topN) params.topN = f.topN;
+    const { data } = await this.http.get<EpiDashboardResponse>('/epidemiologia/dashboard', { params, timeout: 60000, skipLoader: true } as never);
+    return data;
+  }
+  // TAB 2: canal endémico (lazy, al montar el chart). Banda histórica de los 2 años previos por semana ISO.
+  async epiCanalEndemico(f: EpiCanalFilters): Promise<EpiCanalRow[]> {
+    const params: Record<string, unknown> = { anio: f.anio };
+    if (f.hastaSemana != null) params.hastaSemana = f.hastaSemana;
+    if (f.ambito) params.ambito = f.ambito;
+    if (f.capitulo != null) params.capitulo = f.capitulo;
+    if (f.cie10) params.cie10 = f.cie10;
+    const { data } = await this.http.get<EpiCanalRow[]>('/epidemiologia/canal-endemico', { params, timeout: 60000, skipLoader: true } as never);
     return data;
   }
 }
