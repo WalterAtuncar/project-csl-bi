@@ -69,6 +69,7 @@ builder.Services.AddScoped<CompraRepository>();
 builder.Services.AddScoped<HonorariosRepository>();
 builder.Services.AddScoped<ReconciliacionRepository>();
 builder.Services.AddScoped<EpidemiologiaRepository>();
+builder.Services.AddScoped<DashboardRepository>();
 
 // Poller de reconciliacion de caja legacy (BackgroundService). KILL SWITCH: Reconciliacion:Enabled.
 builder.Services.Configure<ReconciliacionOptions>(builder.Configuration.GetSection("Reconciliacion"));
