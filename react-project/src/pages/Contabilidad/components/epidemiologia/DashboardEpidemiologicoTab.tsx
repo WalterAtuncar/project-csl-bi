@@ -26,18 +26,49 @@ const rankEtapa = (g: string): number => {
   return i < 0 ? 99 : i;
 };
 
-// Celda del treemap de capítulos: rect con color categórico + etiqueta si el bloque es grande.
+// Envuelve un texto en varias líneas por palabras (SVG <text> no hace wrap). La última línea se
+// ellipsa si no cupo todo. maxLineas<=0 => sin líneas.
+function wrapWords(text: string, maxChars: number, maxLineas: number): string[] {
+  if (maxLineas <= 0 || !text) return [];
+  const words = text.split(/\s+/);
+  const lineas: string[] = [];
+  let cur = '';
+  let i = 0;
+  for (; i < words.length; i++) {
+    const intento = cur ? cur + ' ' + words[i] : words[i];
+    if (intento.length <= maxChars || !cur) { cur = intento; }
+    else { lineas.push(cur); cur = words[i]; if (lineas.length >= maxLineas) { cur = ''; break; } }
+  }
+  if (cur && lineas.length < maxLineas) { lineas.push(cur); i = words.length; }
+  if (i < words.length && lineas.length) {
+    const last = lineas[lineas.length - 1];
+    lineas[lineas.length - 1] = (last.length > maxChars - 1 ? last.slice(0, maxChars - 1).trimEnd() : last) + '…';
+  }
+  return lineas;
+}
+
+// Celda del treemap de capítulos: rect con color categórico + etiqueta legible (número romano arriba,
+// nombre envuelto en varias líneas, conteo abajo). Peso de fuente ligero; solo si el bloque es grande.
 interface TreemapCellProps { x?: number; y?: number; width?: number; height?: number; index?: number; name?: string; value?: number }
 const TreemapCell: React.FC<TreemapCellProps> = ({ x = 0, y = 0, width = 0, height = 0, index = 0, name = '', value = 0 }) => {
   const color = catColor(index);
-  const showText = width > 54 && height > 26;
+  const showText = width > 46 && height > 22;
+  const sep = name.indexOf(' · ');
+  const romano = sep > 0 ? name.slice(0, sep) : name;      // 'XIII'
+  const nombre = sep > 0 ? name.slice(sep + 3) : '';       // 'Sistema osteomuscular y tejido conjuntivo'
+  const maxChars = Math.max(4, Math.floor((width - 12) / 5.6));
+  const maxLineas = Math.max(0, Math.floor((height - 34) / 12)); // reserva romano (arriba) + conteo (abajo)
+  const lineas = wrapWords(nombre, maxChars, maxLineas);
   return (
     <g>
       <rect x={x} y={y} width={width} height={height} rx={3} style={{ fill: color, stroke: '#fff', strokeOpacity: 0.4, strokeWidth: 1 }} />
       {showText && (
         <>
-          <text x={x + 5} y={y + 15} fill="#fff" fontSize={11} fontWeight={600}>{truncar(name, Math.max(3, Math.floor(width / 7)))}</text>
-          <text x={x + 5} y={y + 29} fill="#fff" fontSize={10} fillOpacity={0.85}>{nInt(value)}</text>
+          <text x={x + 6} y={y + 15} fill="#fff" fontSize={12} fontWeight={150}>{romano}</text>
+          {lineas.map((ln, i) => (
+            <text key={i} x={x + 6} y={y + 28 + i * 12} fill="#fff" fontSize={10} fontWeight={150} fillOpacity={0.9}>{ln}</text>
+          ))}
+          <text x={x + 6} y={y + height - 7} fill="#fff" fontSize={11} fontWeight={150} fillOpacity={0.95}>{nInt(value)}</text>
         </>
       )}
     </g>
@@ -179,10 +210,20 @@ const DashboardEpidemiologicoTab: React.FC<{ filtro: EpiFiltro }> = ({ filtro })
                     content={({ active, payload }) => {
                       if (!active || !payload || !payload.length) return null;
                       const d = payload[0].payload as { name: string; size: number; pacientes: number };
+                      const sep = d.name.indexOf(' · ');
+                      const romano = sep > 0 ? d.name.slice(0, sep) : d.name;
+                      const capNombre = sep > 0 ? d.name.slice(sep + 3) : '';
                       return (
-                        <div style={t.tooltip} className="px-3 py-2">
-                          <div className="font-semibold mb-0.5">{d.name}</div>
-                          <div className="text-[11px]">{nInt(d.size)} dx · {nInt(d.pacientes)} pacientes</div>
+                        <div className="pointer-events-none rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl px-3 py-2" style={{ width: 244 }}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="inline-flex items-center justify-center h-5 min-w-[24px] px-1 rounded text-white text-[10px] font-semibold" style={{ backgroundColor: '#1E3A8A' }}>{romano}</span>
+                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-100 leading-tight">{capNombre}</span>
+                          </div>
+                          <div className="flex items-baseline gap-1 border-t border-slate-100 dark:border-slate-700 pt-1.5">
+                            <span className="text-lg font-bold tabular-nums text-blue-700 dark:text-blue-300">{nInt(d.size)}</span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">diagnóstico{d.size === 1 ? '' : 's'}</span>
+                            <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400">{nInt(d.pacientes)} pac.</span>
+                          </div>
                         </div>
                       );
                     }}
