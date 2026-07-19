@@ -60,6 +60,19 @@ namespace Contabilidad.Repositories
             {
                 Filas = multi.Read<RentabilidadConsultorioRow>().AsList(),
                 SinClasificar = multi.Read<RentabilidadConsultorioDiagRow>().AsList(),
+                Cuadre = multi.Read<RentabilidadConsultorioCuadre>().FirstOrDefault(),
+            };
+        }
+
+        public RentabilidadOcupacionalEmpresaResponse OcupacionalPorEmpresa(short anio, byte mes, bool incluirCredito)
+        {
+            using var cn = _db.Open();
+            using var multi = cn.QueryMultiple("conta.sp_Rentabilidad_OcupacionalPorEmpresa",
+                new { Anio = anio, Mes = mes, IncluirCredito = incluirCredito }, commandType: CommandType.StoredProcedure);
+            return new RentabilidadOcupacionalEmpresaResponse
+            {
+                Empresas = multi.Read<RentabilidadOcupacionalEmpresaRow>().AsList(),
+                Diagnostico = multi.Read<RentabilidadOcupacionalEmpresaDiagRow>().AsList(),
             };
         }
     }

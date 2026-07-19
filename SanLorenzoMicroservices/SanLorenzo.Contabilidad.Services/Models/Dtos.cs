@@ -591,10 +591,48 @@ namespace Contabilidad.Models
         public string Referencia { get; set; }
         public decimal Monto { get; set; }
     }
+    public class RentabilidadConsultorioCuadre   // v3: RS3, cuadre con Rentabilidad General (UNA fila)
+    {
+        public decimal AsistencialNeto { get; set; }
+        public decimal SisolNetoPleno { get; set; }
+        public decimal SisolPorcClinica { get; set; }
+        public decimal SisolParticipacionClinica { get; set; }
+        public decimal OcupacionalNeto { get; set; }
+        public decimal OtrasUnidadesNeto { get; set; }
+        public decimal TotalGeneral { get; set; }
+    }
     public class RentabilidadConsultorioResponse
     {
         public List<RentabilidadConsultorioRow> Filas { get; set; } = new();
         public List<RentabilidadConsultorioDiagRow> SinClasificar { get; set; } = new();
+        public RentabilidadConsultorioCuadre Cuadre { get; set; }   // v3
+    }
+    public class RentabilidadOcupacionalEmpresaRow
+    {
+        public string Ruc { get; set; }             // NULL en PARTICULARES y TOTAL
+        public string Empresa { get; set; }
+        public int NumFacturas { get; set; }
+        public int NumServicios { get; set; }
+        public decimal IngresosNeto { get; set; }   // neto sin IGV
+        public decimal CobradoBruto { get; set; }   // a hoy, con IGV
+        public decimal SaldoBruto { get; set; }     // con IGV
+        public decimal? PorcCobrado { get; set; }   // NULL si Cobrado+Saldo = 0
+        public bool EsOtrosServicios { get; set; }
+        public bool EsSinEmpresa { get; set; }
+        public bool EsTotal { get; set; }
+    }
+    public class RentabilidadOcupacionalEmpresaDiagRow
+    {
+        public string Motivo { get; set; }
+        public string Ruc { get; set; }
+        public string Empresa { get; set; }
+        public string Referencia { get; set; }
+        public decimal MontoNeto { get; set; }
+    }
+    public class RentabilidadOcupacionalEmpresaResponse
+    {
+        public List<RentabilidadOcupacionalEmpresaRow> Empresas { get; set; } = new();
+        public List<RentabilidadOcupacionalEmpresaDiagRow> Diagnostico { get; set; } = new();
     }
 
     // ---------- SISOL ----------

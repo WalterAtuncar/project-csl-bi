@@ -21,6 +21,9 @@ namespace Contabilidad.Controllers
         [HttpGet("por-consultorio")]
         public IActionResult PorConsultorio([FromQuery] short anio, [FromQuery] byte mes, [FromQuery] bool incluirCredito = true) => Ok(_repo.PorConsultorio(anio, mes, incluirCredito));
 
+        [HttpGet("ocupacional-por-empresa")]
+        public IActionResult OcupacionalPorEmpresa([FromQuery] short anio, [FromQuery] byte mes, [FromQuery] bool incluirCredito = true) => Ok(_repo.OcupacionalPorEmpresa(anio, mes, incluirCredito));
+
         [HttpGet("gastos")]
         public IActionResult Gastos([FromQuery] short anio, [FromQuery] byte mes) => Ok(_repo.Gastos(anio, mes));
 
