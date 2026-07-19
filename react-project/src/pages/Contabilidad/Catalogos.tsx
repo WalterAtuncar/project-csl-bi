@@ -174,7 +174,7 @@ const CuentasTab: React.FC<{ canWrite: boolean }> = () => {
   const load = useCallback(async () => { try { setRows(await contabilidadService.cuentasBancarias(false)); } catch (e) { toast.error(String(e)); } }, []);
   useEffect(() => { load(); }, [load]);
   return (
-    <Panel title="Cuentas bancarias" subtitle="Catálogo de tesorería (legacy) · solo lectura" canWrite={false}>
+    <Panel title="Cuentas bancarias" subtitle="Catálogo de tesorería · solo lectura" canWrite={false}>
       <Table head={['Banco', 'Nro. cuenta', 'Moneda', 'Activo']}>
         {rows.map((r) => (
           <tr key={r.i_IdCuentaBancaria} className="border-b border-slate-100 dark:border-slate-700/50">

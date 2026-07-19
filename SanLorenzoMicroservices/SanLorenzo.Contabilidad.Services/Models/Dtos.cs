@@ -489,6 +489,7 @@ namespace Contabilidad.Models
         public string FormaPago { get; set; }
         public bool EsCobranzaCredito { get; set; }
         public decimal Monto { get; set; }
+        public string UsuarioCajero { get; set; }
     }
     public class CuadreDiaEgresoDto
     {
@@ -497,6 +498,8 @@ namespace Contabilidad.Models
         public string CentroCosto { get; set; }
         public string Concepto { get; set; }
         public decimal Monto { get; set; }
+        public int? i_IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
     }
     public class CuadreDiaDto
     {
@@ -734,6 +737,8 @@ namespace Contabilidad.Models
         public int? edadPaciente { get; set; }
         public decimal? PorcRef { get; set; }
         public int esPagado { get; set; }               // 0/1
+        public string UsuarioCajero { get; set; }       // sentinel 'SIN CAJERO' o username real (ej. y.lopez); SP la devuelve siempre no-nula
+        public string TipoProduccion { get; set; }       // 'CLINICA' | 'SISOL' (masterServiceType 9|42); NULL en filas sin service emparejado (no pagables)
     }
     // Fila del grid de pagos (sp_PagoHonorario_List, RS2).
     public class PagoHonorarioListRow
@@ -749,6 +754,7 @@ namespace Contabilidad.Models
         public int NroConsultorios { get; set; }
         public int NroServicios { get; set; }
         public string v_Estado { get; set; }
+        public string v_TipoProduccion { get; set; }     // 'CLINICA' | 'SISOL' (ultima columna del RS2)
     }
     // Cabecera del pago (sp_PagoHonorario_Get, RS1).
     public class PagoHonorarioCabecera
@@ -773,6 +779,7 @@ namespace Contabilidad.Models
         public DateTime t_InsertaFecha { get; set; }
         public int? i_ActualizaIdUsuario { get; set; }
         public DateTime? t_ActualizaFecha { get; set; }
+        public string v_TipoProduccion { get; set; }     // 'CLINICA' | 'SISOL' (ultima columna de la cabecera)
     }
     // Detalle por consultorio (Get RS2 + Insert RS2 -> mismos nombres; en Insert i_Id=0 y EgresoEstado=null).
     public class PagoHonorarioConsultorioRow
@@ -798,12 +805,46 @@ namespace Contabilidad.Models
         public decimal? d_Pagado { get; set; }
         public bool b_Anulado { get; set; }
     }
+    // Comprobante tributario del pago (sp_PagoHonorario_Get, RS4 -> 0 o 1 fila; null si el pago no tiene).
+    // Los datos v_Ruc/v_RazonSocial son los CONGELADOS al emitir; ProveedorRuc/ProveedorRazonSocial son
+    // los VIGENTES del LEFT JOIN a dbo.proveedores (pueden diferir).
+    public class PagoHonorarioComprobanteRow
+    {
+        public int i_Id { get; set; }
+        public int i_IdPago { get; set; }
+        public string v_TipoComprobante { get; set; }   // "01" Factura | "02" Recibo por Honorarios
+        public int? i_IdProveedor { get; set; }
+        public string v_RucEmisor { get; set; }
+        public string v_RazonSocialEmisor { get; set; }
+        public string v_Serie { get; set; }
+        public string v_Numero { get; set; }
+        public DateTime? t_FechaEmision { get; set; }
+        public DateTime? t_FechaVencimiento { get; set; }
+        public string v_Moneda { get; set; }
+        public decimal d_TipoCambio { get; set; }
+        public decimal d_ImporteTotal { get; set; }
+        public decimal d_BaseImponible { get; set; }
+        public decimal d_IGV { get; set; }
+        public bool b_AplicaRetencion { get; set; }
+        public decimal d_MontoRetencion { get; set; }
+        public bool b_AplicaDetraccion { get; set; }
+        public decimal? d_PorcDetraccion { get; set; }
+        public decimal? d_MontoDetraccion { get; set; }
+        public string v_ConstanciaDetraccion { get; set; }
+        public decimal d_NetoPagar { get; set; }
+        public string v_Observaciones { get; set; }
+        public int i_InsertaIdUsuario { get; set; }
+        public DateTime t_InsertaFecha { get; set; }
+        public string ProveedorRuc { get; set; }          // RUC vigente (LEFT JOIN dbo.proveedores)
+        public string ProveedorRazonSocial { get; set; }  // Razon social vigente (LEFT JOIN dbo.proveedores)
+    }
     // Detalle completo del pago (respuesta de GET pagos/{id}).
     public class PagoHonorarioDetalle
     {
         public PagoHonorarioCabecera Cabecera { get; set; }
         public List<PagoHonorarioConsultorioRow> Consultorios { get; set; } = new();
         public List<PagoHonorarioServicioRow> Servicios { get; set; } = new();
+        public PagoHonorarioComprobanteRow Comprobante { get; set; }   // null si el pago no tiene comprobante
     }
     // Resultado de POST pagos (sp_PagoHonorario_Insert: RS1 id + RS2 consultorios/egresos).
     public class PagoHonorarioCreateResult
@@ -820,6 +861,27 @@ namespace Contabilidad.Models
         public decimal? Porc { get; set; }
         public decimal? Pagado { get; set; }
     }
+    // Comprobante tributario del medico (objeto anidado del request de POST pagos). OBLIGATORIO.
+    // Mapea 1:1 a los 16 parametros nuevos de conta.sp_PagoHonorario_Insert.
+    public class ComprobanteInput
+    {
+        public string TipoComprobante { get; set; }        // "01" Factura | "02" Recibo por Honorarios
+        public int? IdProveedor { get; set; }              // null si el emisor se captura como texto libre
+        public string RucEmisor { get; set; }
+        public string RazonSocialEmisor { get; set; }
+        public string Serie { get; set; }
+        public string Numero { get; set; }
+        public DateTime? FechaEmision { get; set; }        // requerida (validada en el controller)
+        public DateTime? FechaVencimiento { get; set; }
+        public string Moneda { get; set; } = "PEN";
+        public decimal TipoCambio { get; set; } = 1m;
+        public bool AplicaRetencion { get; set; }
+        public bool AplicaDetraccion { get; set; }
+        public decimal? PorcDetraccion { get; set; }
+        public decimal? MontoDetraccion { get; set; }
+        public string ConstanciaDetraccion { get; set; }
+        public string Observaciones { get; set; }          // -> @ObservacionesComprobante
+    }
     // Request de POST pagos.
     public class PagoHonorarioCreateRequest
     {
@@ -834,7 +896,9 @@ namespace Contabilidad.Models
         public string Glosa { get; set; }
         public decimal TotalServicios { get; set; }
         public decimal TotalPago { get; set; }
+        public string TipoProduccion { get; set; }          // 'CLINICA' | 'SISOL'; se normaliza a 'CLINICA' si viene null/vacio (controller + repo)
         public List<PagoHonorarioServicioInput> Servicios { get; set; } = new();
+        public ComprobanteInput Comprobante { get; set; }   // OBLIGATORIO (flujo completo)
     }
     // Request de POST pagos/{id}/anular.
     public class AnularRequest { public string Motivo { get; set; } }
@@ -1085,5 +1149,282 @@ namespace Contabilidad.Models
         public decimal Q3 { get; set; }
         public int CasosActual { get; set; }
         public string Zona { get; set; }
+    }
+
+    // ==================== DASHBOARD GERENCIAL / CONTABLE ====================
+    // Pagina Dashboard (2 tabs: Gerencial y Contable). Todas las propiedades = columnas EXACTAS de
+    // los SP conta.sp_Dashboard_* (PascalCase, mismo orden, leidos por posicion). JSON sin camelCase.
+    // Los SP son solo lectura; toda la logica vive en la BD. Ver PLAN_DASHBOARD_GERENCIAL_CONTABLE.md.
+
+    // ---- Catalogo checkboxes (conta.sp_Dashboard_TiposCaja) ----
+    public class DashTipoCajaRow
+    {
+        public int i_IdTipoCaja { get; set; }
+        public string v_NombreTipoCaja { get; set; }
+    }
+
+    // -------- TAB 1: GERENCIAL (conta.sp_Dashboard_Gerencial, multi-RS RS0..RS9) --------
+
+    // RS0 - KPIs (1 fila)
+    public class DashGerencialKpisRow
+    {
+        public decimal VentaNeta { get; set; }
+        public decimal VentaNetaPrev { get; set; }
+        public int NumVentas { get; set; }
+        public decimal TicketPromedio { get; set; }
+        public decimal TicketPromedioPrev { get; set; }
+        public decimal Cobrado { get; set; }
+        public decimal CobradoPrev { get; set; }
+        public decimal Egresos { get; set; }
+        public decimal EgresosPrev { get; set; }
+        public decimal FlujoNeto { get; set; }
+        public decimal IngresosDevAjust { get; set; }
+        public decimal MargenOperativoPct { get; set; }
+        public decimal MargenOperativoPctPrev { get; set; }
+        public decimal PorCobrar { get; set; }
+        public decimal RatioCobranzaPct { get; set; }
+    }
+
+    // RS1 - Tendencia mensual (13m)
+    public class DashTendenciaMensualRow
+    {
+        public int Anio { get; set; }
+        public int Mes { get; set; }
+        public decimal VentaNeta { get; set; }
+        public decimal Cobrado { get; set; }
+        public decimal Egresos { get; set; }
+        public decimal ResultadoDev { get; set; }
+        public decimal MargenPct { get; set; }
+    }
+
+    // RS2 - Serie diaria del rango
+    public class DashSerieDiariaRow
+    {
+        public DateTime Fecha { get; set; }   // (date)
+        public decimal VentaNeta { get; set; }
+        public decimal Cobrado { get; set; }
+        public decimal Egresos { get; set; }
+    }
+
+    // RS3 - Mix por unidad (rango)
+    public class DashMixUnidadRow
+    {
+        public int IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
+        public decimal VentaNeta { get; set; }
+        public decimal Cobrado { get; set; }
+        public decimal Egresos { get; set; }
+        public decimal Resultado { get; set; }
+        public decimal PctVenta { get; set; }
+    }
+
+    // RS4 - Mix mensual x unidad (13m)
+    public class DashMixMensualRow
+    {
+        public int Anio { get; set; }
+        public int Mes { get; set; }
+        public int IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
+        public decimal VentaNeta { get; set; }
+    }
+
+    // RS5 - Medios de pago (rango)
+    public class DashMediosPagoRow
+    {
+        public int IdFormaPago { get; set; }
+        public string FormaPago { get; set; }
+        public decimal Monto { get; set; }
+        public decimal Pct { get; set; }
+    }
+
+    // RS6 - Waterfall del flujo del rango
+    public class DashWaterfallRow
+    {
+        public int Orden { get; set; }
+        public string Concepto { get; set; }
+        public decimal Monto { get; set; }
+        public string Tipo { get; set; }
+    }
+
+    // RS7 - Top categorias de egreso (rango)
+    public class DashTopEgresosRow
+    {
+        public string Categoria { get; set; }
+        public string Fuente { get; set; }
+        public decimal Monto { get; set; }
+        public decimal Pct { get; set; }
+    }
+
+    // RS8 gerencial / RS5 contable - CxC por unidad (mismo contrato, DTO compartido)
+    public class DashCxcUnidadRow
+    {
+        public int IdTipoCaja { get; set; }
+        public string Unidad { get; set; }
+        public decimal CreditoFacturado { get; set; }
+        public decimal CreditoCobrado { get; set; }
+        public decimal PorCobrar { get; set; }
+    }
+
+    // RS9 - Heatmap de cobranza (dia x semana)
+    public class DashHeatmapCobranzaRow
+    {
+        public int DiaSemana { get; set; }               // 1=lun..7=dom
+        public string Etiqueta { get; set; }
+        public int NumSemana { get; set; }
+        public DateTime FechaInicioSemana { get; set; }  // (date)
+        public decimal Cobrado { get; set; }
+    }
+
+    // Contenedor TAB 1 (el controller lo devuelve tal cual: JSON keys = PascalCase de estas propiedades)
+    public class DashGerencialData
+    {
+        public DashGerencialKpisRow Kpis { get; set; }
+        public List<DashTendenciaMensualRow> TendenciaMensual { get; set; } = new();
+        public List<DashSerieDiariaRow> SerieDiaria { get; set; } = new();
+        public List<DashMixUnidadRow> MixUnidad { get; set; } = new();
+        public List<DashMixMensualRow> MixMensual { get; set; } = new();
+        public List<DashMediosPagoRow> MediosPago { get; set; } = new();
+        public List<DashWaterfallRow> Waterfall { get; set; } = new();
+        public List<DashTopEgresosRow> TopEgresos { get; set; } = new();
+        public List<DashCxcUnidadRow> CxcUnidad { get; set; } = new();
+        public List<DashHeatmapCobranzaRow> HeatmapCobranza { get; set; } = new();
+    }
+
+    // -------- TAB 2: CONTABLE (conta.sp_Dashboard_Contable, multi-RS RS0..RS11) --------
+
+    // RS0 - KPIs (1 fila) - todas decimal
+    public class DashContableKpisRow
+    {
+        public decimal Cobrado { get; set; }
+        public decimal CobradoPrev { get; set; }
+        public decimal Egresos { get; set; }
+        public decimal EgresosPrev { get; set; }
+        public decimal EgresosLegacy { get; set; }
+        public decimal EgresosConta { get; set; }
+        public decimal Planilla { get; set; }
+        public decimal FlujoNeto { get; set; }
+        public decimal FlujoNetoPrev { get; set; }
+        public decimal EgresoPromedioDiario { get; set; }
+        public decimal PorCobrar { get; set; }
+        public decimal PorPagar { get; set; }
+        public decimal IGVDebitoEstimado { get; set; }
+        public decimal IGVCreditoFiscal { get; set; }
+        public decimal IGVResultanteEstimado { get; set; }
+    }
+
+    // RS1 - Ingresos vs egresos mensual (13m)
+    public class DashIngresosVsEgresosRow
+    {
+        public int Anio { get; set; }
+        public int Mes { get; set; }
+        public decimal Cobrado { get; set; }
+        public decimal Egresos { get; set; }
+        public decimal FlujoNeto { get; set; }
+    }
+
+    // RS2 - Cobranzas x medio x mes (13m)
+    public class DashCobranzasMedioMesRow
+    {
+        public int Anio { get; set; }
+        public int Mes { get; set; }
+        public int IdFormaPago { get; set; }
+        public string FormaPago { get; set; }
+        public decimal Monto { get; set; }
+    }
+
+    // RS3 - Composicion de gastos (rango)
+    public class DashComposicionGastosRow
+    {
+        public string Fuente { get; set; }
+        public string Categoria { get; set; }
+        public decimal Monto { get; set; }
+        public decimal Pct { get; set; }
+    }
+
+    // RS4 - Evolucion CxC mensual (13m)
+    public class DashEvolucionCxcRow
+    {
+        public int Anio { get; set; }
+        public int Mes { get; set; }
+        public decimal CreditoFacturadoMes { get; set; }
+        public decimal CreditoCobradoMes { get; set; }
+        public decimal SaldoAcumulado { get; set; }
+    }
+
+    // RS6 - CxP aging (al corte @Hasta)
+    public class DashCxpAgingRow
+    {
+        public string Categoria { get; set; }
+        public string Bucket { get; set; }
+        public decimal Monto { get; set; }
+        public int NumDocs { get; set; }
+    }
+
+    // RS7 - IGV mensual (13m)
+    public class DashIgvMensualRow
+    {
+        public int Anio { get; set; }
+        public int Mes { get; set; }
+        public decimal IGVDebitoEstimado { get; set; }
+        public decimal IGVCreditoFiscal { get; set; }
+        public decimal IGVResultante { get; set; }
+    }
+
+    // RS8 - Planilla x concepto x mes (13m)
+    public class DashPlanillaMesRow
+    {
+        public int Anio { get; set; }
+        public int Mes { get; set; }
+        public string Concepto { get; set; }
+        public decimal Monto { get; set; }
+    }
+
+    // RS9 - Saldos bancarios (6 cuentas; Saldo/AnioMesRef NULL hoy)
+    public class DashSaldoBancarioRow
+    {
+        public int IdCuenta { get; set; }
+        public string Banco { get; set; }
+        public string Cuenta { get; set; }
+        public string Moneda { get; set; }
+        public bool EsDetraccion { get; set; }
+        public decimal? Saldo { get; set; }        // NULLABLE (sin saldo cargado)
+        public int? AnioMesRef { get; set; }       // NULLABLE
+    }
+
+    // RS10 - Honorarios x consultorio (rango)
+    public class DashHonorarioConsultorioRow
+    {
+        public string Consultorio { get; set; }
+        public decimal Monto { get; set; }
+        public int NumPagos { get; set; }
+    }
+
+    // RS11 - SISOL liquidaciones (meses del rango)
+    public class DashSisolLiquidacionRow
+    {
+        public int Anio { get; set; }
+        public int Mes { get; set; }
+        public decimal VentaNeta { get; set; }
+        public decimal PctClinica { get; set; }
+        public decimal MontoClinica { get; set; }
+        public decimal MontoHospital { get; set; }
+        public string Estado { get; set; }
+    }
+
+    // Contenedor TAB 2 (el controller lo devuelve tal cual: JSON keys = PascalCase de estas propiedades)
+    public class DashContableData
+    {
+        public DashContableKpisRow Kpis { get; set; }
+        public List<DashIngresosVsEgresosRow> IngresosVsEgresos { get; set; } = new();
+        public List<DashCobranzasMedioMesRow> CobranzasMedioMes { get; set; } = new();
+        public List<DashComposicionGastosRow> ComposicionGastos { get; set; } = new();
+        public List<DashEvolucionCxcRow> EvolucionCxc { get; set; } = new();
+        public List<DashCxcUnidadRow> CxcUnidad { get; set; } = new();
+        public List<DashCxpAgingRow> CxpAging { get; set; } = new();
+        public List<DashIgvMensualRow> IgvMensual { get; set; } = new();
+        public List<DashPlanillaMesRow> PlanillaMes { get; set; } = new();
+        public List<DashSaldoBancarioRow> SaldosBancarios { get; set; } = new();
+        public List<DashHonorarioConsultorioRow> HonorariosConsultorio { get; set; } = new();
+        public List<DashSisolLiquidacionRow> SisolLiquidaciones { get; set; } = new();
     }
 }

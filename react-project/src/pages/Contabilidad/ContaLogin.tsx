@@ -12,7 +12,7 @@ const ContaLogin: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const from = (location.state as { from?: string })?.from || '/conta/egresos';
+  const from = (location.state as { from?: string })?.from || '/conta/dashboard';
   if (isAuthenticated) return <Navigate to={from} replace />;
 
   const submit = async (e: React.FormEvent) => {

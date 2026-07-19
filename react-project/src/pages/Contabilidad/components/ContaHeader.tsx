@@ -7,7 +7,8 @@ import type { ContaUser } from '../../../context/ContaAuthContext';
 // Réplica visual del Header del sistema principal (src/components/Layout/Header.tsx):
 // bg-primary h-16, botón toggle, título, ThemeToggle + Bell + dropdown de usuario.
 // Diferencia: el "Cerrar sesión" NO es <a href="/login"> sino un botón que llama al
-// onLogout PROPIO del conta (logout() + navigate a /conta/login).
+// onLogout PROPIO del conta: doLogout limpia AMBAS sesiones (conta + legacy) y redirige a /login
+// (login unificado), limpio para re-loguearse.
 
 interface ContaHeaderProps {
   toggleSidebar?: () => void;

@@ -10,7 +10,7 @@ import { MESES, money, rowClass, cellBg } from './components/flujoShared';
 import type { Row, RowKind } from './components/flujoShared';
 
 const FlujoConsolidado: React.FC = () => {
-  const { canWrite, hasRole } = useContaAuth();
+  const { canWrite } = useContaAuth();
   const now = new Date();
   const [anio, setAnio] = useState(now.getFullYear());
   const [data, setData] = useState<FlujoData | null>(null);
@@ -155,11 +155,10 @@ const FlujoConsolidado: React.FC = () => {
               <button onClick={fijarApertura} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
                 <PlayCircle className="h-4 w-4" /> Apertura
               </button>
-              {hasRole('SA') && (
-                <button onClick={reabrirMes} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-300 text-sm text-amber-700 hover:bg-amber-50">
-                  <Unlock className="h-4 w-4" /> Reabrir
-                </button>
-              )}
+              {/* Reabrir: operador completo (SA + CONTABILIDAD). Ya esta dentro del bloque canWrite. */}
+              <button onClick={reabrirMes} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-300 text-sm text-amber-700 hover:bg-amber-50">
+                <Unlock className="h-4 w-4" /> Reabrir
+              </button>
             </>
           )}
         </div>

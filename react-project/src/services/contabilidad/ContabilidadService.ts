@@ -7,6 +7,7 @@ import type {
   CajaDiaRow, FlujoConsolidado, FlujoDetallado, CerrarMesResultado, FormaPagoRow,
   EpiFichaFilters, EpiFichaResponse, EpiFichaExportResponse,
   EpiDashboardFilters, EpiDashboardResponse, EpiCanalFilters, EpiCanalRow,
+  DashTipoCaja, DashFiltro, DashGerencialResponse, DashContableResponse,
 } from './contaTypes';
 
 // Base URL de la API dedicada de Contabilidad. Configurable por env; dev por defecto.
@@ -355,9 +356,10 @@ class ContabilidadService {
     const { data } = await this.http.get<import('./contaTypes').HonorarioProfesional[]>('/honorarios/profesionales', { params: { texto }, skipLoader: true } as never);
     return data;
   }
-  // Análisis de atenciones por consultorio+rango. PESADA (~varios s). consultorioId=-1 => todos.
+  // Análisis de atenciones por consultorio+rango. PESADA (cross-DB); tras la optimización del SP el uso
+  // típico (por consultorio) baja a ~2-3s, pero consultorioId=-1 (TODOS) puede rondar ~10s -> timeout largo.
   async honorariosAnalisis(consultorioId: number, desde: string, hasta: string): Promise<import('./contaTypes').AnalisisHonorarioRow[]> {
-    const { data } = await this.http.get<import('./contaTypes').AnalisisHonorarioRow[]>('/honorarios/analisis', { params: { consultorioId, desde, hasta } });
+    const { data } = await this.http.get<import('./contaTypes').AnalisisHonorarioRow[]>('/honorarios/analisis', { params: { consultorioId, desde, hasta }, timeout: 120000 } as never);
     return data;
   }
   // Grid de pagos con paginación real server-side (Total/Page/PageSize).
@@ -402,9 +404,8 @@ class ContabilidadService {
   }
 
   // ---- Epidemiología (base /epidemiologia; JWT conta; visible a todo usuario autenticado) ----
-  // TAB 1: grid paginado (50) con las 25 columnas del formato DIRESA. Usa skipLoader para que la
-  // tabla muestre su propio estado de carga (no el loader global). soloConDx/incluirDescartados se
-  // envían solo cuando son true (el SP repone sus defaults false).
+  // TAB 1: grid paginado (50) con las 25 columnas del formato DIRESA. Muestra el LOADER GLOBAL (overlay,
+  // como las demás pages). soloConDx/incluirDescartados se envían solo cuando son true (el SP repone false).
   async epiFicha(f: EpiFichaFilters): Promise<EpiFichaResponse> {
     const params: Record<string, unknown> = { desde: f.desde, hasta: f.hasta };
     if (f.ambito) params.ambito = f.ambito;
@@ -413,7 +414,7 @@ class ContabilidadService {
     if (f.soloConDx) params.soloConDx = true;
     if (f.incluirDescartados) params.incluirDescartados = true;
     if (f.red) params.red = f.red;
-    const { data } = await this.http.get<EpiFichaResponse>('/epidemiologia/ficha', { params, skipLoader: true } as never);
+    const { data } = await this.http.get<EpiFichaResponse>('/epidemiologia/ficha', { params } as never);
     return data;
   }
   // Export a Excel: mismos filtros sin paginación (cap ~100k en el back). timeout largo (SQL remoto).
@@ -424,17 +425,17 @@ class ContabilidadService {
     if (f.soloConDx) params.soloConDx = true;
     if (f.incluirDescartados) params.incluirDescartados = true;
     if (f.red) params.red = f.red;
-    const { data } = await this.http.get<EpiFichaExportResponse>('/epidemiologia/ficha/export', { params, timeout: 120000, skipLoader: true } as never);
+    const { data } = await this.http.get<EpiFichaExportResponse>('/epidemiologia/ficha/export', { params, timeout: 120000 } as never);
     return data;
   }
-  // TAB 2: dashboard multi-resultset en un solo fetch. Puede tardar ~15s (SQL remoto) -> skipLoader +
-  // timeout 60s; la pantalla muestra skeletons por card.
+  // TAB 2: dashboard multi-resultset en un solo fetch. Puede tardar ~15s (SQL remoto) -> loader global
+  // (overlay, como las demás pages) + timeout 60s.
   async epiDashboard(f: EpiDashboardFilters): Promise<EpiDashboardResponse> {
     const params: Record<string, unknown> = { desde: f.desde, hasta: f.hasta };
     if (f.ambito) params.ambito = f.ambito;
     if (f.incluirDescartados) params.incluirDescartados = true;
     if (f.topN) params.topN = f.topN;
-    const { data } = await this.http.get<EpiDashboardResponse>('/epidemiologia/dashboard', { params, timeout: 60000, skipLoader: true } as never);
+    const { data } = await this.http.get<EpiDashboardResponse>('/epidemiologia/dashboard', { params, timeout: 60000 } as never);
     return data;
   }
   // TAB 2: canal endémico (lazy, al montar el chart). Banda histórica de los 2 años previos por semana ISO.
@@ -444,7 +445,30 @@ class ContabilidadService {
     if (f.ambito) params.ambito = f.ambito;
     if (f.capitulo != null) params.capitulo = f.capitulo;
     if (f.cie10) params.cie10 = f.cie10;
-    const { data } = await this.http.get<EpiCanalRow[]>('/epidemiologia/canal-endemico', { params, timeout: 60000, skipLoader: true } as never);
+    const { data } = await this.http.get<EpiCanalRow[]>('/epidemiologia/canal-endemico', { params, timeout: 60000 } as never);
+    return data;
+  }
+
+  // ---- Dashboard Gerencial + Contable (base /dashboard; JWT conta, cualquier rol lo lee) ----
+  // Catálogo de tipos de caja para los checkboxes del filtro (catalog-driven; NO hardcodear los 6).
+  async dashTiposCaja(): Promise<DashTipoCaja[]> {
+    const { data } = await this.http.get<DashTipoCaja[]>('/dashboard/tipos-caja');
+    return data;
+  }
+  // Multi-resultset del TAB Gerencial en un solo fetch. `tiposCaja` viaja como CSV string (el axios no
+  // serializa arrays a .NET); si es vacío/undefined se omite y el SP asume TODOS. Puede tardar unos
+  // segundos (SQL remoto, ventana 13m) -> muestra el LOADER GLOBAL (overlay, igual que /caja) + timeout 60s.
+  async dashGerencial(f: DashFiltro): Promise<DashGerencialResponse> {
+    const params: Record<string, unknown> = { desde: f.desde, hasta: f.hasta };
+    if (f.tiposCaja) params.tiposCaja = f.tiposCaja;
+    const { data } = await this.http.get<DashGerencialResponse>('/dashboard/gerencial', { params, timeout: 60000 } as never);
+    return data;
+  }
+  // Multi-resultset del TAB Contable. Misma convención que dashGerencial (loader global + timeout 60s).
+  async dashContable(f: DashFiltro): Promise<DashContableResponse> {
+    const params: Record<string, unknown> = { desde: f.desde, hasta: f.hasta };
+    if (f.tiposCaja) params.tiposCaja = f.tiposCaja;
+    const { data } = await this.http.get<DashContableResponse>('/dashboard/contable', { params, timeout: 60000 } as never);
     return data;
   }
 }

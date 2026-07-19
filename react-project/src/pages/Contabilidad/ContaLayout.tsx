@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope, Activity } from 'lucide-react';
+import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope, Activity, LayoutDashboard } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
+import { useScrollTopOnNavigate } from '../../hooks/useScrollTopOnNavigate';
+import { authService } from '../../services';
 import ContaSidebar from './components/ContaSidebar';
 import ContaHeader from './components/ContaHeader';
 import Footer from '../../components/Layout/Footer';
 
 // 'need' controla la visibilidad: undefined = todos; 'write' = SA/CONTABILIDAD; 'SA' = solo SA.
 const navItems: { to: string; label: string; icon: React.ComponentType<{ className?: string }>; need?: 'write' | 'SA' }[] = [
+  // Dashboard PRIMERO de la lista (pedido explícito del usuario). Visible a todo usuario conta.
+  { to: '/conta/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/conta/caja', label: 'Caja Diaria', icon: Wallet },
   { to: '/conta/flujo-consolidado', label: 'Flujo Consolidado', icon: TrendingUp },
   { to: '/conta/rentabilidad', label: 'Rentabilidad', icon: PieChart },
@@ -37,6 +41,7 @@ const ContaLayout: React.FC = () => {
   const { isAuthenticated, user, logout, canWrite, hasRole } = useContaAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const scrollRef = useScrollTopOnNavigate<HTMLDivElement>(); // vuelve al top al cambiar de página
 
   // Estado del sidebar: abierto en desktop (>=1024), cerrado en mobile.
   // (Mismo patrón que MainLayout: listener de resize + colapso al cambiar de ruta en mobile.)
@@ -56,11 +61,20 @@ const ContaLayout: React.FC = () => {
 
   // El guard de auth va DESPUES de los hooks (reglas de hooks: no return antes de los hooks).
   if (!isAuthenticated) {
-    return <Navigate to="/conta/login" replace state={{ from: location.pathname }} />;
+    // Login unificado: sin sesion conta -> /login (ya no existe /conta/login). Se preserva 'from'.
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
   const toggleSidebar = () => setIsSidebarOpen((prev) => !prev);
-  const doLogout = () => { logout(); navigate('/conta/login', { replace: true }); };
+  // Logout UNIFICADO: el login puebla ambas sesiones, así que cerrar sesión limpia LAS DOS y vuelve al
+  // login unificado (/login), limpio para re-loguearse. (1) conta: conta_token + conta_user; (2) legacy:
+  // userData + authToken + refreshToken + loginTime vía authService; (3) evento para guards legacy montados.
+  const doLogout = () => {
+    logout();
+    authService.logout();
+    window.dispatchEvent(new CustomEvent('auth:logout'));
+    navigate('/login', { replace: true });
+  };
 
   // Nav plana ya filtrada por rol -> se pasa a ContaSidebar.
   const visibleNav = navItems
@@ -80,7 +94,7 @@ const ContaLayout: React.FC = () => {
         <ContaHeader toggleSidebar={toggleSidebar} user={user} onLogout={doLogout} />
 
         {/* Contenido principal con scroll */}
-        <div className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

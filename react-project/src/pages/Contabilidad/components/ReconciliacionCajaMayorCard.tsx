@@ -72,7 +72,7 @@ const resumenCorrida = (fila?: ReconLogRow): string => {
 };
 
 const ReconciliacionCajaMayorCard: React.FC = () => {
-  const { hasRole } = useContaAuth();
+  const { canWrite } = useContaAuth();
   const [estado, setEstado] = useState<ReconEstadoResponse | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(false);
@@ -124,7 +124,7 @@ const ReconciliacionCajaMayorCard: React.FC = () => {
     return (
       <div className="mb-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-3 flex items-center justify-between gap-3">
         <span className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-          <ShieldCheck className="h-4 w-4 text-slate-400" /> Reconciliación caja mayor (legacy): estado no disponible
+          <ShieldCheck className="h-4 w-4 text-slate-400" /> Reconciliación caja mayor: estado no disponible
         </span>
         <button
           type="button"
@@ -146,9 +146,9 @@ const ReconciliacionCajaMayorCard: React.FC = () => {
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">Reconciliación caja mayor (legacy)</div>
+            <div className="text-sm font-semibold text-slate-700 dark:text-slate-200">Reconciliación caja mayor</div>
             <div className="text-[11px] text-slate-400 dark:text-slate-500">
-              Cierres del legacy (cajamayor) reconciliados automáticamente. Tubería distinta de la Caja Diaria.
+              Cierres de caja mayor reconciliados automáticamente. Tubería distinta de la Caja Diaria.
             </div>
           </div>
         </div>
@@ -188,14 +188,14 @@ const ReconciliacionCajaMayorCard: React.FC = () => {
               </span>
             )}
 
-            {/* Reconciliar ahora (solo SA) */}
-            {hasRole('SA') && (
+            {/* Reconciliar ahora: operador completo (SA + CONTABILIDAD) */}
+            {canWrite && (
               <button
                 type="button"
                 onClick={reconciliarAhora}
                 disabled={reconciliando}
                 title={esObservacion(config?.Modo)
-                  ? 'La configuración está en Observación: la corrida no escribirá en la caja legacy'
+                  ? 'La configuración está en Observación: la corrida no escribirá en la caja mayor'
                   : 'Ejecuta una corrida de reconciliación ahora'}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white text-xs font-semibold"
               >

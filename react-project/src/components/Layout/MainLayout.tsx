@@ -4,12 +4,14 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Header from './Header';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
+import { useScrollTopOnNavigate } from '../../hooks/useScrollTopOnNavigate';
 
 const MainLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     return window.innerWidth >= 1024;
   });
   const location = useLocation();
+  const scrollRef = useScrollTopOnNavigate<HTMLDivElement>(); // vuelve al top al cambiar de página
 
   useEffect(() => {
     const handleResize = () => {
@@ -42,7 +44,7 @@ const MainLayout: React.FC = () => {
         <Header toggleSidebar={toggleSidebar} userName="Usuario CSL" />
         
         {/* Contenido principal con scroll */}
-        <div className="flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

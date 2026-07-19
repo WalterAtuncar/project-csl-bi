@@ -258,6 +258,7 @@ export interface CuadreDiaIngresoRow {
   i_IdFormaPago: number | null;
   FormaPago: string;
   EsCobranzaCredito: boolean;
+  UsuarioCajero: string; // username real del cajero que registró la venta (sentinel "SIN CAJERO"; nunca null)
   Monto: number;
 }
 export interface CuadreDiaEgresoRow {
@@ -266,6 +267,8 @@ export interface CuadreDiaEgresoRow {
   CentroCosto: string;
   Concepto: string | null;
   Monto: number;
+  i_IdTipoCaja: number | null;
+  Unidad: string;
 }
 export interface CuadreDiaResponse {
   Ingresos: CuadreDiaIngresoRow[];
@@ -570,6 +573,8 @@ export interface AnalisisHonorarioRow {
   edadPaciente: number | string | null;
   PorcRef: number | null;
   esPagado: number; // 0 | 1
+  UsuarioCajero: string; // username real del cajero que hizo la venta (sentinel "SIN CAJERO"; nunca null)
+  TipoProduccion: 'CLINICA' | 'SISOL' | null; // 9=CLINICA, 42=SISOL; NULL en filas sin service (no pagables)
 }
 
 // GET /honorarios/pagos (paginado server-side).
@@ -585,6 +590,7 @@ export interface HonorarioPagoListItem {
   NroConsultorios: number;
   NroServicios: number;
   v_Estado: 'PAGADO' | 'ANULADO' | string;
+  v_TipoProduccion: string; // 'CLINICA' | 'SISOL' (lo expone tanto la lista como la cabecera del Get)
 }
 export interface HonorarioPagosResponse {
   Total: number;
@@ -618,6 +624,38 @@ export interface HonorarioPagoServicio {
   d_Pagado: number | null;
   b_Anulado: boolean;
 }
+// Comprobante del detalle (GET /honorarios/pagos/{id} -> clave hermana de Cabecera/Consultorios/Servicios).
+// JSON sin camelCase (calca el DTO C#). v_Ruc/v_RazonSocialEmisor = CONGELADOS al emitir;
+// ProveedorRuc/ProveedorRazonSocial = VIGENTES del proveedor (pueden diferir).
+export interface HonorarioPagoComprobante {
+  i_Id: number;
+  i_IdPago: number;
+  v_TipoComprobante: string;          // '01' Factura | '02' Recibo por Honorarios
+  i_IdProveedor: number | null;
+  v_RucEmisor: string | null;
+  v_RazonSocialEmisor: string | null;
+  v_Serie: string | null;
+  v_Numero: string | null;
+  t_FechaEmision: string;
+  t_FechaVencimiento: string | null;
+  v_Moneda: string;
+  d_TipoCambio: number;
+  d_ImporteTotal: number;
+  d_BaseImponible: number;
+  d_IGV: number;
+  b_AplicaRetencion: boolean;
+  d_MontoRetencion: number;
+  b_AplicaDetraccion: boolean;
+  d_PorcDetraccion: number | null;
+  d_MontoDetraccion: number | null;
+  v_ConstanciaDetraccion: string | null;
+  d_NetoPagar: number;
+  v_Observaciones: string | null;
+  i_InsertaIdUsuario: number;
+  t_InsertaFecha: string;
+  ProveedorRuc: string | null;
+  ProveedorRazonSocial: string | null;
+}
 // Cabecera del detalle: campos del List + los opcionales que solo expone el Get.
 export interface HonorarioPagoCabecera extends HonorarioPagoListItem {
   d_PorcMedico?: number | null;
@@ -630,6 +668,7 @@ export interface HonorarioPagoDetalle {
   Cabecera: HonorarioPagoCabecera;
   Consultorios: HonorarioPagoConsultorio[];
   Servicios: HonorarioPagoServicio[];
+  Comprobante: HonorarioPagoComprobante | null;
 }
 
 // POST /honorarios/pagos — el IdUsuario NO se manda (sale del JWT).
@@ -639,6 +678,27 @@ export interface HonorarioServicioInput {
   Precio?: number | null;
   Porc?: number | null;
   Pagado?: number | null;
+}
+// Comprobante (Factura/Recibo por Honorarios) del POST — OBLIGATORIO (el API responde 400 sin él).
+// Objeto anidado dentro de HonorarioPagoCreate. JSON sin camelCase (calca el DTO C#). El ImporteTotal
+// autoritativo lo fija el API = TotalPago del honorario; el front no lo envía (lo deriva el SP).
+export interface ComprobanteHonorarioInput {
+  TipoComprobante: '01' | '02';       // '01' Factura | '02' Recibo por Honorarios
+  IdProveedor?: number | null;        // null = emisor por texto libre
+  RucEmisor?: string | null;
+  RazonSocialEmisor?: string | null;
+  Serie?: string | null;
+  Numero?: string | null;
+  FechaEmision: string;               // 'YYYY-MM-DD' (requerida)
+  FechaVencimiento?: string | null;
+  Moneda: string;                     // 'PEN' | 'USD'
+  TipoCambio: number;                 // default 1
+  AplicaRetencion: boolean;           // renta 4ta 8% (solo relevante para Recibo)
+  AplicaDetraccion: boolean;
+  PorcDetraccion?: number | null;
+  MontoDetraccion?: number | null;    // si viene, tiene prioridad sobre PorcDetraccion
+  ConstanciaDetraccion?: string | null;
+  Observaciones?: string | null;
 }
 export interface HonorarioPagoCreate {
   MedicoId: number;
@@ -653,6 +713,8 @@ export interface HonorarioPagoCreate {
   TotalServicios: number;
   TotalPago: number;
   Servicios: HonorarioServicioInput[];
+  Comprobante: ComprobanteHonorarioInput;
+  TipoProduccion: 'CLINICA' | 'SISOL'; // liquidación mono-tipo: rutea el egreso a CC-ASIS o CC-SISOL
 }
 export interface HonorarioPagoCreateResult {
   i_IdPago: number;
@@ -875,4 +937,111 @@ export interface EpiCanalFilters {
   ambito?: EpiAmbito;
   capitulo?: number;
   cie10?: string;
+}
+
+// ================= Dashboard Gerencial + Contable (módulo /conta/dashboard) =================
+// Contratos del DashboardController (API conta). A diferencia de Epidemiología, ESTE endpoint NO
+// envuelve en camelCase: el JSON de nivel superior y los campos internos son TODO PascalCase
+// (columnas de los SPs sp_Dashboard_Gerencial/Contable; PropertyNamingPolicy=null en Program.cs).
+// NO tocar los nombres — el front lee por clave exacta. Ver PLAN_DASHBOARD_GERENCIAL_CONTABLE §5.4/§5.5.
+
+// ---- Catálogo de checkboxes (GET /dashboard/tipos-caja) ----
+export interface DashTipoCaja {
+  i_IdTipoCaja: number;
+  v_NombreTipoCaja: string;
+}
+
+// Filtro común de ambos tabs. `tiposCaja` viaja como CSV string (regla del proyecto: axios sin
+// paramsSerializer no bindea arrays a .NET). desde/hasta en yyyy-MM-dd.
+export interface DashFiltro {
+  desde: string;
+  hasta: string;
+  tiposCaja: string; // CSV de ids '1,2,6'
+}
+
+// ---- TAB Gerencial (GET /dashboard/gerencial) ----
+export interface DashGerencialKpis {
+  VentaNeta: number;
+  VentaNetaPrev: number;
+  NumVentas: number;
+  TicketPromedio: number;
+  TicketPromedioPrev: number;
+  Cobrado: number;
+  CobradoPrev: number;
+  Egresos: number;
+  EgresosPrev: number;
+  FlujoNeto: number;
+  IngresosDevAjust: number;
+  MargenOperativoPct: number;
+  MargenOperativoPctPrev: number;
+  PorCobrar: number;
+  RatioCobranzaPct: number;
+}
+export interface DashTendenciaMensualRow { Anio: number; Mes: number; VentaNeta: number; Cobrado: number; Egresos: number; ResultadoDev: number; MargenPct: number; }
+export interface DashSerieDiariaRow { Fecha: string; VentaNeta: number; Cobrado: number; Egresos: number; }
+export interface DashMixUnidadRow { IdTipoCaja: number; Unidad: string; VentaNeta: number; Cobrado: number; Egresos: number; Resultado: number; PctVenta: number; }
+export interface DashMixMensualRow { Anio: number; Mes: number; IdTipoCaja: number; Unidad: string; VentaNeta: number; }
+export interface DashMedioPagoRow { IdFormaPago: number; FormaPago: string; Monto: number; Pct: number; }
+export type DashWaterfallTipo = 'ENTRADA' | 'SALIDA' | 'NETO';
+export interface DashWaterfallRow { Orden: number; Concepto: string; Monto: number; Tipo: DashWaterfallTipo; }
+export interface DashTopEgresoRow { Categoria: string; Fuente: string; Monto: number; Pct: number; }
+export interface DashCxcUnidadRow { IdTipoCaja: number; Unidad: string; CreditoFacturado: number; CreditoCobrado: number; PorCobrar: number; }
+export interface DashHeatmapCobranzaRow { DiaSemana: number; Etiqueta: string; NumSemana: number; FechaInicioSemana: string; Cobrado: number; }
+
+export interface DashGerencialResponse {
+  Kpis: DashGerencialKpis;
+  TendenciaMensual: DashTendenciaMensualRow[];
+  SerieDiaria: DashSerieDiariaRow[];
+  MixUnidad: DashMixUnidadRow[];
+  MixMensual: DashMixMensualRow[];
+  MediosPago: DashMedioPagoRow[];
+  Waterfall: DashWaterfallRow[];
+  TopEgresos: DashTopEgresoRow[];
+  CxcUnidad: DashCxcUnidadRow[];
+  HeatmapCobranza: DashHeatmapCobranzaRow[];
+}
+
+// ---- TAB Contable (GET /dashboard/contable) ----
+export interface DashContableKpis {
+  Cobrado: number;
+  CobradoPrev: number;
+  Egresos: number;
+  EgresosPrev: number;
+  EgresosLegacy: number;
+  EgresosConta: number;
+  Planilla: number;
+  FlujoNeto: number;
+  FlujoNetoPrev: number;
+  EgresoPromedioDiario: number;
+  PorCobrar: number;
+  PorPagar: number;
+  IGVDebitoEstimado: number;
+  IGVCreditoFiscal: number;
+  IGVResultanteEstimado: number;
+}
+export interface DashIngresosVsEgresosRow { Anio: number; Mes: number; Cobrado: number; Egresos: number; FlujoNeto: number; }
+export interface DashCobranzaMedioMesRow { Anio: number; Mes: number; IdFormaPago: number; FormaPago: string; Monto: number; }
+export interface DashComposicionGastoRow { Fuente: string; Categoria: string; Monto: number; Pct: number; }
+export interface DashEvolucionCxcRow { Anio: number; Mes: number; CreditoFacturadoMes: number; CreditoCobradoMes: number; SaldoAcumulado: number; }
+export type DashCxpBucket = '0-30' | '31-60' | '61-90' | '90+';
+export interface DashCxpAgingRow { Categoria: string; Bucket: DashCxpBucket; Monto: number; NumDocs: number; }
+export interface DashIgvMensualRow { Anio: number; Mes: number; IGVDebitoEstimado: number; IGVCreditoFiscal: number; IGVResultante: number; }
+export interface DashPlanillaMesRow { Anio: number; Mes: number; Concepto: string; Monto: number; }
+export interface DashSaldoBancarioRow { IdCuenta: number; Banco: string; Cuenta: string; Moneda: string; EsDetraccion: boolean; Saldo: number | null; AnioMesRef: number | null; }
+export interface DashHonorarioConsultorioRow { Consultorio: string; Monto: number; NumPagos: number; }
+export interface DashSisolLiquidacionRow { Anio: number; Mes: number; VentaNeta: number; PctClinica: number; MontoClinica: number; MontoHospital: number; Estado: string; }
+
+export interface DashContableResponse {
+  Kpis: DashContableKpis;
+  IngresosVsEgresos: DashIngresosVsEgresosRow[];
+  CobranzasMedioMes: DashCobranzaMedioMesRow[];
+  ComposicionGastos: DashComposicionGastoRow[];
+  EvolucionCxc: DashEvolucionCxcRow[];
+  CxcUnidad: DashCxcUnidadRow[];
+  CxpAging: DashCxpAgingRow[];
+  IgvMensual: DashIgvMensualRow[];
+  PlanillaMes: DashPlanillaMesRow[];
+  SaldosBancarios: DashSaldoBancarioRow[];
+  HonorariosConsultorio: DashHonorarioConsultorioRow[];
+  SisolLiquidaciones: DashSisolLiquidacionRow[];
 }

@@ -33,7 +33,7 @@ namespace Contabilidad.Controllers
         /// Respeta el Modo de config: permite override SOLO hacia Observacion (jamas fuerza Escritura).
         /// </summary>
         [HttpPost("reconciliar")]
-        [Authorize(Roles = "SA")]
+        [Authorize(Roles = "SA,CONTABILIDAD")] // SA + CONTABILIDAD: operador completo (la unica exclusiva de SA es gestion de usuarios)
         public async Task<IActionResult> Reconciliar([FromBody] ReconciliarRequest req, CancellationToken ct)
         {
             req ??= new ReconciliarRequest();

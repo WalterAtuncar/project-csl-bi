@@ -58,7 +58,7 @@ namespace Contabilidad.Controllers
             => Ok(_repo.CerrarMes(r.Anio, r.Mes, User.UserId()));
 
         [HttpPost("reabrir-mes")]
-        [Authorize(Roles = "SA")]
+        [Authorize(Roles = ESCRITURA)] // SA + CONTABILIDAD: operador completo (la unica exclusiva de SA es gestion de usuarios)
         public IActionResult ReabrirMes([FromBody] CerrarMesRequest r)
             => Ok(new { ok = _repo.ReabrirMes(r.Anio, r.Mes, User.UserId()) });
 

@@ -1,19 +1,10 @@
 import React from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import MainLayout from './components/Layout/MainLayout';
 import Login from './pages/Login/Login';
-import { GeneralDashboard, FinancialDashboard, SalesDashboard } from './pages/Dashboard';
-import { CajaMayor } from './pages/CajaMayor';
-import { HonorariosMedicos } from './pages/HonorariosMedicos';
-import { FlujoCaja } from './pages/FlujoCaja';
-import { RegistroCompras } from './pages/RegistroCompras';
 import NotFound from './pages/NotFound';
-import ProtectedRoute from './components/ProtectedRoute';
-import ExampleAssets from './components/ExampleAssets';
-import AnalisisV2 from './pages/ConsultasBI/Analisis-v2';
 import { GlobalLoader, ToastProvider } from './components/UI';
 import { ContaAuthProvider } from './context/ContaAuthContext';
-import { ContaLogin, ContaLayout, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, Honorarios, Epidemiologia, Catalogos, Usuarios } from './pages/Contabilidad';
+import { ContaLayout, Dashboard, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, Honorarios, Epidemiologia, Catalogos, Usuarios } from './pages/Contabilidad';
 // [SOFT-DELETE 2026-07-13] Registro de Compras absorbido por Egresos (/conta/egresos), que ahora
 // unifica compras (receptor PROVEEDOR) + entidades. La ruta /conta/compras redirige a /conta/egresos
 // para no romper bookmarks. El componente Compras sigue en disco (bandeja fiscal sin feed). Restaurar
@@ -30,6 +21,12 @@ import { ContaLogin, ContaLayout, Egresos, CostosPersonal, CajaDiaria, FlujoCons
 // Restaurar: descomentar el import de abajo y devolver element={<Sisol />} a su <Route>, re-agregar la entrada en ContaLayout.
 // import { Sisol } from './pages/Contabilidad';
 
+// [CLEANUP 2026-07-15] Rutas legacy (MainLayout + ProtectedRoute: dashboards, consultas-bi, caja-mayor,
+// flujo-caja, registro-compras, honorarios-medicos, assets-demo) RETIRADAS del routing: el BI vive ahora
+// bajo /conta/* con el login unificado (/login). Tambien se retiro /conta/login (deep-link duplicado):
+// el guard de no-autenticado del conta redirige directo a /login. Los componentes legacy siguen en disco
+// (huerfanos, sin ruta). La raiz '/' ahora entra a /conta/dashboard (el guard rebota a /login si no hay sesion).
+
 // El provider de auth de contabilidad envuelve las rutas hijas del modulo.
 const ContaOutlet: React.FC = () => <Outlet />;
 
@@ -37,13 +34,15 @@ const App: React.FC = () => {
   return (
     <ToastProvider>
       <Routes>
+        {/* Raiz -> app. Si no hay sesion, el guard de ContaLayout rebota a /login. */}
+        <Route path="/" element={<Navigate to="/conta/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
 
         {/* Modulo de Gestion Financiera / Contabilidad (API dedicada + identity propia) */}
         <Route path="/conta" element={<ContaAuthProvider><ContaOutlet /></ContaAuthProvider>}>
-          <Route path="login" element={<ContaLogin />} />
           <Route element={<ContaLayout />}>
-            <Route index element={<Navigate to="/conta/caja" replace />} />
+            <Route index element={<Navigate to="/conta/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
             <Route path="caja" element={<CajaDiaria />} />
             <Route path="flujo-consolidado" element={<FlujoConsolidado />} />
             <Route path="rentabilidad" element={<Rentabilidad />} />
@@ -64,39 +63,10 @@ const App: React.FC = () => {
             <Route path="usuarios" element={<Usuarios />} />
           </Route>
         </Route>
-        
-        <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<MainLayout />}>
-            <Route index element={<Navigate to="/dashboards/general" replace />} />
-            
-            <Route path="dashboards">
-              <Route index element={<Navigate to="/dashboards/general" replace />} />
-              <Route path="general" element={<GeneralDashboard />} />
-              <Route path="finanzas" element={<FinancialDashboard />} />
-              <Route path="ventas" element={<SalesDashboard />} />
-              <Route path="operaciones" element={<Navigate to="/dashboards/ventas" replace />} />
-            </Route>
-            
-            <Route path="consultas-bi">
-              <Route index element={<Navigate to="/consultas-bi/v2" replace />} />
-              <Route path="v2" element={<AnalisisV2 />} />
-              {/* Redirigir la ruta antigua a la nueva versión */}
-              <Route path="analisis" element={<Navigate to="/consultas-bi/v2" replace />} />
-            </Route>
-            
-            <Route path="caja-mayor" element={<CajaMayor />} />
-            <Route path="flujo-caja" element={<FlujoCaja />} />
-            <Route path="registro-compras" element={<RegistroCompras />} />
-            <Route path="honorarios-medicos" element={<HonorariosMedicos />} />
 
-            {/* Ruta para probar los recursos estáticos */}
-            <Route path="assets-demo" element={<ExampleAssets />} />
-          </Route>
-        </Route>
-        
         <Route path="*" element={<NotFound />} />
       </Routes>
-      
+
       {/* Loader global que se muestra en toda la aplicación */}
       <GlobalLoader />
     </ToastProvider>

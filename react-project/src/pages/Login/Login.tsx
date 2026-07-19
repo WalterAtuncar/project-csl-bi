@@ -37,8 +37,8 @@ const Login: React.FC = () => {
         // Usuario del sistema: puebla el userData legacy (pantallas del BI siguen disponibles).
         authService.saveUserDataFromLegacy(res.LegacyUser);
       }
-      // Login correcto (legacy o breakglass): entra directo al modulo de Contabilidad.
-      setTimeout(() => navigate('/conta'), 100);
+      // Login correcto (legacy o breakglass): entra directo al Dashboard del modulo de Contabilidad.
+      setTimeout(() => navigate('/conta/dashboard'), 100);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Error al iniciar sesión. Verifique sus credenciales.';
       setError(errorMessage);
