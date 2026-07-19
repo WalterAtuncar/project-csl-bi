@@ -1,23 +1,23 @@
 -- =============================================================================
 -- 10_rentabilidad_consultorio.sql
--- Rentabilidad por Consultorio (ASISTENCIAL / OCUPACIONAL) + OTRAS_UNIDADES.
+-- Rentabilidad por Consultorio (ASISTENCIAL vs SISOL). REFORMADO 2026-07-19:
+--   la rama OCUPACIONAL sale de este SP -> se analiza por EMPRESA CLIENTE en
+--   conta.sp_Rentabilidad_OcupacionalPorEmpresa (sp/17_rentabilidad_empresa.sql).
 -- Objetos del schema conta:
 --   * conta.fn_Rentabilidad_IngresosDetalleEx  (iTVF, universo canonico a nivel linea) -- INTOCABLE
---   * conta.sp_Rentabilidad_PorConsultorio     (SP, 2 resultsets)
+--   * conta.sp_Rentabilidad_PorConsultorio     (SP, 3 resultsets: RS1 detalle, RS2 diag, RS3 cuadre)
 --
 -- Universo IDENTICO a conta.fn_Rentabilidad_IngresosEx (4 filtros canonicos +
 -- vd.i_Eliminado=0 + dh41 credito + fecha v.t_InsertaFecha + unidad via
--- tipocaja_clientetipo/tipocaja + % SISOL vigente para OTRAS).
+-- tipocaja_clientetipo/tipocaja). Aqui SOLO tipocaja 1 (ASISTENCIAL) y 3 (SISOL).
 --
--- Puentes venta <-> Sigesoft (SigesoftDesarrollo_2 = SOLO SELECT):
+-- Puente venta <-> Sigesoft (SigesoftDesarrollo_2 = SOLO SELECT):
 --   A (cabecera/boletas): venta.v_CorrelativoDocumentoFin = ALGUN token de
 --       service.v_ComprobantePago (split multi-token por '|'), ventana +-15d.
---       ASISTENCIAL dedup rn=1 prefiriendo el token primario (posicion 1).
---   B (liquidacion/EDP):  serie-correlativo = liquidacion.v_NroFactura ->
---       v_NroLiquidacion -> service.v_NroLiquidacion.
+--       Dedup rn=1 prefiriendo el token primario (posicion 1).
 --
--- ASISTENCIAL: protocol.i_Consultorio -> grupo 403, con CUATRO capas de rescate
---   (determinista -> heuristica) sobre lo que va quedando '(SIN CLASIFICAR)':
+-- ASISTENCIAL (tipocaja=1): protocol.i_Consultorio -> grupo 403, con CUATRO capas
+--   de rescate (determinista -> heuristica) sobre lo que va quedando '(SIN CLASIFICAR)':
 --   Capa 1 Multi-token: Puente A contra TODOS los tokens (rescata comprobantes en
 --          posicion 2+, p.ej. garantia bundleada en la liquidacion).
 --   Capa 2 SIN_CONSULTORIO por protocolo: i_Consultorio NULL y (v_Procedencia='H'
@@ -28,13 +28,17 @@
 --          en +-15d de la venta.
 --   Capa 4 Heuristica por descripcion (ultima red): refDesc LIKE '%GARANT%' /
 --          '%PAQUETE%' / '%HOSPITALIZA%' / '%HOSPITALAR%' -> HOSPITALIZACION.
---   Toda capa REDISTRIBUYE (nunca crea/pierde ingreso); el residuo sigue en
---   '(SIN CLASIFICAR)' con motivo del dominio (SIN_SERVICE / SIN_CONSULTORIO).
--- OCUPACIONAL: A U B -> servicecomponent -> component.i_CategoryId -> grupo 116,
---   con PRORRATEO anti-fan-out: IngresoComp = NetoVenta * Peso / SUM(Peso) OVER(venta),
---   Peso = ISNULL(NULLIF(sc.r_Price,0), c.r_BasePrice). Sin puente -> '(SIN CLASIFICAR)'.
---   (NO se le aplican las capas de rescate asistenciales; su Puente A tambien es multi-token.)
--- El dinero SIEMPRE sale de ventadetalle.d_Valor; Sigesoft solo aporta dimension/peso.
+--   Fuga rotulada 'NO SE ATENDIERON CON EL SISTEMA' (EsNoClasificado=1).
+-- SISOL (tipocaja=3): NETO PLENO (no el 30% clinica). Mismo Puente A + dedup rn=1 +
+--   catalogo 403, SIN las capas de rescate de hospitalizacion (para SISOL basta el
+--   Puente A + dedup). Fuga rotulada 'SIN ATENCION ASOCIADA' (EsNoClasificado=1).
+--
+-- El dinero SIEMPRE sale de ventadetalle.d_Valor; Sigesoft solo aporta dimension.
+-- Egresos (v2, fix D5): particionados por centro de costo resuelto por v_Codigo
+--   (CC-ASIS -> filas ASISTENCIAL ; CC-SISOL -> filas SISOL). Cualquier otro centro
+--   (o egreso manual con consultorio) queda EXCLUIDO de ambos, por diseno.
+-- RS3 (cuadre): reconcilia con Rentabilidad General leyendo % SISOL y otras unidades
+--   EN VIVO desde fn_Rentabilidad_IngresosEx; Ocupacional = SUM iTVF Detalle tipocaja=2.
 -- SQL Server 2012 estricto (LTRIM/RTRIM, CHARINDEX, ROW_NUMBER, SUM() OVER; sin
 -- STRING_SPLIT/TRIM/CREATE OR ALTER). Cross-DB texto con COLLATE DATABASE_DEFAULT.
 -- Tokenizador blindado (CASE anti "Invalid length"); materializado UNA vez en #tok.
@@ -50,6 +54,8 @@ GO
 -- iTVF: universo canonico a nivel LINEA (misma logica que fn_Rentabilidad_IngresosEx,
 -- pero devolviendo la linea con claves de venta para los puentes).
 -- SUM(Neto) por i_IdTipoCaja reproduce al centavo NetoSinIGV de la fn agregada.
+-- INTOCABLE: devuelve TODAS las tipocajas (el SP filtra). Consumidores: este SP y
+-- conta.sp_Rentabilidad_OcupacionalPorEmpresa (sp/17).
 -- -----------------------------------------------------------------------------
 CREATE FUNCTION conta.fn_Rentabilidad_IngresosDetalleEx
     (@Anio SMALLINT, @Mes TINYINT, @IncluirCredito BIT)
@@ -85,7 +91,7 @@ RETURN (
 );
 GO
 -- -----------------------------------------------------------------------------
--- SP: Rentabilidad por Consultorio (2 resultsets).
+-- SP: Rentabilidad por Consultorio (ASISTENCIAL vs SISOL). 3 resultsets.
 -- -----------------------------------------------------------------------------
 CREATE PROCEDURE conta.sp_Rentabilidad_PorConsultorio
     @Anio           SMALLINT,
@@ -98,8 +104,12 @@ BEGIN
     DECLARE @ini   DATE = DATEFROMPARTS(@Anio,@Mes,1);
     DECLARE @finEx DATE = DATEADD(MONTH,1,DATEFROMPARTS(@Anio,@Mes,1));
 
+    -- Centros de costo resueltos por v_Codigo (NUNCA ids hardcodeados).
+    DECLARE @ccAsis INT  = (SELECT i_IdCentroCosto FROM conta.centro_costo WHERE v_Codigo = 'CC-ASIS');
+    DECLARE @ccSisol INT = (SELECT i_IdCentroCosto FROM conta.centro_costo WHERE v_Codigo = 'CC-SISOL');
+
     -- ---------------------------------------------------------------------
-    -- 1) Universo por VENTA (solo ASISTENCIAL=1 y OCUPACIONAL=2) desde la iTVF.
+    -- 1) Universo por VENTA (solo ASISTENCIAL=1 y SISOL=3) desde la iTVF.
     --    NetoVenta = SUM(vd.d_Valor). Claves de puente por venta. v_IdCliente y
     --    FechaVenta (t_InsertaFecha) se traen de dbo.venta para el Puente C (Capa 3).
     -- ---------------------------------------------------------------------
@@ -117,7 +127,7 @@ BEGIN
     INTO #venta
     FROM conta.fn_Rentabilidad_IngresosDetalleEx(@Anio,@Mes,@IncluirCredito) d
     LEFT JOIN dbo.venta v2 ON v2.v_IdVenta = d.v_IdVenta
-    WHERE d.i_IdTipoCaja IN (1,2)
+    WHERE d.i_IdTipoCaja IN (1,3)
     GROUP BY d.v_IdVenta, d.i_IdTipoCaja, d.v_CorrelativoDocumentoFin,
              d.v_SerieDocumento, d.v_CorrelativoDocumento;
 
@@ -163,11 +173,9 @@ BEGIN
        AND (n.number = 1 OR SUBSTRING(b.cp, CASE WHEN n.number < 2 THEN 1 ELSE n.number-1 END, 1) = '|');
 
     -- ---------------------------------------------------------------------
-    -- 3) RAMA ASISTENCIAL: Puente A multi-token con dedup rn=1 (1 consultorio por
-    --    token). Se prefiere el token primario (TokPrimario DESC) para NO mover a
-    --    los ya clasificados: los tokens en posicion 1 conservan su service dueno;
-    --    solo los tokens que unicamente existen en posicion 2+ rescatan la venta.
-    --    EsSalaOps: protocolo de sala de operaciones (Capa 2).
+    -- 3) CLASIFICACION POR CONSULTORIO (Puente A multi-token con dedup rn=1).
+    --    Se prefiere el token primario (TokPrimario DESC) para NO mover a los ya
+    --    clasificados. EsSalaOps: protocolo de sala de operaciones (Capa 2 ASIST).
     -- ---------------------------------------------------------------------
     IF OBJECT_ID('tempdb..#svcA') IS NOT NULL DROP TABLE #svcA;
     SELECT token, i_Consultorio, v_Procedencia, EsSalaOps
@@ -186,7 +194,8 @@ BEGIN
     ) z
     WHERE z.rn = 1;
 
-    -- Clasificacion base (Capa 1 + rescate H existente + Capa 2 Sala de Operaciones).
+    -- 3.1) RAMA ASISTENCIAL (tipocaja=1): clasificacion base (Capa 1 + rescate H
+    --      existente + Capa 2 Sala de Operaciones), luego Capa 3 y Capa 4.
     IF OBJECT_ID('tempdb..#asis') IS NOT NULL DROP TABLE #asis;
     SELECT
         v.v_IdVenta,
@@ -248,76 +257,31 @@ BEGIN
          OR UPPER(a.refDesc) LIKE '%HOSPITALIZA%'
          OR UPPER(a.refDesc) LIKE '%HOSPITALAR%' );
 
-    -- ---------------------------------------------------------------------
-    -- 4) RAMA OCUPACIONAL: pares venta-service (Puente A boletas U Puente B EDP).
-    --    Puente A tambien es multi-token (drop-in de #tok): rescata comprobantes
-    --    en posicion 2+ sin dedup (se abre el paquete). NO se le aplican capas.
-    -- ---------------------------------------------------------------------
-    IF OBJECT_ID('tempdb..#pair') IS NOT NULL DROP TABLE #pair;
-    -- Puente A: TODOS los services cuyo token = corrFin (sin dedup: se abre el paquete).
-    SELECT DISTINCT o.v_IdVenta, sv.v_ServiceId
-    INTO #pair
-    FROM #venta o
-    JOIN #tok sv ON sv.token = o.corrFin AND sv.token <> ''
-    WHERE o.i_IdTipoCaja = 2;
-
-    -- Puente B: factura -> liquidacion.v_NroFactura -> v_NroLiquidacion ->
-    -- service.v_NroLiquidacion. NO se limita a la ventana +-15d: los EDP se
-    -- liquidan semanas/meses despues; se alcanza hasta 12 meses atras (piso que
-    -- ademas aprovecha el clustered de servicecomponent en el paso siguiente).
-    INSERT INTO #pair (v_IdVenta, v_ServiceId)
-    SELECT DISTINCT o.v_IdVenta, s.v_ServiceId COLLATE DATABASE_DEFAULT
-    FROM #venta o
-    JOIN SigesoftDesarrollo_2.dbo.liquidacion lq
-        ON LTRIM(RTRIM(lq.v_NroFactura)) COLLATE DATABASE_DEFAULT = o.factura
-    JOIN SigesoftDesarrollo_2.dbo.service s
-        ON LTRIM(RTRIM(s.v_NroLiquidacion)) COLLATE DATABASE_DEFAULT
-             = LTRIM(RTRIM(lq.v_NroLiquidacion))
-       AND ISNULL(s.i_IsDeleted,0) = 0
-       AND s.v_NroLiquidacion IS NOT NULL
-       AND LTRIM(RTRIM(s.v_NroLiquidacion)) <> ''
-       AND s.d_ServiceDate >= DATEADD(MONTH,-12,@ini)
-    WHERE o.i_IdTipoCaja = 2
-      AND NOT EXISTS (SELECT 1 FROM #pair p
-                      WHERE p.v_IdVenta = o.v_IdVenta
-                        AND p.v_ServiceId = s.v_ServiceId COLLATE DATABASE_DEFAULT);
-
-    -- Componentes del paquete con peso (r_Price pactado; r_BasePrice solo fallback).
-    IF OBJECT_ID('tempdb..#comp') IS NOT NULL DROP TABLE #comp;
+    -- 3.2) RAMA SISOL (tipocaja=3): mismo Puente A + dedup rn=1 + catalogo 403,
+    --      SIN capas de rescate de hospitalizacion (para SISOL basta Puente A).
+    --      Toda fuga (sin token o sin consultorio) cae a '(SIN CLASIFICAR)'.
+    IF OBJECT_ID('tempdb..#sis') IS NOT NULL DROP TABLE #sis;
     SELECT
-        p.v_IdVenta,
-        ISNULL(sp116.v_Value1,'(SIN CATEGORIA)') COLLATE DATABASE_DEFAULT AS Categoria,
-        CAST(ISNULL(NULLIF(sc.r_Price,0), c.r_BasePrice) AS FLOAT) AS Peso
-    INTO #comp
-    FROM #pair p
-    JOIN SigesoftDesarrollo_2.dbo.service s2
-        ON s2.v_ServiceId = p.v_ServiceId COLLATE DATABASE_DEFAULT
-       AND s2.d_ServiceDate >= DATEADD(MONTH,-12,@ini)
-    JOIN SigesoftDesarrollo_2.dbo.servicecomponent sc
-        ON sc.v_ServiceId = p.v_ServiceId COLLATE DATABASE_DEFAULT
-       AND ISNULL(sc.i_IsDeleted,0) = 0
-    JOIN SigesoftDesarrollo_2.dbo.component c
-        ON c.v_ComponentId = sc.v_ComponentId
-    LEFT JOIN SigesoftDesarrollo_2.dbo.systemparameter sp116
-        ON sp116.i_GroupId = 116 AND sp116.i_ParameterId = c.i_CategoryId;
-
-    -- Prorrateo anti-fan-out: SUM por (venta) == NetoVenta exacto.
-    IF OBJECT_ID('tempdb..#ocupCat') IS NOT NULL DROP TABLE #ocupCat;
-    SELECT x.v_IdVenta, x.Categoria,
-           SUM(o.NetoVenta * x.PesoCalc / x.TotPeso) AS Ingreso
-    INTO #ocupCat
-    FROM (
-        SELECT cmp.v_IdVenta, cmp.Categoria,
-               ISNULL(cmp.Peso,0) AS PesoCalc,
-               SUM(ISNULL(cmp.Peso,0)) OVER (PARTITION BY cmp.v_IdVenta) AS TotPeso
-        FROM #comp cmp
-    ) x
-    JOIN #venta o ON o.v_IdVenta = x.v_IdVenta
-    WHERE x.TotPeso > 0
-    GROUP BY x.v_IdVenta, x.Categoria;
+        v.v_IdVenta,
+        v.NetoVenta,
+        v.factura,
+        v.refDesc,
+        CASE WHEN sv.token IS NULL THEN '(SIN CLASIFICAR)'
+             WHEN sv.i_Consultorio IS NULL THEN '(SIN CLASIFICAR)'
+             ELSE ISNULL(sp.v_Value1,'(SIN CLASIFICAR)')
+        END COLLATE DATABASE_DEFAULT AS Consultorio,
+        CASE WHEN sv.token IS NULL THEN 'SIN_SERVICE' ELSE 'SIN_CONSULTORIO' END AS MotivoRaw
+    INTO #sis
+    FROM #venta v
+    LEFT JOIN #svcA sv
+        ON sv.token = v.corrFin AND v.corrFin <> ''
+    LEFT JOIN SigesoftDesarrollo_2.dbo.systemparameter sp
+        ON sp.i_GroupId = 403 AND sp.i_ParameterId = sv.i_Consultorio
+    WHERE v.i_IdTipoCaja = 3;
 
     -- ---------------------------------------------------------------------
-    -- 5) Ensamblado RS1: detalle (Grupo, Consultorio, Ingresos, EsNoClasificado).
+    -- 4) Ensamblado RS1: detalle (Grupo, Consultorio, Ingresos, EsNoClasificado).
+    --    ASISTENCIAL y SISOL sin prorrateo (sumas exactas de 2 decimales).
     -- ---------------------------------------------------------------------
     IF OBJECT_ID('tempdb..#det') IS NOT NULL DROP TABLE #det;
     CREATE TABLE #det (
@@ -325,45 +289,34 @@ BEGIN
         Consultorio     NVARCHAR(100) NOT NULL,
         Ingresos        DECIMAL(18,2) NOT NULL,
         EsNoClasificado BIT           NOT NULL,
-        Egresos         DECIMAL(18,2) NOT NULL DEFAULT (0)   -- v2: egresos por consultorio (solo ASISTENCIAL)
+        Egresos         DECIMAL(18,2) NOT NULL DEFAULT (0)
     );
 
-    -- ASISTENCIAL (sin prorrateo: sumas exactas de 2 decimales).
+    -- ASISTENCIAL (NETO pleno del grupo asistencial).
     INSERT INTO #det (Grupo, Consultorio, Ingresos, EsNoClasificado)
     SELECT 'ASISTENCIAL', a.Consultorio, CAST(SUM(a.NetoVenta) AS DECIMAL(18,2)),
            CASE WHEN a.Consultorio = '(SIN CLASIFICAR)' THEN 1 ELSE 0 END
     FROM #asis a
     GROUP BY a.Consultorio;
 
-    -- OCUPACIONAL clasificado (prorrateado, redondeado a 2 decimales).
+    -- SISOL (NETO PLENO -- D1: no el 30% clinica; la participacion va en RS3).
     INSERT INTO #det (Grupo, Consultorio, Ingresos, EsNoClasificado)
-    SELECT 'OCUPACIONAL', oc.Categoria, CAST(SUM(oc.Ingreso) AS DECIMAL(18,2)), 0
-    FROM #ocupCat oc
-    GROUP BY oc.Categoria;
-
-    -- OCUPACIONAL sin clasificar = total del grupo - clasificado (reconciliacion exacta;
-    -- absorbe el residuo sub-centimo del prorrateo + las ventas EDP sin liquidacion aun).
-    INSERT INTO #det (Grupo, Consultorio, Ingresos, EsNoClasificado)
-    SELECT 'OCUPACIONAL', '(SIN CLASIFICAR)',
-           ISNULL((SELECT SUM(v.NetoVenta) FROM #venta v WHERE v.i_IdTipoCaja = 2),0)
-           - ISNULL((SELECT SUM(d.Ingresos) FROM #det d WHERE d.Grupo = 'OCUPACIONAL'),0),
-           1;
-
-    -- OTRAS_UNIDADES: directo de la fn canonica (SISOL a % clinica, FARMACIA, SEGUROS,
-    -- MTC) -> garantiza que el gran total reconcilie con Rentabilidad General.
-    INSERT INTO #det (Grupo, Consultorio, Ingresos, EsNoClasificado)
-    SELECT 'OTRAS_UNIDADES', f.Unidad, f.NetoRentabilidad, 0
-    FROM conta.fn_Rentabilidad_IngresosEx(@Anio,@Mes,@IncluirCredito) f
-    WHERE f.i_IdTipoCaja NOT IN (1,2);
+    SELECT 'SISOL', s.Consultorio, CAST(SUM(s.NetoVenta) AS DECIMAL(18,2)),
+           CASE WHEN s.Consultorio = '(SIN CLASIFICAR)' THEN 1 ELSE 0 END
+    FROM #sis s
+    GROUP BY s.Consultorio;
 
     -- ---------------------------------------------------------------------
-    -- 5b) EGRESOS por consultorio ASISTENCIAL (v2). Devengado (t_FechaDocumento),
-    --     <> ANULADO, con consultorio. Nombre = 403 (COLLATE DATABASE_DEFAULT,
-    --     fallback 'CONSULTORIO '+id) -> misma clave textual que #asis/#det.
-    --     OCUPACIONAL / OTRAS_UNIDADES: Egresos = 0 en esta fase.
+    -- 4b) EGRESOS por consultorio, PARTICIONADOS por centro de costo (fix D5).
+    --     Devengado (t_FechaDocumento), <> ANULADO, con consultorio. Nombre = 403
+    --     (COLLATE DATABASE_DEFAULT, fallback 'CONSULTORIO '+id). Se filtra a los
+    --     centros CC-ASIS/CC-SISOL: filas CC-ASIS alimentan ASISTENCIAL, filas
+    --     CC-SISOL alimentan SISOL. Cualquier otro centro queda EXCLUIDO.
+    --     Estado HOY: 0 egresos con i_IdConsultorio -> #egr vacio, Egresos=0.
     -- ---------------------------------------------------------------------
     IF OBJECT_ID('tempdb..#egr') IS NOT NULL DROP TABLE #egr;
     SELECT
+        e.i_IdCentroCosto,
         ISNULL(sp403.v_Value1 COLLATE DATABASE_DEFAULT,
                'CONSULTORIO ' + CAST(e.i_IdConsultorio AS VARCHAR(10))) AS Consultorio,
         CAST(SUM(e.d_MontoNeto) AS DECIMAL(18,2)) AS Egresos
@@ -375,32 +328,51 @@ BEGIN
       AND e.v_Estado <> 'ANULADO'
       AND e.t_FechaDocumento >= @ini
       AND e.t_FechaDocumento <  @finEx
-    GROUP BY e.i_IdConsultorio, sp403.v_Value1;
+      AND e.i_IdCentroCosto IN (@ccAsis, @ccSisol)
+    GROUP BY e.i_IdCentroCosto,
+             ISNULL(sp403.v_Value1 COLLATE DATABASE_DEFAULT,
+                    'CONSULTORIO ' + CAST(e.i_IdConsultorio AS VARCHAR(10)));
 
-    -- Adosar egresos a los consultorios ASISTENCIALES ya existentes (match por nombre).
+    -- Adosar egresos CC-ASIS a los consultorios ASISTENCIALES existentes.
     UPDATE d
        SET d.Egresos = g.Egresos
     FROM #det d
-    JOIN #egr g ON g.Consultorio = d.Consultorio
+    JOIN #egr g ON g.Consultorio = d.Consultorio AND g.i_IdCentroCosto = @ccAsis
     WHERE d.Grupo = 'ASISTENCIAL';
 
-    -- Consultorios SOLO-EGRESO (egreso sin ingreso en el mes): fila con Ingresos = 0.
+    -- Adosar egresos CC-SISOL a los consultorios SISOL existentes.
+    UPDATE d
+       SET d.Egresos = g.Egresos
+    FROM #det d
+    JOIN #egr g ON g.Consultorio = d.Consultorio AND g.i_IdCentroCosto = @ccSisol
+    WHERE d.Grupo = 'SISOL';
+
+    -- Consultorios SOLO-EGRESO ASISTENCIAL (egreso sin ingreso en el mes).
     INSERT INTO #det (Grupo, Consultorio, Ingresos, EsNoClasificado, Egresos)
     SELECT 'ASISTENCIAL', g.Consultorio, 0, 0, g.Egresos
     FROM #egr g
-    WHERE NOT EXISTS (SELECT 1 FROM #det d WHERE d.Grupo = 'ASISTENCIAL' AND d.Consultorio = g.Consultorio);
+    WHERE g.i_IdCentroCosto = @ccAsis
+      AND NOT EXISTS (SELECT 1 FROM #det d WHERE d.Grupo = 'ASISTENCIAL' AND d.Consultorio = g.Consultorio);
 
+    -- Consultorios SOLO-EGRESO SISOL (egreso sin ingreso en el mes).
+    INSERT INTO #det (Grupo, Consultorio, Ingresos, EsNoClasificado, Egresos)
+    SELECT 'SISOL', g.Consultorio, 0, 0, g.Egresos
+    FROM #egr g
+    WHERE g.i_IdCentroCosto = @ccSisol
+      AND NOT EXISTS (SELECT 1 FROM #det d WHERE d.Grupo = 'SISOL' AND d.Consultorio = g.Consultorio);
+
+    -- ---------------------------------------------------------------------
     -- RS1 con % del grupo y filas TOTAL por grupo.
     -- ROTULO especifico por grupo SOLO para la fila fugada (EsNoClasificado=1):
     --   ASISTENCIAL -> 'NO SE ATENDIERON CON EL SISTEMA'
-    --   OCUPACIONAL -> 'SIN LIQUIDACION' (con tilde en la O)
-    --   cualquier otro grupo (OTRAS_UNIDADES, hoy nunca fugada) -> '(SIN CLASIFICAR)' generico.
-    -- Solo cambia la ETIQUETA mostrada: monto, %, EsNoClasificado=1 (ambar en el front),
-    -- shape de columnas y ORDEN quedan identicos -> se ordena por ConsultorioOrd (rotulo
+    --   SISOL       -> 'SIN ATENCION ASOCIADA' (con tilde en la O)
+    -- Solo cambia la ETIQUETA mostrada; monto, %, EsNoClasificado=1 (ambar en el
+    -- front), shape y ORDEN quedan identicos -> se ordena por ConsultorioOrd (rotulo
     -- interno crudo '(SIN CLASIFICAR)'), no por la etiqueta mostrada.
-    -- v2: RS1 gana Egresos y Resultado (=Ingresos-Egresos) AL FINAL. PorcDelGrupo (sobre
+    -- RS1 lleva Egresos y Resultado (=Ingresos-Egresos) AL FINAL. PorcDelGrupo (sobre
     -- Ingresos) NO cambia; los TOTALes suman Ingresos y Egresos. Filtro relajado a
     -- (Ingresos<>0 OR Egresos<>0) para no perder consultorios solo-egreso.
+    -- ---------------------------------------------------------------------
     ;WITH tot AS (
         SELECT Grupo, SUM(Ingresos) AS GT, SUM(Egresos) AS GE FROM #det GROUP BY Grupo
     ),
@@ -408,7 +380,7 @@ BEGIN
         SELECT
             d.Grupo,
             CASE WHEN d.EsNoClasificado = 1 AND d.Grupo = 'ASISTENCIAL' THEN N'NO SE ATENDIERON CON EL SISTEMA'
-                 WHEN d.EsNoClasificado = 1 AND d.Grupo = 'OCUPACIONAL' THEN N'SIN LIQUIDACIÓN'
+                 WHEN d.EsNoClasificado = 1 AND d.Grupo = 'SISOL'       THEN N'SIN ATENCIÓN ASOCIADA'
                  ELSE d.Consultorio
             END AS Consultorio,
             d.Consultorio AS ConsultorioOrd,
@@ -439,8 +411,8 @@ BEGIN
     ORDER BY Grupo, EsTotal, Ingresos DESC, ConsultorioOrd;
 
     -- ---------------------------------------------------------------------
-    -- 6) RS2: diagnostico de la fuga (TOP 50 por monto).
-    --    ASISTENCIAL -> SIN_SERVICE / SIN_CONSULTORIO ; OCUPACIONAL -> SIN_LIQUIDACION.
+    -- RS2: diagnostico de la fuga (TOP 50 por monto).
+    --   ASISTENCIAL -> SIN_SERVICE / SIN_CONSULTORIO ; SISOL -> SIN_SERVICE (/ SIN_CONSULTORIO).
     -- ---------------------------------------------------------------------
     SELECT TOP 50 g.Grupo, g.Motivo, g.Referencia, g.Monto
     FROM (
@@ -451,14 +423,49 @@ BEGIN
         FROM #asis a
         WHERE a.Consultorio = '(SIN CLASIFICAR)'
         UNION ALL
-        SELECT 'OCUPACIONAL',
-               'SIN_LIQUIDACION',
-               (o.factura + ' | ' + ISNULL(o.refDesc,'')),
-               o.NetoVenta
-        FROM #venta o
-        WHERE o.i_IdTipoCaja = 2
-          AND o.v_IdVenta NOT IN (SELECT oc.v_IdVenta FROM #ocupCat oc)
+        SELECT 'SISOL',
+               s.MotivoRaw,
+               (s.factura + ' | ' + ISNULL(s.refDesc,'')),
+               s.NetoVenta
+        FROM #sis s
+        WHERE s.Consultorio = '(SIN CLASIFICAR)'
     ) g
     ORDER BY g.Monto DESC;
+
+    -- ---------------------------------------------------------------------
+    -- RS3: CUADRE con Rentabilidad General (una fila). Todo EN VIVO:
+    --   Asistencial/SisolNetoPleno = totales de RS1 (#det). SisolPorcClinica,
+    --   SisolParticipacionClinica y OtrasUnidadesNeto desde fn_Rentabilidad_IngresosEx
+    --   (para reconciliar al centavo con General, sin recalcular el % a mano).
+    --   OcupacionalNeto = SUM iTVF Detalle tipocaja=2 (mismo calculo que sp/17).
+    -- ---------------------------------------------------------------------
+    DECLARE @asisNeto DECIMAL(18,2) =
+        ISNULL((SELECT SUM(Ingresos) FROM #det WHERE Grupo = 'ASISTENCIAL'),0);
+    DECLARE @sisolPleno DECIMAL(18,2) =
+        ISNULL((SELECT SUM(Ingresos) FROM #det WHERE Grupo = 'SISOL'),0);
+    DECLARE @sisolPart DECIMAL(18,2) =
+        ISNULL((SELECT SUM(NetoRentabilidad) FROM conta.fn_Rentabilidad_IngresosEx(@Anio,@Mes,@IncluirCredito) WHERE i_IdTipoCaja = 3),0);
+    DECLARE @sisolPorc DECIMAL(5,2) =
+        ISNULL((SELECT TOP 1 PorcClinica FROM conta.fn_Rentabilidad_IngresosEx(@Anio,@Mes,@IncluirCredito) WHERE i_IdTipoCaja = 3),
+               ISNULL((SELECT TOP 1 d_PorcClinica FROM conta.sisol_participacion
+                       WHERE t_VigenciaDesde <= @ini AND (t_VigenciaHasta IS NULL OR t_VigenciaHasta >= @ini)
+                       ORDER BY t_VigenciaDesde DESC), 100));
+    DECLARE @otrasNeto DECIMAL(18,2) =
+        ISNULL((SELECT SUM(NetoRentabilidad) FROM conta.fn_Rentabilidad_IngresosEx(@Anio,@Mes,@IncluirCredito) WHERE i_IdTipoCaja NOT IN (1,2,3)),0);
+    DECLARE @ocupNeto DECIMAL(18,2) =
+        ISNULL((SELECT SUM(x.NetoVenta) FROM (
+                    SELECT CAST(SUM(d.Neto) AS DECIMAL(18,2)) AS NetoVenta
+                    FROM conta.fn_Rentabilidad_IngresosDetalleEx(@Anio,@Mes,@IncluirCredito) d
+                    WHERE d.i_IdTipoCaja = 2
+                    GROUP BY d.v_IdVenta) x),0);
+
+    SELECT
+        @asisNeto AS AsistencialNeto,
+        @sisolPleno AS SisolNetoPleno,
+        @sisolPorc AS SisolPorcClinica,
+        @sisolPart AS SisolParticipacionClinica,
+        @ocupNeto AS OcupacionalNeto,
+        @otrasNeto AS OtrasUnidadesNeto,
+        CAST(@asisNeto + @sisolPart + @ocupNeto + @otrasNeto AS DECIMAL(18,2)) AS TotalGeneral;
 END
 GO
