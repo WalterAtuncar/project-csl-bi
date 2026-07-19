@@ -11,7 +11,8 @@ import type {
   AnalisisHonorarioRow, HonorarioConsultorio, FormaPagoRow, HonorarioServicioInput,
   ProveedorRow, ComprobanteHonorarioInput,
 } from '../../../../services/contabilidad/contaTypes';
-import { descargarPlantillaAtenciones, formatDateToDDMMYYYY, getFirstComprobante } from './excelHonorarios';
+import { descargarPlantillaAtenciones, getFirstComprobante, parsePlantilla, matchPlantilla } from './excelHonorarios';
+import type { FilaSistema } from './excelHonorarios';
 import { abrirReciboHonorarioPDF, type ReciboHonorarioData } from './ReciboPDF';
 
 // ---- helpers ----
@@ -323,13 +324,19 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
     }
   };
   const toggleServicio = (key: string, checked: boolean) => {
+    // Gate D-A: solo son seleccionables las filas validadas por la plantilla activa.
+    if (!validacionActiva || !validKeys.has(key)) return;
     setSelectedKeys((prev) => {
       const next = new Set(prev);
       if (checked) next.add(key); else next.delete(key);
       return next;
     });
   };
-  const seleccionablesVisibles = useMemo(() => rowsVisibles.filter((r) => r.esPagado !== 1), [rowsVisibles]);
+  // Gate D-A: "seleccionable" = pendiente Y validado por la plantilla activa (alimenta el check "todos").
+  const seleccionablesVisibles = useMemo(
+    () => rowsVisibles.filter((r) => r.esPagado !== 1 && validacionActiva && validKeys.has(r._key)),
+    [rowsVisibles, validacionActiva, validKeys],
+  );
   const allVisiblesSelected = seleccionablesVisibles.length > 0 && seleccionablesVisibles.every((r) => selectedKeys.has(r._key));
   const toggleAllVisibles = (checked: boolean) => {
     setSelectedKeys((prev) => {
@@ -357,7 +364,9 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
     if (medicoUnico && compIdProveedor == null) setCompRazon(medicoUnico.nombre);
   }, [medicoUnico?.medicoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- Validación Excel (opcional) ----
+  // ---- Validación Excel (GATE de la selección) ----
+  // El parseo/normalización/cruce viven como funciones PURAS en excelHonorarios.ts
+  // (parsePlantilla / normComprobante / matchPlantilla); aquí solo se orquesta el estado React.
   const onExcelFile = async (file: File) => {
     if (!analizado || rows.length === 0) { toast.error('Realice primero el análisis'); return; }
     try {
@@ -365,35 +374,37 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
       const wb = XLSX.read(buf);
       const ws = wb.Sheets['Plantilla Atenciones'];
       if (!ws) { toast.error('No se encontró la hoja "Plantilla Atenciones"'); return; }
-      const json = XLSX.utils.sheet_to_json<(string | number | undefined)[]>(ws, { header: 1 });
-      const items: { fecha: string; comprobante: string; matched: boolean; motivo: string }[] = [];
-      for (let i = 1; i < json.length; i++) {
-        const r = json[i];
-        if (r && r.length >= 3 && r[0] && r[2]) {
-          items.push({ fecha: String(r[0]), comprobante: String(r[2]).trim(), matched: false, motivo: '' });
-        }
-      }
-      if (items.length === 0) { toast.error('El Excel no tiene filas válidas (Fecha y Comprobante obligatorios)'); return; }
+      const aoa = XLSX.utils.sheet_to_json<(string | number | undefined)[]>(ws, { header: 1 });
 
-      // Cruce: comprobante (primer token '|') + fecha ddMMyyyy — SOLO contra las filas del tipo activo.
-      const nuevosValidos = new Set<string>();
-      const medicosDeValidos = new Set<number>();
-      rowsTipo.forEach((row) => {
-        if (esSinMedico(row.medicoId)) return; // no autoseleccionar servicios sin médico tratante
-        const compRow = getFirstComprobante(row.v_ComprobantePago);
-        const it = items.find((x) => x.comprobante === compRow);
-        if (it) {
-          if (formatDateToDDMMYYYY(it.fecha) === formatDateToDDMMYYYY(soloFechaPago(row.fechaPago))) {
-            it.matched = true; it.motivo = '';
-            nuevosValidos.add(row._key);
-            if (row.esPagado !== 1) medicosDeValidos.add(row.medicoId);
-          } else {
-            it.matched = false; it.motivo = 'No coincide la fecha';
-          }
-        }
-      });
-      items.forEach((it) => { if (!it.matched && !it.motivo) it.motivo = 'No se encuentra en el sistema'; });
-      const errores = items.filter((it) => !it.matched).map((it) => ({ comprobante: it.comprobante, motivo: it.motivo }));
+      const parsed = parsePlantilla(aoa);
+      // Plantilla vieja (3 columnas, sin 'Monto' en D1) → abortar la carga, no validar nada.
+      if (parsed.plantillaVieja) {
+        const msg = 'Plantilla desactualizada: descargue la plantilla nueva (incluye la columna Monto)';
+        setErroresExcel([{ comprobante: '—', motivo: msg }]);
+        setShowErroresExcel(true);
+        toast.error(msg);
+        return;
+      }
+      // Plantilla nueva pero completamente en blanco → no activar el gate (mantiene el banner).
+      if (parsed.filas.length === 0 && parsed.errores.length === 0) {
+        toast.error('El Excel no tiene filas llenas (Fecha, Comprobante y Monto obligatorios)');
+        return;
+      }
+
+      // Filas del sistema para el cruce: SOLO el tipo activo (rowsTipo) y con médico tratante.
+      const rowsSistema: FilaSistema[] = rowsTipo
+        .filter((r) => !esSinMedico(r.medicoId))
+        .map((r) => ({
+          _key: r._key,
+          medicoId: r.medicoId,
+          esPagado: r.esPagado,
+          comprobante: getFirstComprobante(r.v_ComprobantePago),
+          fechaDia: soloFechaPago(r.fechaPago),
+          monto: r.monto ?? 0, // total de la boleta, BRUTO c/IGV (DD1) — NO precioServicio
+        }));
+
+      const { validKeys: nuevosValidos, medicosDeValidos, errores: erroresMatch } = matchPlantilla(rowsSistema, parsed.filas);
+      const errores = [...parsed.errores, ...erroresMatch];
 
       setValidacionActiva(true);
       setValidKeys(nuevosValidos);
@@ -409,9 +420,9 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
 
       if (errores.length > 0) {
         setShowErroresExcel(true);
-        toast(`Validación con ${errores.length} error(es). Se autoseleccionaron ${nuevosValidos.size} válidos.`, { icon: '⚠️' });
+        toast(`Validación con ${errores.length} error(es). Se habilitaron ${nuevosValidos.size} atención(es).`, { icon: '⚠️' });
       } else {
-        toast.success(`Validación OK. Se autoseleccionaron ${nuevosValidos.size} servicios.`);
+        toast.success(`Validación OK. Se habilitaron ${nuevosValidos.size} atención(es).`);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error procesando el Excel');
@@ -419,7 +430,12 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
       if (fileRef.current) fileRef.current.value = '';
     }
   };
-  const limpiarValidacion = () => { setValidacionActiva(false); setValidKeys(new Set()); setErroresExcel([]); setShowErroresExcel(false); };
+  // Quitar la validación: los checks vuelven a nacer deshabilitados → también se vacía la
+  // selección de servicios (si no, quedan keys marcadas con checks deshabilitados = huérfanas).
+  const limpiarValidacion = () => {
+    setValidacionActiva(false); setValidKeys(new Set()); setErroresExcel([]); setShowErroresExcel(false);
+    setSelectedKeys(new Set());
+  };
 
   // Cambio de tipo de producción: resetea selección/filtros/validación Excel.
   // NO toca manualPercents/visaDiscountPercent/includeIgv ni datos de pago/comprobante.
@@ -433,7 +449,8 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
   };
 
   // ---- Registrar ----
-  const puedeRegistrar = selectedMedicos.size === 1 && selectedDetalles.length > 0 && !!fechaPago && appliedTotalMedico > 0 && comprobanteValido;
+  // Gate D-A: sin validación activa no hay checks operables → tampoco se puede registrar.
+  const puedeRegistrar = selectedMedicos.size === 1 && selectedDetalles.length > 0 && !!fechaPago && appliedTotalMedico > 0 && comprobanteValido && validacionActiva;
   const registrar = async () => {
     setAntiDoblePago(null);
     if (selectedMedicos.size !== 1) { toast.error('Seleccione exactamente UN médico para registrar el pago'); return; }
@@ -687,6 +704,14 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
                     </div>
                   </div>
 
+                  {/* ---- Gate D-A: sin validación activa, las atenciones no son seleccionables ---- */}
+                  {!validacionActiva && (
+                    <div className="flex items-start gap-2 px-4 py-3 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 text-sm">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>Cargue la plantilla llena del médico para habilitar la selección de atenciones (botón &quot;Cargar Excel&quot;).</span>
+                    </div>
+                  )}
+
                   {/* ---- Grid de detalles ---- */}
                   {selectedMedicos.size > 0 && (
                     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -711,7 +736,7 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
                         <table className="w-full text-sm">
                           <thead className="sticky top-0 bg-slate-50 dark:bg-slate-700/60">
                             <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                              <th className="px-3 py-2 w-8"><input type="checkbox" checked={allVisiblesSelected} onChange={(e) => toggleAllVisibles(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" /></th>
+                              <th className="px-3 py-2 w-8"><input type="checkbox" checked={allVisiblesSelected} disabled={seleccionablesVisibles.length === 0} onChange={(e) => toggleAllVisibles(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed" /></th>
                               <th className="px-3 py-2">Fecha</th>
                               {validacionActiva && <th className="px-3 py-2 text-center">Válido</th>}
                               <th className="px-3 py-2">Paciente</th>
@@ -731,7 +756,7 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
                               return (
                                 <tr key={r._key} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
                                   <td className="px-3 py-2">
-                                    <input type="checkbox" disabled={r.esPagado === 1} checked={selectedKeys.has(r._key)} onChange={(e) => toggleServicio(r._key, e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40" />
+                                    <input type="checkbox" disabled={r.esPagado === 1 || !validacionActiva || !validKeys.has(r._key)} checked={selectedKeys.has(r._key)} onChange={(e) => toggleServicio(r._key, e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed" />
                                   </td>
                                   <td className="px-3 py-2 text-slate-500">{soloFechaPago(r.fechaPago) || '—'}</td>
                                   {validacionActiva && (
