@@ -9,6 +9,7 @@ import type {
   RentabilidadUnidadRow,
   RentabilidadConsultorioRow,
   RentabilidadConsultorioResponse,
+  RentabilidadOcupacionalEmpresaResponse,
 } from '../../services/contabilidad/contaTypes';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
@@ -39,8 +40,16 @@ const semLabel: Record<string, string> = {
 const motivoLabel: Record<string, string> = {
   SIN_SERVICE: 'Sin service (sin atención Sigesoft)',
   SIN_CONSULTORIO: 'Sin consultorio (protocolo sin dimensión)',
-  SIN_LIQUIDACION: 'Sin liquidación EDP aún',
 };
+
+// Etiquetas del motivo de la vista Ocupacional por Empresa (RS2 diagnostico, seccion 4 colapsable).
+const motivoEmpresaLabel: Record<string, string> = {
+  SIN_SERVICIOS_EMO: 'Sin servicios EMO (factura sin flujo Sigesoft)',
+  SIN_EMPRESA: 'Sin empresa (cliente particular / no jurídico)',
+};
+
+// Color de la barra de % cobrado (semaforo): verde ≥80, ambar ≥40, rojo por debajo.
+const pctColor = (p: number) => (p >= 80 ? '#10b981' : p >= 40 ? '#f59e0b' : '#ef4444');
 
 type Tab = 'mensual' | 'trimestral' | 'semestral';
 
@@ -52,28 +61,33 @@ const Rentabilidad: React.FC = () => {
   const [comp, setComp] = useState<ComparativaResponse | null>(null);
   const [unidades, setUnidades] = useState<RentabilidadUnidadRow[]>([]);
   const [consultorio, setConsultorio] = useState<RentabilidadConsultorioResponse | null>(null);
+  const [empresas, setEmpresas] = useState<RentabilidadOcupacionalEmpresaResponse | null>(null);
   const [tab, setTab] = useState<Tab>('mensual');
-  // Loading independiente por seccion (C4): la seccion 1 no espera a la 3.
+  // Loading independiente por seccion (C4): la seccion 1 no espera a la 3/4.
   const [loading, setLoading] = useState(false);
   const [loadingUnidad, setLoadingUnidad] = useState(false);
   const [loadingConsultorio, setLoadingConsultorio] = useState(false);
+  const [loadingEmpresas, setLoadingEmpresas] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
+  const [showDiagEmpresas, setShowDiagEmpresas] = useState(false);
   // Toggle "incluir ventas a credito" (PLAN §5.3). Estado local, default ON, sin persistencia (T5).
   const [incluirCredito, setIncluirCredito] = useState(true);
   const filtroActivo = !incluirCredito;
 
   const load = useCallback(async () => {
-    // Credito ON => param omitido (URL default identica). Mismo anio/mes/incluirCredito para las 4 (C4).
+    // Credito ON => param omitido (URL default identica). Mismo anio/mes/incluirCredito para las 5 (C4).
     const incluirCreditoParam = incluirCredito ? undefined : false;
     setLoading(true);
     setLoadingUnidad(true);
     setLoadingConsultorio(true);
+    setLoadingEmpresas(true);
 
-    // 4 llamadas disparadas juntas; cada seccion resuelve su propio loading (no se bloquean entre si).
+    // 5 llamadas disparadas juntas; cada seccion resuelve su propio loading (no se bloquean entre si).
     const pGeneral = contabilidadService.rentabilidadGeneral(anio, mes, incluirCreditoParam);
     const pComp = contabilidadService.rentabilidadComparativa(anio, incluirCreditoParam);
     const pUnidad = contabilidadService.rentabilidadPorUnidad(anio, mes, incluirCreditoParam);
     const pConsultorio = contabilidadService.rentabilidadPorConsultorio(anio, mes, incluirCreditoParam);
+    const pEmpresas = contabilidadService.rentabilidadOcupacionalPorEmpresa(anio, mes, incluirCreditoParam);
 
     // Seccion 1: KPIs General + grafico Comparativa (T6).
     Promise.all([pGeneral, pComp])
@@ -87,13 +101,19 @@ const Rentabilidad: React.FC = () => {
       .catch((e) => toast.error(e instanceof Error ? e.message : 'Error cargando rentabilidad por unidad'))
       .finally(() => setLoadingUnidad(false));
 
-    // Seccion 3: Rentabilidad por Consultorio.
+    // Seccion 3: Rentabilidad por Consultorio (Asistencial / SISOL + cuadre).
     pConsultorio
       .then(setConsultorio)
       .catch((e) => toast.error(e instanceof Error ? e.message : 'Error cargando rentabilidad por consultorio'))
       .finally(() => setLoadingConsultorio(false));
 
-    await Promise.all([pGeneral, pComp, pUnidad, pConsultorio]).catch(() => { /* errores ya notificados por seccion */ });
+    // Seccion 4: Rentabilidad Ocupacional por Empresa Cliente.
+    pEmpresas
+      .then(setEmpresas)
+      .catch((e) => toast.error(e instanceof Error ? e.message : 'Error cargando rentabilidad ocupacional por empresa'))
+      .finally(() => setLoadingEmpresas(false));
+
+    await Promise.all([pGeneral, pComp, pUnidad, pConsultorio, pEmpresas]).catch(() => { /* errores ya notificados por seccion */ });
   }, [anio, mes, incluirCredito]);
 
   useEffect(() => { load(); }, [load]);
@@ -119,11 +139,8 @@ const Rentabilidad: React.FC = () => {
 
   // Seccion 3: reparto de Filas por grupo (el orden ya viene del backend: Grupo, EsTotal, Ingresos DESC).
   const asistencial = useMemo(() => (consultorio?.Filas ?? []).filter((f) => f.Grupo === 'ASISTENCIAL'), [consultorio]);
-  const ocupacional = useMemo(() => (consultorio?.Filas ?? []).filter((f) => f.Grupo === 'OCUPACIONAL'), [consultorio]);
-  const otrasTotal = useMemo(
-    () => (consultorio?.Filas ?? []).filter((f) => f.Grupo === 'OTRAS_UNIDADES').reduce((a, f) => a + f.Ingresos, 0),
-    [consultorio],
-  );
+  const sisol = useMemo(() => (consultorio?.Filas ?? []).filter((f) => f.Grupo === 'SISOL'), [consultorio]);
+  const cuadre = consultorio?.Cuadre ?? null;
 
   return (
     <div className="p-6">
@@ -278,11 +295,11 @@ const Rentabilidad: React.FC = () => {
         )}
       </div>
 
-      {/* ===== Seccion 3: Rentabilidad por Consultorio (C1/C4) ===== */}
+      {/* ===== Seccion 3: Rentabilidad por Consultorio — Asistencial / SISOL (C1/C4) ===== */}
       <div className="mt-6">
         <div className="mb-3">
           <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Rentabilidad por Consultorio</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Ingresos y egresos por consultorio; Resultado = Ingresos − Egresos.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Consultas médicas por consultorio (catálogo grupo 403): Asistencial vs SISOL. Resultado = Ingresos − Egresos.</p>
         </div>
         {loadingConsultorio && !consultorio && <p className="text-sm text-slate-400">Cargando...</p>}
         {consultorio && (
@@ -291,18 +308,20 @@ const Rentabilidad: React.FC = () => {
               <ConsultorioBloque
                 titulo="Asistencial"
                 rows={asistencial}
-                nota="Egresos por consultorio = pagos de honorarios registrados en el módulo. OCUPACIONAL y otras unidades no llevan egresos por consultorio."
+                nota="Egresos por consultorio = pagos de honorarios registrados en el módulo (centro de costo CC-ASIS)."
               />
               <ConsultorioBloque
-                titulo="Ocupacional"
-                rows={ocupacional}
-                nota="El mes en curso puede tener monto sin clasificar hasta que lleguen las liquidaciones EDP; se reclasifica retroactivamente."
+                titulo="SISOL"
+                rows={sisol}
+                nota={`Montos a venta plena (neto sin IGV). La participación clínica (${cuadre ? cuadre.SisolPorcClinica : ''}%) se muestra en el cuadre y es la que usa el KPI general.`}
               />
             </div>
-            {/* linea compacta de cuadre con OTRAS_UNIDADES (C6) */}
-            <div className="mt-3 text-xs px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
-              Otras unidades (SISOL al %, Farmacia, Seguros): <span className="font-semibold">S/ {money(otrasTotal)}</span> — el gran total cuadra con el KPI Ingresos.
-            </div>
+            {/* linea de cuadre con Rentabilidad General (RS3) */}
+            {cuadre && (
+              <div className="mt-3 text-xs px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                Ocupacional: <span className="font-semibold">S/ {money(cuadre.OcupacionalNeto)}</span> (ver sección Empresas) · Otras unidades (Farmacia, Seguros): <span className="font-semibold">S/ {money(cuadre.OtrasUnidadesNeto)}</span> · Participación clínica SISOL ({cuadre.SisolPorcClinica}% de {money(cuadre.SisolNetoPleno)}): <span className="font-semibold">S/ {money(cuadre.SisolParticipacionClinica)}</span> <span className="mx-0.5">→</span> Total general: <span className="font-semibold">S/ {money(cuadre.TotalGeneral)}</span>
+              </div>
+            )}
             {/* colapsable: detalle de lo no clasificado (RS2, C3) */}
             {consultorio.SinClasificar.length > 0 && (
               <div className="mt-3">
@@ -331,6 +350,115 @@ const Rentabilidad: React.FC = () => {
                             <td className="px-3 py-1.5">{motivoLabel[d.Motivo] || d.Motivo}</td>
                             <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400">{d.Referencia}</td>
                             <td className="px-3 py-1.5 text-right">{money(d.Monto)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ===== Seccion 4: Rentabilidad Ocupacional por Empresa Cliente (NUEVA) ===== */}
+      <div className="mt-6">
+        <div className="mb-3">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Rentabilidad Ocupacional por Empresa Cliente</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Ingresos: neto sin IGV (devengado del mes). Cobrado/Saldo: bruto con IGV, acumulado a hoy.
+          </p>
+        </div>
+        {loadingEmpresas && !empresas && <p className="text-sm text-slate-400">Cargando...</p>}
+        {empresas && (
+          <>
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                    <th className="px-3 py-2">Empresa</th>
+                    <th className="px-3 py-2 text-right">Facturas</th>
+                    <th className="px-3 py-2 text-right">Servicios</th>
+                    <th className="px-3 py-2 text-right">Ingresos<span className="block font-normal normal-case text-[10px] text-slate-400">S/ sin IGV</span></th>
+                    <th className="px-3 py-2 text-right">Cobrado<span className="block font-normal normal-case text-[10px] text-slate-400">S/ c/IGV</span></th>
+                    <th className="px-3 py-2 text-right">Saldo<span className="block font-normal normal-case text-[10px] text-slate-400">S/ c/IGV</span></th>
+                    <th className="px-3 py-2 text-right">% cobrado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {empresas.Empresas.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">Sin datos ocupacionales del mes</td></tr>}
+                  {empresas.Empresas.map((r, i) => {
+                    const rowStyle = r.EsTotal
+                      ? 'font-bold bg-sky-50 dark:bg-sky-900/20'
+                      : r.EsSinEmpresa
+                        ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
+                        : '';
+                    return (
+                      <tr key={i} className={`border-b border-slate-100 dark:border-slate-700/50 ${rowStyle}`}>
+                        <td className="px-3 py-2">
+                          <div className="font-medium" title={r.Ruc ?? undefined}>{r.Empresa}</div>
+                          {r.Ruc && <div className="text-[10px] text-slate-400 dark:text-slate-500">RUC {r.Ruc}</div>}
+                          {r.EsOtrosServicios && (
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              OTROS SERVICIOS OCUPACIONALES
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{r.NumFacturas}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{r.NumServicios}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{money(r.IngresosNeto)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{money(r.CobradoBruto)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-rose-500">{money(r.SaldoBruto)}</td>
+                        <td className="px-3 py-2">
+                          {r.PorcCobrado === null ? (
+                            <span className="block text-right text-slate-400">—</span>
+                          ) : (
+                            <div className="flex items-center gap-2 justify-end">
+                              <div className="w-16 h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, r.PorcCobrado))}%`, background: pctColor(r.PorcCobrado) }} />
+                              </div>
+                              <span className="tabular-nums w-11 text-right">{r.PorcCobrado.toFixed(1)}%</span>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* colapsable: detalle sin clasificar (RS2 diagnostico) */}
+            {empresas.Diagnostico.length > 0 && (
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowDiagEmpresas((v) => !v)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  {showDiagEmpresas ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  Ver detalle sin clasificar ({empresas.Diagnostico.length})
+                </button>
+                {showDiagEmpresas && (
+                  <div className="mt-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                          <th className="px-3 py-2">Motivo</th>
+                          <th className="px-3 py-2">Empresa</th>
+                          <th className="px-3 py-2">Referencia</th>
+                          <th className="px-3 py-2 text-right">Monto neto</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {empresas.Diagnostico.map((d, i) => (
+                          <tr key={i} className="border-b border-slate-100 dark:border-slate-700/50 text-xs">
+                            <td className="px-3 py-1.5">{motivoEmpresaLabel[d.Motivo] || d.Motivo}</td>
+                            <td className="px-3 py-1.5">
+                              <div>{d.Empresa}</div>
+                              {d.Ruc && <div className="text-[10px] text-slate-400 dark:text-slate-500">RUC {d.Ruc}</div>}
+                            </td>
+                            <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400">{d.Referencia}</td>
+                            <td className="px-3 py-1.5 text-right">{money(d.MontoNeto)}</td>
                           </tr>
                         ))}
                       </tbody>

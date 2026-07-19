@@ -286,6 +286,14 @@ class ContabilidadService {
     const { data } = await this.http.get('/rentabilidad/por-consultorio', { params });
     return data;
   }
+  // Rentabilidad ocupacional por empresa cliente — PLAN_RENTABILIDAD_CONSULTORIO_EMPRESA §4.3.
+  // Misma convencion del toggle: solo se envia incluirCredito cuando esta explicitamente en false.
+  async rentabilidadOcupacionalPorEmpresa(anio: number, mes: number, incluirCredito?: boolean): Promise<import('./contaTypes').RentabilidadOcupacionalEmpresaResponse> {
+    const params: Record<string, unknown> = { anio, mes };
+    if (incluirCredito === false) params.incluirCredito = false;
+    const { data } = await this.http.get('/rentabilidad/ocupacional-por-empresa', { params });
+    return data;
+  }
 
   // ---- SISOL ----
   async sisolList(anio: number): Promise<import('./contaTypes').SisolLiquidacion[]> {

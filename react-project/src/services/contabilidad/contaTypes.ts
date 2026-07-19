@@ -423,13 +423,15 @@ export interface ComparativaResponse {
   Semestral: ComparativaPeriodoRow[];
 }
 
-// ---- Rentabilidad por Consultorio (Asistencial / Ocupacional) ----
-// Calcados de los DTOs C# (PLAN_RENTABILIDAD_CONSULTORIO §4). JSON sin camelCase.
+// ---- Rentabilidad por Consultorio (Asistencial / SISOL) ----
+// Calcados de los DTOs C# (PLAN_RENTABILIDAD_CONSULTORIO_EMPRESA §4.1). JSON sin camelCase.
+// Grupo ahora vale 'ASISTENCIAL' | 'SISOL' (OCUPACIONAL/OTRAS_UNIDADES salieron del RS1: lo ocupacional
+// se analiza por empresa cliente en su endpoint propio; el % SISOL y las otras unidades van en Cuadre).
 export interface RentabilidadConsultorioRow {
-  Grupo: 'ASISTENCIAL' | 'OCUPACIONAL' | 'OTRAS_UNIDADES' | string;
+  Grupo: 'ASISTENCIAL' | 'SISOL' | string;
   Consultorio: string;
   Ingresos: number;
-  // Egresos por consultorio = pagos de honorarios registrados en el módulo (Rentabilidad v2, FASE 1).
+  // Egresos por consultorio = pagos de honorarios (partición por centro: ASIST←CC-ASIS, SISOL←CC-SISOL).
   Egresos: number;
   Resultado: number; // Ingresos − Egresos
   PorcDelGrupo: number;
@@ -438,13 +440,52 @@ export interface RentabilidadConsultorioRow {
 }
 export interface RentabilidadConsultorioDiagRow {
   Grupo: string;
-  Motivo: 'SIN_SERVICE' | 'SIN_CONSULTORIO' | 'SIN_LIQUIDACION' | string;
+  Motivo: 'SIN_SERVICE' | 'SIN_CONSULTORIO' | string;
   Referencia: string;
   Monto: number;
+}
+// RS3 (NUEVO) — cuadre con Rentabilidad General, una fila. Calca las columnas del SP (PascalCase exacto).
+export interface RentabilidadConsultorioCuadre {
+  AsistencialNeto: number;
+  SisolNetoPleno: number;
+  SisolPorcClinica: number;
+  SisolParticipacionClinica: number;
+  OcupacionalNeto: number;
+  OtrasUnidadesNeto: number;
+  TotalGeneral: number;
 }
 export interface RentabilidadConsultorioResponse {
   Filas: RentabilidadConsultorioRow[];
   SinClasificar: RentabilidadConsultorioDiagRow[];
+  Cuadre: RentabilidadConsultorioCuadre;
+}
+
+// ---- Rentabilidad Ocupacional por Empresa Cliente ----
+// Calcados de los DTOs C# (PLAN_RENTABILIDAD_CONSULTORIO_EMPRESA §4.2). JSON sin camelCase.
+// Ingresos = neto sin IGV (devengado del mes); Cobrado/Saldo = bruto con IGV, acumulado a hoy.
+export interface RentabilidadOcupacionalEmpresaRow {
+  Ruc: string | null;                 // NULL en PARTICULARES y TOTAL
+  Empresa: string;                    // razón social | 'PARTICULARES / SIN EMPRESA' | 'TOTAL'
+  NumFacturas: number;
+  NumServicios: number;               // services A∪B; 0 en líneas EDP/sin flujo EMO
+  IngresosNeto: number;
+  CobradoBruto: number;
+  SaldoBruto: number;
+  PorcCobrado: number | null;         // NULL si Cobrado+Saldo = 0
+  EsOtrosServicios: boolean;          // badge "OTROS SERVICIOS OCUPACIONALES" (NumServicios=0, ingresos>0)
+  EsSinEmpresa: boolean;              // 1 solo en la fila PARTICULARES
+  EsTotal: boolean;
+}
+export interface RentabilidadOcupacionalEmpresaDiagRow {
+  Motivo: string;                     // 'SIN_SERVICIOS_EMO' | 'SIN_EMPRESA'
+  Ruc: string | null;
+  Empresa: string;
+  Referencia: string;
+  MontoNeto: number;
+}
+export interface RentabilidadOcupacionalEmpresaResponse {
+  Empresas: RentabilidadOcupacionalEmpresaRow[];
+  Diagnostico: RentabilidadOcupacionalEmpresaDiagRow[];
 }
 
 // ---- SISOL ----
