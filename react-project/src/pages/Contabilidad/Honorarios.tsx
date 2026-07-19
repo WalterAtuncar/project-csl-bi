@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  Plus, Download, Search, X, Eye, Printer, Ban, ChevronLeft, ChevronRight, RefreshCw, Stethoscope,
+  Plus, Download, Search, X, Eye, Printer, Ban, ChevronLeft, ChevronRight, RefreshCw, Stethoscope, FileText,
 } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 import { useContaAuth } from '../../context/ContaAuthContext';
@@ -25,6 +25,15 @@ const estadoBadge: Record<string, string> = {
   PAGADO: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   ANULADO: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
 };
+
+// Badge del tipo de producción (mismo molde que estadoBadge).
+const tipoProduccionBadge: Record<string, string> = {
+  CLINICA: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
+  SISOL: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+};
+const tipoProduccionLabel = (t: string) => (t === 'CLINICA' ? 'Clínica' : t === 'SISOL' ? 'SISOL' : t || '—');
+
+const tipoComprobanteLabel = (t: string) => (t === '01' ? 'Factura' : t === '02' ? 'Recibo por Honorarios' : t);
 
 const selCls = 'w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-sm outline-none focus:ring-2 focus:ring-emerald-500';
 
@@ -126,6 +135,10 @@ const Honorarios: React.FC = () => {
         TotalPago: d.Cabecera.d_TotalPago,
         Glosa: d.Cabecera.v_Glosa ?? null,
         Estado: d.Cabecera.v_Estado,
+        TipoProduccion: d.Cabecera.v_TipoProduccion ?? null,
+        TipoComprobante: d.Comprobante?.v_TipoComprobante ?? null,
+        Serie: d.Comprobante?.v_Serie ?? null,
+        Numero: d.Comprobante?.v_Numero ?? null,
         Consultorios: d.Consultorios.map((c) => ({ Nombre: c.v_ConsultorioNombre, MontoServicios: c.d_MontoServicios, MontoPago: c.d_MontoPago })),
       });
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al generar el recibo'); }
@@ -221,6 +234,7 @@ const Honorarios: React.FC = () => {
               <th className="px-3 py-2">#</th>
               <th className="px-3 py-2">Fecha pago</th>
               <th className="px-3 py-2">Médico</th>
+              <th className="px-3 py-2">Tipo</th>
               <th className="px-3 py-2">Periodo</th>
               <th className="px-3 py-2 text-right">Total</th>
               <th className="px-3 py-2 text-center">Consult.</th>
@@ -230,13 +244,14 @@ const Honorarios: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Cargando...</td></tr>}
-            {!loading && items.length === 0 && <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Sin pagos registrados</td></tr>}
+            {loading && <tr><td colSpan={10} className="px-3 py-8 text-center text-slate-400">Cargando...</td></tr>}
+            {!loading && items.length === 0 && <tr><td colSpan={10} className="px-3 py-8 text-center text-slate-400">Sin pagos registrados</td></tr>}
             {!loading && items.map((p) => (
               <tr key={p.i_IdPago} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
                 <td className="px-3 py-2 text-slate-400">{p.i_IdPago}</td>
                 <td className="px-3 py-2">{fmtFecha(p.t_FechaPago)}</td>
                 <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-100">{p.v_MedicoNombre}</td>
+                <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tipoProduccionBadge[p.v_TipoProduccion] || 'bg-slate-100 text-slate-600'}`}>{tipoProduccionLabel(p.v_TipoProduccion)}</span></td>
                 <td className="px-3 py-2 text-xs text-slate-500">{fmtFecha(p.t_PeriodoDesde)} - {fmtFecha(p.t_PeriodoHasta)}</td>
                 <td className="px-3 py-2 text-right font-semibold text-emerald-600">S/ {money(p.d_TotalPago)}</td>
                 <td className="px-3 py-2 text-center">{p.NroConsultorios}</td>
@@ -283,6 +298,7 @@ const Honorarios: React.FC = () => {
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <Info label="Fecha pago" value={fmtFecha(detalle.Cabecera.t_FechaPago)} />
+                <Info label="Tipo producción" value={tipoProduccionLabel(detalle.Cabecera.v_TipoProduccion)} />
                 <Info label="Periodo" value={`${fmtFecha(detalle.Cabecera.t_PeriodoDesde)} - ${fmtFecha(detalle.Cabecera.t_PeriodoHasta)}`} />
                 <Info label="Total servicios" value={`S/ ${money(detalle.Cabecera.d_TotalServicios)}`} />
                 <Info label="Total pago" value={`S/ ${money(detalle.Cabecera.d_TotalPago)}`} highlight />
@@ -291,6 +307,42 @@ const Honorarios: React.FC = () => {
                 {detalle.Cabecera.v_Glosa && <Info label="Glosa" value={detalle.Cabecera.v_Glosa} />}
                 {detalle.Cabecera.v_MotivoAnulacion && <Info label="Motivo anulación" value={detalle.Cabecera.v_MotivoAnulacion} />}
               </div>
+
+              {detalle.Comprobante && (
+                <div>
+                  <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-emerald-600" /> Comprobante
+                  </div>
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                      <Info label="Tipo" value={tipoComprobanteLabel(detalle.Comprobante.v_TipoComprobante)} />
+                      <Info label="Serie-Número" value={`${detalle.Comprobante.v_Serie || '—'}${detalle.Comprobante.v_Numero ? '-' + detalle.Comprobante.v_Numero : ''}`} />
+                      <Info label="Emisión" value={fmtFecha(detalle.Comprobante.t_FechaEmision)} />
+                      <Info label="Vencimiento" value={fmtFecha(detalle.Comprobante.t_FechaVencimiento)} />
+                      <Info label="Moneda" value={`${detalle.Comprobante.v_Moneda} · TC ${detalle.Comprobante.d_TipoCambio}`} />
+                      <Info label="RUC emisor (congelado)" value={detalle.Comprobante.v_RucEmisor || '—'} />
+                      <Info label="Razón social (congelada)" value={detalle.Comprobante.v_RazonSocialEmisor || '—'} />
+                      {detalle.Comprobante.i_IdProveedor != null && (
+                        <Info label="Proveedor vigente" value={`${detalle.Comprobante.ProveedorRuc || '—'} · ${detalle.Comprobante.ProveedorRazonSocial || '—'}`} />
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                      <Info label="Base imponible" value={`S/ ${money(detalle.Comprobante.d_BaseImponible)}`} />
+                      <Info label="IGV" value={`S/ ${money(detalle.Comprobante.d_IGV)}`} />
+                      <Info label="Retención" value={`S/ ${money(detalle.Comprobante.d_MontoRetencion)}`} />
+                      <Info label="Detracción" value={`S/ ${money(detalle.Comprobante.d_MontoDetraccion ?? 0)}`} />
+                      <Info label="Neto a pagar" value={`S/ ${money(detalle.Comprobante.d_NetoPagar)}`} highlight />
+                    </div>
+                    {(detalle.Comprobante.d_PorcDetraccion != null || detalle.Comprobante.v_ConstanciaDetraccion || detalle.Comprobante.v_Observaciones) && (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        {detalle.Comprobante.d_PorcDetraccion != null && <Info label="% detracción" value={`${detalle.Comprobante.d_PorcDetraccion}%`} />}
+                        {detalle.Comprobante.v_ConstanciaDetraccion && <Info label="N° constancia" value={detalle.Comprobante.v_ConstanciaDetraccion} />}
+                        {detalle.Comprobante.v_Observaciones && <Info label="Observaciones" value={detalle.Comprobante.v_Observaciones} />}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Consultorios y egresos</div>

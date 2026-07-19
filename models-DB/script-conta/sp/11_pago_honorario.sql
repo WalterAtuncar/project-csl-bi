@@ -5,10 +5,13 @@
 -- PAGO (conta, transaccional):
 --   sp_PagoHonorario_Insert  (anti-doble-pago DUAL; upsert entidad MEDICO; prorrateo
 --                             por consultorio con ajuste de residuo; 1 egreso PAGADO por
---                             consultorio via INSERT..EXEC sp_Egreso_Insert)
+--                             consultorio via INSERT..EXEC sp_Egreso_Insert. COMPROBANTE
+--                             tributario opcional 1:1 -> conta.comprobante_honorario con
+--                             retencion/IGV/detraccion; los egresos llevan el DOCUMENTO REAL
+--                             con IGV prorrateado. Sin comprobante = comportamiento anterior)
 --   sp_PagoHonorario_Anular  (cascada: anula egresos + libera servicios)
 --   sp_PagoHonorario_List    (OFFSET/FETCH, RS1 total + RS2 pagina)
---   sp_PagoHonorario_Get     (RS1 cabecera + RS2 consultorios + RS3 servicios)
+--   sp_PagoHonorario_Get     (RS1 cabecera + RS2 consultorios + RS3 servicios + RS4 comprobante)
 --
 -- ANALISIS / CATALOGO (lectura cross-DB a SigesoftDesarrollo_2 = SOLO SELECT):
 --   sp_Honorarios_Analisis        PORT FIEL de la def VIVA de
@@ -41,7 +44,30 @@ CREATE PROCEDURE conta.sp_PagoHonorario_Insert
     @TotalServicios    DECIMAL(18,2),
     @TotalPago         DECIMAL(18,2),
     @Servicios         conta.tvp_pago_honorario_servicio READONLY,
-    @IdUsuario         INT
+    @IdUsuario         INT,
+    -- Comprobante tributario del medico (1 pago <-> 1 comprobante). TODOS opcionales:
+    -- si @TipoComprobante IS NULL el SP se comporta EXACTAMENTE como antes (egreso HONORARIO/PH-<id>,
+    -- IGV 0, sin fila en conta.comprobante_honorario) -> compatibilidad total hacia atras.
+    @TipoComprobante          NVARCHAR(4)   = NULL,   -- '01'=Factura, '02'=Recibo por Honorarios
+    @IdProveedor              INT           = NULL,   -- emisor (dbo.proveedores)
+    @RucEmisor                NVARCHAR(15)  = NULL,
+    @RazonSocialEmisor        NVARCHAR(200) = NULL,
+    @Serie                    NVARCHAR(20)  = NULL,
+    @Numero                   NVARCHAR(20)  = NULL,
+    @FechaEmision             DATE          = NULL,
+    @FechaVencimiento         DATE          = NULL,
+    @Moneda                   CHAR(3)       = 'PEN',
+    @TipoCambio               DECIMAL(9,4)  = 1,
+    @AplicaRetencion          BIT           = 0,
+    @AplicaDetraccion         BIT           = 0,
+    @PorcDetraccion           DECIMAL(5,2)  = NULL,
+    @MontoDetraccion          DECIMAL(18,2) = NULL,   -- detraccion MANUAL (si NULL y hay %, se deriva del total)
+    @ConstanciaDetraccion     NVARCHAR(30)  = NULL,
+    @ObservacionesComprobante NVARCHAR(300) = NULL,
+    -- Tipo de produccion del pago (MONO-TIPO): 'CLINICA' (masterServiceType 9) | 'SISOL' (42).
+    -- Rutea el centro de costo del egreso (CC-ASIS / CC-SISOL) y se graba en la cabecera.
+    -- Default 'CLINICA' -> retro-compatible con llamadas que no lo envian.
+    @TipoProduccion           NVARCHAR(10)  = 'CLINICA'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -62,6 +88,28 @@ BEGIN
     DECLARE @IdTipoGastoHon INT = (SELECT i_IdTipoGasto FROM conta.tipo_gasto WHERE v_Codigo = 'MED-HON');
     IF @IdTipoGastoHon IS NULL
     BEGIN RAISERROR('No existe el tipo de gasto MED-HON (siembra ddl/10).', 16, 1); RETURN; END
+
+    -- 1c) Tipo de produccion (mono-tipo). Valida el dominio y resuelve el centro de costo del egreso
+    --     POR CODIGO (patron sp_Sisol_Pagar): CLINICA -> CC-ASIS, SISOL -> CC-SISOL. NO se hardcodea id.
+    SET @TipoProduccion = LTRIM(RTRIM(ISNULL(@TipoProduccion, 'CLINICA')));
+    IF @TipoProduccion NOT IN ('CLINICA','SISOL')
+    BEGIN RAISERROR('Tipo de produccion invalido (CLINICA o SISOL).', 16, 1); RETURN; END
+
+    DECLARE @IdCentroCostoHon INT =
+        ( SELECT i_IdCentroCosto FROM conta.centro_costo
+          WHERE v_Codigo = CASE @TipoProduccion WHEN 'SISOL' THEN 'CC-SISOL' ELSE 'CC-ASIS' END
+            AND b_Activo = 1 );
+    IF @IdCentroCostoHon IS NULL
+    BEGIN RAISERROR('Centro de costo no encontrado para %s', 16, 1, @TipoProduccion); RETURN; END
+
+    -- 1b) Validacion del comprobante (solo si se envia; sin comprobante no valida nada -> backward-compat).
+    IF @TipoComprobante IS NOT NULL
+    BEGIN
+        IF @TipoComprobante NOT IN ('01','02')
+        BEGIN RAISERROR('Tipo de comprobante invalido (01=Factura, 02=Recibo por Honorarios).', 16, 1); RETURN; END
+        IF @FechaEmision IS NULL
+        BEGIN RAISERROR('La fecha de emision del comprobante es requerida.', 16, 1); RETURN; END
+    END
 
     -- 2) Anti-doble-pago DUAL: conta.pago_honorario_servicio activo + legacy servicespaid(details) activo.
     DECLARE @ofensores NVARCHAR(MAX) =
@@ -114,6 +162,33 @@ BEGIN
         RAISERROR(@msg2, 16, 1); RETURN;
     END
 
+    -- 2c) Anti-mixto server-side: un pago es MONO-TIPO. Todo v_ServiceId de la TVP debe pertenecer a la
+    --     produccion declarada (@TipoProduccion). Cross-DB a SigesoftDesarrollo_2 = SOLO SELECT. Estricto
+    --     a proposito: un service inexistente/borrado tambien cae aqui (no se paga lo no verificable).
+    DECLARE @tipoEsperado INT = CASE @TipoProduccion WHEN 'SISOL' THEN 42 ELSE 9 END;
+    DECLARE @mixtos NVARCHAR(MAX) =
+    (
+        SELECT STUFF((
+            SELECT ', ' + x.v_ServiceId
+            FROM (
+                SELECT DISTINCT sv.v_ServiceId
+                FROM @Servicios sv
+                LEFT JOIN SigesoftDesarrollo_2.dbo.service s
+                       ON s.v_ServiceId = sv.v_ServiceId COLLATE DATABASE_DEFAULT
+                      AND ISNULL(s.i_IsDeleted,0) = 0
+                LEFT JOIN SigesoftDesarrollo_2.dbo.protocol pr
+                       ON pr.v_ProtocolId = s.v_ProtocolId
+                WHERE ISNULL(pr.i_MasterServiceTypeId, -1) <> @tipoEsperado
+            ) x
+            ORDER BY x.v_ServiceId
+            FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
+    );
+    IF @mixtos IS NOT NULL AND LEN(@mixtos) > 0
+    BEGIN
+        DECLARE @msg3 NVARCHAR(2048) = LEFT('Servicios que no corresponden a la produccion ' + @TipoProduccion + ': ' + @mixtos, 2000);
+        RAISERROR(@msg3, 16, 1); RETURN;
+    END
+
     BEGIN TRY
         BEGIN TRAN;
 
@@ -137,13 +212,66 @@ BEGIN
         INSERT INTO conta.pago_honorario
             (i_MedicoId, v_MedicoNombre, i_IdEntidad, t_PeriodoDesde, t_PeriodoHasta, d_PorcMedico,
              d_TotalServicios, d_TotalPago, v_Estado, t_FechaPago, i_IdFormaPago, i_IdCuentaBancaria,
-             v_Glosa, i_InsertaIdUsuario)
+             v_Glosa, i_InsertaIdUsuario, v_TipoProduccion)
         VALUES
             (@MedicoId, @MedicoNombre, @IdEntidad, @Desde, @Hasta, @PorcMedico,
              @TotalServicios, @TotalPago, 'PAGADO', @FechaPago, @IdFormaPago, @IdCuentaBancaria,
-             @Glosa, @IdUsuario);
+             @Glosa, @IdUsuario, @TipoProduccion);
         SET @IdPago = SCOPE_IDENTITY();
-        DECLARE @serie NVARCHAR(50) = 'PH-' + CAST(@IdPago AS VARCHAR(20));
+        -- Serie/numero interno por defecto (PH-<id>): egreso sin comprobante + detalle de auditoria.
+        -- (NO puede llamarse @serie: colisiona case-insensitive con el parametro @Serie del comprobante.)
+        DECLARE @serieDefault NVARCHAR(50) = 'PH-' + CAST(@IdPago AS VARCHAR(20));
+
+        -- 4b) Comprobante tributario (opcional). d_ImporteTotal = @TotalPago (1 pago <-> 1 comprobante:
+        --     el bruto del documento = lo que se paga; los egresos por consultorio ya suman @TotalPago).
+        --     Reglas: Factura -> base=Total/1.18, IGV=Total-base, sin retencion. Recibo -> IGV=0,
+        --     base=Total, retencion 4ta 8% si aplica. Detraccion SIEMPRE manual (monto o % del total).
+        --     @egr* = documento REAL que llevaran los egresos (sin comprobante = HONORARIO / PH-<id>).
+        DECLARE @egrTipoDoc  NVARCHAR(30)  = 'HONORARIO';
+        DECLARE @egrSerieNum NVARCHAR(50)  = @serieDefault;
+        DECLARE @egrMoneda   CHAR(3)       = 'PEN';
+        DECLARE @egrTC       DECIMAL(9,4)  = 1;
+        DECLARE @igvTotal    DECIMAL(18,2) = 0;   -- IGV del documento a prorratear entre consultorios
+        IF @TipoComprobante IS NOT NULL
+        BEGIN
+            DECLARE @cImporte DECIMAL(18,2) = @TotalPago;
+            DECLARE @cBase DECIMAL(18,2), @cIgv DECIMAL(18,2) = 0,
+                    @cRet DECIMAL(18,2) = 0, @cDet DECIMAL(18,2) = 0, @cNeto DECIMAL(18,2);
+            IF @TipoComprobante = '01'   -- Factura: IGV embebido (18%)
+            BEGIN
+                SET @cBase = ROUND(@cImporte / 1.18, 2);
+                SET @cIgv  = @cImporte - @cBase;
+            END
+            ELSE                          -- '02' Recibo por Honorarios: sin IGV; retencion 4ta 8%
+            BEGIN
+                SET @cIgv  = 0;
+                SET @cBase = @cImporte;
+                IF @AplicaRetencion = 1 SET @cRet = ROUND(@cImporte * 0.08, 2);
+            END
+            -- Detraccion MANUAL: usa el monto si viene; si no, lo deriva del % sobre el total; si nada, 0.
+            IF @AplicaDetraccion = 1
+                SET @cDet = COALESCE(@MontoDetraccion, ROUND(@cImporte * NULLIF(@PorcDetraccion,0) / 100.0, 2), 0);
+            SET @cNeto = @cImporte - @cRet - @cDet;
+
+            INSERT INTO conta.comprobante_honorario
+                (i_IdPago, v_TipoComprobante, i_IdProveedor, v_RucEmisor, v_RazonSocialEmisor,
+                 v_Serie, v_Numero, t_FechaEmision, t_FechaVencimiento, v_Moneda, d_TipoCambio,
+                 d_ImporteTotal, d_BaseImponible, d_IGV, b_AplicaRetencion, d_MontoRetencion,
+                 b_AplicaDetraccion, d_PorcDetraccion, d_MontoDetraccion, v_ConstanciaDetraccion,
+                 d_NetoPagar, v_Observaciones, i_InsertaIdUsuario)
+            VALUES
+                (@IdPago, @TipoComprobante, @IdProveedor, @RucEmisor, @RazonSocialEmisor,
+                 @Serie, @Numero, @FechaEmision, @FechaVencimiento, ISNULL(@Moneda,'PEN'), ISNULL(@TipoCambio,1),
+                 @cImporte, @cBase, @cIgv, @AplicaRetencion, @cRet,
+                 @AplicaDetraccion, @PorcDetraccion, @cDet, @ConstanciaDetraccion,
+                 @cNeto, @ObservacionesComprobante, @IdUsuario);
+
+            SET @egrTipoDoc  = CASE @TipoComprobante WHEN '01' THEN 'FACTURA' ELSE 'RECIBO HONORARIOS' END;
+            SET @egrSerieNum = NULLIF(LTRIM(RTRIM(ISNULL(@Serie,'') + '-' + ISNULL(@Numero,''))), '-');
+            SET @egrMoneda   = ISNULL(@Moneda,'PEN');
+            SET @egrTC       = ISNULL(@TipoCambio,1);
+            SET @igvTotal    = @cIgv;
+        END
 
         -- 5) Agrupar la TVP por consultorio + prorratear @TotalPago (residuo al de mayor peso).
         DECLARE @cons TABLE (
@@ -153,6 +281,8 @@ BEGIN
             d_MontoServicios    DECIMAL(18,2),
             w                   DECIMAL(18,4),
             d_MontoPago         DECIMAL(18,2),
+            d_IgvCons           DECIMAL(18,2) NULL,
+            d_NetoCons          DECIMAL(18,2) NULL,
             i_IdEgreso          INT NULL
         );
         INSERT INTO @cons (i_IdConsultorio, v_ConsultorioNombre, d_MontoServicios)
@@ -173,13 +303,30 @@ BEGIN
         UPDATE @cons SET d_MontoPago = d_MontoPago + @residuo
         WHERE seq = (SELECT TOP 1 seq FROM @cons ORDER BY w DESC, seq ASC);
 
+        -- 5b) Prorrateo del IGV del documento por consultorio (solo Factura -> @igvTotal>0). Residuo al de
+        --     mayor peso (mismo criterio que el monto) => SUM(d_IgvCons)=@igvTotal exacto y cada egreso
+        --     cumple el CHECK CK_egreso_montos (bruto = neto + igv). Sin comprobante / Recibo: IGV 0,
+        --     neto = bruto (identico al comportamiento anterior).
+        UPDATE @cons SET d_IgvCons = 0, d_NetoCons = d_MontoPago;
+        IF @igvTotal > 0
+        BEGIN
+            UPDATE @cons SET d_IgvCons = CAST(d_MontoPago - ROUND(d_MontoPago / 1.18, 2) AS DECIMAL(18,2));
+            DECLARE @residuoIgv DECIMAL(18,2) = @igvTotal - (SELECT ISNULL(SUM(d_IgvCons),0) FROM @cons);
+            UPDATE @cons SET d_IgvCons = d_IgvCons + @residuoIgv
+            WHERE seq = (SELECT TOP 1 seq FROM @cons ORDER BY w DESC, seq ASC);
+            UPDATE @cons SET d_NetoCons = d_MontoPago - d_IgvCons;
+        END
+
         -- 6) Un egreso PAGADO por consultorio (INSERT..EXEC, igual que sp_Compra_Clasificar).
+        --    Lleva el DOCUMENTO REAL del comprobante (tipo/serie-numero/moneda/TC) e IGV prorrateado.
         DECLARE @i INT = 1, @maxseq INT = (SELECT ISNULL(MAX(seq),0) FROM @cons);
-        DECLARE @cId INT, @cMonto DECIMAL(18,2), @cNombre NVARCHAR(100), @egr INT, @glosaEgr NVARCHAR(300);
+        DECLARE @cId INT, @cMonto DECIMAL(18,2), @cNombre NVARCHAR(100), @cIgvEgr DECIMAL(18,2),
+                @egr INT, @glosaEgr NVARCHAR(300);
         DECLARE @out TABLE (i_IdEgreso INT);
         WHILE @i <= @maxseq
         BEGIN
-            SELECT @cId = i_IdConsultorio, @cMonto = d_MontoPago, @cNombre = v_ConsultorioNombre
+            SELECT @cId = i_IdConsultorio, @cMonto = d_MontoPago, @cNombre = v_ConsultorioNombre,
+                   @cIgvEgr = d_IgvCons
             FROM @cons WHERE seq = @i;
 
             SET @glosaEgr = LEFT('Honorarios ' + @MedicoNombre + ' ' +
@@ -188,10 +335,10 @@ BEGIN
             DELETE FROM @out;
             INSERT INTO @out
             EXEC conta.sp_Egreso_Insert
-                 @IdEntidad = @IdEntidad, @FechaDocumento = @FechaPago, @TipoDocumento = 'HONORARIO',
-                 @SerieNumero = @serie, @IdCentroCosto = 2, @IdTipoGasto = @IdTipoGastoHon,
-                 @Condicion = 'CONTADO', @Moneda = 'PEN', @TipoCambio = 1,
-                 @MontoBruto = @cMonto, @IGV = 0, @Glosa = @glosaEgr, @IdUsuario = @IdUsuario,
+                 @IdEntidad = @IdEntidad, @FechaDocumento = @FechaPago, @TipoDocumento = @egrTipoDoc,
+                 @SerieNumero = @egrSerieNum, @IdCentroCosto = @IdCentroCostoHon, @IdTipoGasto = @IdTipoGastoHon,
+                 @Condicion = 'CONTADO', @Moneda = @egrMoneda, @TipoCambio = @egrTC,
+                 @MontoBruto = @cMonto, @IGV = @cIgvEgr, @Glosa = @glosaEgr, @IdUsuario = @IdUsuario,
                  @Estado = 'PAGADO', @FechaPago = @FechaPago, @IdFormaPago = @IdFormaPago,
                  @IdCuentaBancaria = @IdCuentaBancaria, @IdConsultorio = @cId;
             SET @egr = (SELECT TOP 1 i_IdEgreso FROM @out);
@@ -220,7 +367,7 @@ BEGIN
         FROM @Servicios s
         GROUP BY s.v_ServiceId, s.i_IdConsultorio;
 
-        EXEC conta.sp_Auditoria_Insert 'conta.pago_honorario', @IdPago, 'INSERT', @serie, @IdUsuario;
+        EXEC conta.sp_Auditoria_Insert 'conta.pago_honorario', @IdPago, 'INSERT', @serieDefault, @IdUsuario;
 
         COMMIT TRAN;
 
@@ -329,7 +476,7 @@ BEGIN
            ph.t_PeriodoDesde, ph.t_PeriodoHasta, ph.d_TotalPago, ph.d_TotalServicios,
            (SELECT COUNT(*) FROM conta.pago_honorario_consultorio c WHERE c.i_IdPago = ph.i_IdPago) AS NroConsultorios,
            (SELECT COUNT(*) FROM conta.pago_honorario_servicio s WHERE s.i_IdPago = ph.i_IdPago) AS NroServicios,
-           ph.v_Estado
+           ph.v_Estado, ph.v_TipoProduccion
     FROM conta.pago_honorario ph
     WHERE (@Desde IS NULL OR ph.t_FechaPago >= @Desde)
       AND (@Hasta IS NULL OR ph.t_FechaPago <= @Hasta)
@@ -354,7 +501,7 @@ BEGIN
            ph.t_PeriodoDesde, ph.t_PeriodoHasta, ph.d_PorcMedico, ph.d_TotalServicios, ph.d_TotalPago,
            ph.v_Estado, ph.t_FechaPago, ph.i_IdFormaPago, ph.i_IdCuentaBancaria, ph.v_Glosa,
            ph.v_MotivoAnulacion, ph.i_InsertaIdUsuario, ph.t_InsertaFecha,
-           ph.i_ActualizaIdUsuario, ph.t_ActualizaFecha
+           ph.i_ActualizaIdUsuario, ph.t_ActualizaFecha, ph.v_TipoProduccion
     FROM conta.pago_honorario ph
     LEFT JOIN conta.entidad ent ON ent.i_IdEntidad = ph.i_IdEntidad
     WHERE ph.i_IdPago = @IdPago;
@@ -372,6 +519,20 @@ BEGIN
     FROM conta.pago_honorario_servicio s
     WHERE s.i_IdPago = @IdPago
     ORDER BY s.i_Id;
+
+    -- RS4 comprobante tributario del pago (0 o 1 fila). Enriquecido con el RUC/razon vigentes del
+    -- proveedor emisor (dbo.proveedores, tabla del BI) ademas de los valores congelados del comprobante.
+    SELECT ch.i_Id, ch.i_IdPago, ch.v_TipoComprobante, ch.i_IdProveedor,
+           ch.v_RucEmisor, ch.v_RazonSocialEmisor, ch.v_Serie, ch.v_Numero,
+           ch.t_FechaEmision, ch.t_FechaVencimiento, ch.v_Moneda, ch.d_TipoCambio,
+           ch.d_ImporteTotal, ch.d_BaseImponible, ch.d_IGV,
+           ch.b_AplicaRetencion, ch.d_MontoRetencion,
+           ch.b_AplicaDetraccion, ch.d_PorcDetraccion, ch.d_MontoDetraccion, ch.v_ConstanciaDetraccion,
+           ch.d_NetoPagar, ch.v_Observaciones, ch.i_InsertaIdUsuario, ch.t_InsertaFecha,
+           p.ruc AS ProveedorRuc, p.razon_social AS ProveedorRazonSocial
+    FROM conta.comprobante_honorario ch
+    LEFT JOIN dbo.proveedores p ON p.id_proveedor = ch.i_IdProveedor
+    WHERE ch.i_IdPago = @IdPago;
 END
 GO
 
@@ -379,7 +540,14 @@ GO
 -- 5) sp_Honorarios_Analisis  (PORT FIEL de SigesoftDesarrollo_2.dbo.PagoMedicoPorConsultorio_SP,
 --    def VIVA de sys.sql_modules). Three-part names invertidos: la venta vive en dbo (BD actual
 --    20505310072) y el servicio/paciente en SigesoftDesarrollo_2. COLLATE DATABASE_DEFAULT en los
---    dos unicos cruces de texto cross-DB (CHARINDEX comprobante y esPagado conta). esPagado DUAL.
+--    cruces de texto cross-DB (equi-join por token comprobante y esPagado conta). esPagado DUAL.
+--    OPTIMIZACION (Opcion A, 2026-07-19): el LEFT JOIN original usaba
+--    ON CHARINDEX(V.Comprobante, S.ComprobanteAt) > 0 (substring-match no sargable -> ~24s CPU).
+--    Se materializan VentasData/ServiciosData en #V/#S y se explota #S.ComprobanteAt (lista de
+--    comprobantes delimitada por '|') en tokens #T con una tally table (ROW_NUMBER sobre
+--    sys.all_objects, patron SQL2012 sin STRING_SPLIT); el join pasa a EQUI-JOIN V.Comprobante=T.tok.
+--    El contrato (74 columnas, nombres/tipos/orden, universo IN(9,42), filtros, ventana +-10d y
+--    ORDER BY) es IDENTICO al original (verificado al centavo con EXCEPT en 4 escenarios).
 -- =====================================================================
 IF OBJECT_ID('conta.sp_Honorarios_Analisis','P') IS NOT NULL DROP PROCEDURE conta.sp_Honorarios_Analisis;
 GO
@@ -397,8 +565,13 @@ BEGIN
     DECLARE @FechaFinAlargada     DATETIME = DATEADD(DAY, 10, @FechaFin);
     DECLARE @ConsultorioVal INT = CASE WHEN @ConsultorioId = -1 THEN NULL ELSE @ConsultorioId END;
 
-    ;WITH VentasData AS (
-        SELECT
+    -- Cleanup defensivo (idempotencia intra-sesion).
+    IF OBJECT_ID('tempdb..#V') IS NOT NULL DROP TABLE #V;
+    IF OBJECT_ID('tempdb..#S') IS NOT NULL DROP TABLE #S;
+    IF OBJECT_ID('tempdb..#T') IS NOT NULL DROP TABLE #T;
+
+    -- 1) VentasData -> #V (columnas IDENTICAS a la CTE original).
+    SELECT
             v.v_IdVenta as 'idexterno',
             CASE WHEN v.v_IdCliente = 'N002-CL000000000' then 'DNI'
                  else spc.v_Value1 end as 'extdocumento_c',
@@ -437,6 +610,7 @@ BEGIN
             v.v_MotivoEliminacion AS 'motivo_t',
             vd.v_IdVentaDetalle as 'v_IdVentaDetalle',
             '' as 'TipCaj'
+        INTO #V
         FROM dbo.venta as v
         JOIN dbo.cliente as c on v.v_IdCliente = c.v_IdCliente
         LEFT JOIN dbo.systemparameter spc on c.i_IdTipoIdentificacion = spc.i_ParameterId and spc.i_GroupId = 150
@@ -458,10 +632,11 @@ BEGIN
                 'N001-ZQ000120450', 'N001-ZQ000120522', 'N001-ZQ000120960',
                 'N001-ZQ000120968', 'N001-ZQ000121051', 'N001-ZQ000121100',
                 'N001-ZQ000113070'
-            )
-    ),
-    ServiciosData AS (
-        SELECT
+            );
+
+    -- 2) ServiciosData -> #S (columnas IDENTICAS) + rid surrogate por FILA fisica: preserva EXACTO
+    --    la cardinalidad del LEFT JOIN por CHARINDEX aunque un v_ServiceId tenga varias filas (calendar).
+    SELECT
             s.v_ServiceId as 'Servicio_p',
             s.v_ComprobantePago AS 'ComprobanteAt',
             dhd.v_Value1 as 'extdocumento_p',
@@ -514,6 +689,7 @@ BEGIN
             p.v_PersonId as 'PersonId',
             A.UseriD as UseriD,
             pr.i_Consultorio AS 'ConsultorioId',
+            pr.i_MasterServiceTypeId as 'MasterTypeId',
             pr.i_mktWork as 'TipoProtocoloId',
             CASE
                 WHEN pr.v_Procedencia = 'O' THEN 'OCUPACIONAL'
@@ -525,7 +701,9 @@ BEGIN
                 ELSE '- - -'
             END as 'Value1',
             pr.v_Procedencia as 'Value2',
-            A.ServiceComponentId as ServiceComponentId
+            A.ServiceComponentId as ServiceComponentId,
+            ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS rid
+        INTO #S
         FROM SigesoftDesarrollo_2.dbo.service s
         INNER JOIN SigesoftDesarrollo_2.dbo.protocol pr on s.v_ProtocolId = pr.v_ProtocolId
         INNER JOIN SigesoftDesarrollo_2.dbo.person as p on s.v_PersonId = p.v_PersonId
@@ -589,8 +767,27 @@ BEGIN
             AND (@FechaInicioRetrasada <= s.d_ServiceDate AND s.d_ServiceDate <= @FechaFinAlargada)
             AND cl.i_CalendarStatusId != 3
             AND cl.i_IsDeleted = 0
-            AND (@ConsultorioVal IS NULL OR pr.i_Consultorio = @ConsultorioVal)
+            AND (@ConsultorioVal IS NULL OR pr.i_Consultorio = @ConsultorioVal);
+
+    -- 3) Split de #S.ComprobanteAt (lista de comprobantes delimitada por '|') -> #T (rid, tok).
+    --    Tally table via ROW_NUMBER sobre sys.all_objects (SQL2012, sin STRING_SPLIT). LTRIM/RTRIM y
+    --    se descartan tokens vacios. DISTINCT (rid,tok) replica la semantica de EXISTENCIA del CHARINDEX
+    --    (un comprobante repetido dentro de una misma lista = un solo match, sin inflar cardinalidad).
+    ;WITH Nums AS (
+        SELECT ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n FROM sys.all_objects
     )
+    SELECT DISTINCT
+        s.rid,
+        LTRIM(RTRIM(SUBSTRING(s.ComprobanteAt, n.n,
+              CHARINDEX('|', s.ComprobanteAt + '|', n.n) - n.n))) AS tok
+    INTO #T
+    FROM #S s
+    JOIN Nums n ON n.n <= LEN(s.ComprobanteAt)
+               AND SUBSTRING('|' + s.ComprobanteAt, n.n, 1) = '|'
+    WHERE LTRIM(RTRIM(SUBSTRING(s.ComprobanteAt, n.n,
+              CHARINDEX('|', s.ComprobanteAt + '|', n.n) - n.n))) <> '';
+
+    -- 4) SELECT final (contrato IDENTICO: 74 columnas, nombres/tipos/orden, filtros y ORDER BY).
     SELECT
         V.idexterno as idVenta,
         V.extdocumento_c as docTypeCliente,
@@ -671,12 +868,26 @@ BEGIN
             WHEN EXISTS (SELECT 1 FROM conta.pago_honorario_servicio phs
                          WHERE phs.v_ServiceId = S.Servicio_p COLLATE DATABASE_DEFAULT AND phs.b_Anulado = 0) THEN 1
             ELSE 0
-        END as esPagado
-    FROM VentasData V
-    LEFT JOIN ServiciosData S ON CHARINDEX(V.Comprobante, S.ComprobanteAt COLLATE DATABASE_DEFAULT) > 0
+        END as esPagado,
+        -- Cajero que REGISTRO la venta: dbo.venta.i_InsertaIdUsuario -> dbo.systemuser.v_UserName.
+        -- Ya viene joineado 1:1 en VentasData (INNER JOIN dbo.systemuser sy => usuario_t); solo se
+        -- proyecta con nombre de proposito (analogo a conta.sp_Caja_CuadreDia.UsuarioCajero).
+        -- MISMA BD 20505310072, SOLO LECTURA sobre dbo; jamas v_Password; jamas cross-DB a SigesoftDesarrollo_2.
+        ISNULL(V.usuario_t, 'SIN CAJERO') AS UsuarioCajero,
+        -- Tipo de produccion del servicio emparejado: CLINICA (masterType 9) | SISOL (42).
+        -- NULL en filas sin service emparejado (solo con @ConsultorioId NULL/-1): no pagables
+        -- (sin v_ServiceId) -> el front las excluye.
+        CASE S.MasterTypeId WHEN 9 THEN 'CLINICA' WHEN 42 THEN 'SISOL' END AS TipoProduccion
+    FROM #V V
+    LEFT JOIN ( #T T JOIN #S S ON S.rid = T.rid )
+           ON V.Comprobante = T.tok COLLATE DATABASE_DEFAULT
     WHERE
         (@ConsultorioVal IS NULL OR S.Servicio_p IS NOT NULL)
     ORDER BY V.idexterno, V.extserie_t, V.numero_t;
+
+    IF OBJECT_ID('tempdb..#V') IS NOT NULL DROP TABLE #V;
+    IF OBJECT_ID('tempdb..#S') IS NOT NULL DROP TABLE #S;
+    IF OBJECT_ID('tempdb..#T') IS NOT NULL DROP TABLE #T;
 END
 GO
 

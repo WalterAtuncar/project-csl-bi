@@ -63,6 +63,28 @@ namespace Contabilidad.Controllers
         {
             if (r == null || r.Servicios == null || r.Servicios.Count == 0)
                 return BadRequest(new { message = "Debe indicar al menos un servicio para pagar." });
+
+            // Comprobante tributario: OBLIGATORIO (flujo completo). El SP tambien valida via RAISERROR;
+            // aqui damos un 400 limpio antes de llegar a la BD.
+            var c = r.Comprobante;
+            if (c == null)
+                return BadRequest(new { message = "El comprobante tributario es obligatorio para registrar el pago." });
+
+            var tipo = c.TipoComprobante?.Trim();
+            if (tipo != "01" && tipo != "02")
+                return BadRequest(new { message = "TipoComprobante debe ser '01' (Factura) o '02' (Recibo por Honorarios)." });
+            c.TipoComprobante = tipo;   // normaliza lo que recibe el SP
+
+            if (c.FechaEmision == null)
+                return BadRequest(new { message = "La fecha de emision del comprobante es requerida." });
+
+            if (c.AplicaDetraccion && c.PorcDetraccion == null && c.MontoDetraccion == null)
+                return BadRequest(new { message = "Si aplica detraccion debe indicar el porcentaje o el monto de detraccion." });
+
+            // Tipo de produccion: normaliza a 'CLINICA' si viene null/vacio (canonico 'CLINICA'|'SISOL').
+            // La validacion estricta (IN + anti-mixto de servicios) la hace el SP via RAISERROR.
+            r.TipoProduccion = string.IsNullOrWhiteSpace(r.TipoProduccion) ? "CLINICA" : r.TipoProduccion.Trim().ToUpperInvariant();
+
             return Ok(_repo.CrearPago(r, User.UserId()));
         }
 

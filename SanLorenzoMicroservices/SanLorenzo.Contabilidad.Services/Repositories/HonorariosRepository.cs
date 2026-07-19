@@ -69,11 +69,14 @@ namespace Contabilidad.Repositories
             if (cabecera == null) return null;
             var consultorios = multi.Read<PagoHonorarioConsultorioRow>().AsList();
             var servicios = multi.Read<PagoHonorarioServicioRow>().AsList();
+            // RS4 (nuevo): comprobante tributario -> 0 o 1 fila. null si el pago no tiene comprobante.
+            var comprobante = multi.ReadFirstOrDefault<PagoHonorarioComprobanteRow>();
             return new PagoHonorarioDetalle
             {
                 Cabecera = cabecera,
                 Consultorios = consultorios,
-                Servicios = servicios
+                Servicios = servicios,
+                Comprobante = comprobante
             };
         }
 
@@ -108,6 +111,31 @@ namespace Contabilidad.Repositories
             p.Add("@TotalPago", r.TotalPago);
             p.Add("@Servicios", tabla.AsTableValuedParameter("conta.tvp_pago_honorario_servicio"));
             p.Add("@IdUsuario", idUsuario);
+
+            // --- Comprobante tributario (16 params nuevos del SP; obligatorio, validado en el controller) ---
+            var c = r.Comprobante;
+            p.Add("@TipoComprobante", c?.TipoComprobante);
+            p.Add("@IdProveedor", c?.IdProveedor);
+            p.Add("@RucEmisor", c?.RucEmisor);
+            p.Add("@RazonSocialEmisor", c?.RazonSocialEmisor);
+            p.Add("@Serie", c?.Serie);
+            p.Add("@Numero", c?.Numero);
+            p.Add("@FechaEmision", c?.FechaEmision);
+            p.Add("@FechaVencimiento", c?.FechaVencimiento);
+            p.Add("@Moneda", string.IsNullOrWhiteSpace(c?.Moneda) ? "PEN" : c.Moneda.Trim());
+            p.Add("@TipoCambio", c?.TipoCambio ?? 1m);
+            p.Add("@AplicaRetencion", c?.AplicaRetencion ?? false);
+            p.Add("@AplicaDetraccion", c?.AplicaDetraccion ?? false);
+            p.Add("@PorcDetraccion", c?.PorcDetraccion);
+            p.Add("@MontoDetraccion", c?.MontoDetraccion);
+            p.Add("@ConstanciaDetraccion", c?.ConstanciaDetraccion);
+            p.Add("@ObservacionesComprobante", c?.Observaciones);
+
+            // Tipo de produccion (ord 30 del SP, @TipoProduccion nvarchar(10) = 'CLINICA'):
+            // rutea el egreso a CC-ASIS (CLINICA) o CC-SISOL (SISOL). Sin este param el SP usaria su
+            // default y se perderia la seleccion del usuario. Normalizado a 'CLINICA' si viene null/vacio.
+            p.Add("@TipoProduccion",
+                string.IsNullOrWhiteSpace(r.TipoProduccion) ? "CLINICA" : r.TipoProduccion.Trim().ToUpperInvariant());
 
             using var cn = _db.Open();
             try

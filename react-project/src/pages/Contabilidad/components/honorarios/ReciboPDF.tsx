@@ -4,14 +4,15 @@ import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer';
 
 // Datos de la clínica (estáticos — NO se llama al legacy). Ajustables si el usuario lo pide.
-const CLINICA = {
+// Exportados como ÚNICA fuente de datos de la clínica (los reusa el export del Cuadre de Caja).
+export const CLINICA = {
   nombre: 'CLÍNICA SAN LORENZO',
   ruc: '20000000000',
   direccion: 'Av. Principal 123 - Lima, Perú',
   telefono: '(01) 000-0000',
   email: 'contacto@clinicasanlorenzo.pe',
 };
-const LOGO_URL = '/assets/images/logo-csl.png';
+export const LOGO_URL = '/assets/images/logo-csl.png';
 
 export interface ReciboConsultorioRow {
   Nombre: string;
@@ -28,8 +29,18 @@ export interface ReciboHonorarioData {
   TotalPago: number;
   Glosa?: string | null;
   Estado?: string | null;
+  TipoProduccion?: string | null; // 'CLINICA' | 'SISOL'
+  TipoComprobante?: string | null; // '01' Factura | '02' Recibo por Honorarios
+  Serie?: string | null;
+  Numero?: string | null;
   Consultorios: ReciboConsultorioRow[];
 }
+// Título del documento según el tipo de comprobante (fallback al recibo genérico).
+const tipoComprobanteTitulo = (t?: string | null): string =>
+  t === '01' ? 'FACTURA' : t === '02' ? 'RECIBO POR HONORARIOS' : 'RECIBO DE HONORARIOS';
+// Etiqueta legible de la producción liquidada.
+const tipoProduccionLabel = (t?: string | null): string =>
+  t === 'CLINICA' ? 'Clínica' : t === 'SISOL' ? 'SISOL' : '—';
 
 const money = (n: number) => `S/ ${(n ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fechaLegible = (iso: string) => {
@@ -94,8 +105,8 @@ const ReciboHonorarioDoc: React.FC<{ data: ReciboHonorarioData }> = ({ data }) =
           <Text style={styles.clinicaLinea}>{CLINICA.telefono} · {CLINICA.email}</Text>
         </View>
         <View style={styles.docBox}>
-          <Text style={styles.docTitulo}>RECIBO DE HONORARIOS</Text>
-          <Text style={styles.docNro}>N° {nroDocumento(data)}</Text>
+          <Text style={styles.docTitulo}>{tipoComprobanteTitulo(data.TipoComprobante)}</Text>
+          <Text style={styles.docNro}>N° {data.Serie && data.Numero ? `${data.Serie}-${data.Numero}` : nroDocumento(data)}</Text>
           <Text style={styles.docFecha}>Emisión: {fechaLegible(data.FechaPago)}</Text>
         </View>
       </View>
@@ -118,6 +129,10 @@ const ReciboHonorarioDoc: React.FC<{ data: ReciboHonorarioData }> = ({ data }) =
         <View style={styles.infoItem}>
           <Text style={styles.infoLabel}>Consultorios</Text>
           <Text style={styles.infoValue}>{data.Consultorios.length}</Text>
+        </View>
+        <View style={styles.infoItem}>
+          <Text style={styles.infoLabel}>Producción</Text>
+          <Text style={styles.infoValue}>{tipoProduccionLabel(data.TipoProduccion)}</Text>
         </View>
       </View>
 

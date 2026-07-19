@@ -3,12 +3,13 @@ import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 import {
   X, Search, Calculator, Upload, RotateCcw, Check, XCircle, Activity, DollarSign, Clock,
-  Users, Printer, CheckCircle, AlertCircle,
+  Users, Printer, CheckCircle, AlertCircle, FileText,
 } from 'lucide-react';
 import contabilidadService from '../../../../services/contabilidad/ContabilidadService';
 import SearchableSelect from '../SearchableSelect';
 import type {
-  AnalisisHonorarioRow, HonorarioConsultorio, CuentaBancaria, FormaPagoRow, HonorarioServicioInput,
+  AnalisisHonorarioRow, HonorarioConsultorio, FormaPagoRow, HonorarioServicioInput,
+  ProveedorRow, ComprobanteHonorarioInput,
 } from '../../../../services/contabilidad/contaTypes';
 import { descargarPlantillaAtenciones, formatDateToDDMMYYYY, getFirstComprobante } from './excelHonorarios';
 import { abrirReciboHonorarioPDF, type ReciboHonorarioData } from './ReciboPDF';
@@ -25,6 +26,18 @@ const fmtFecha = (iso: string) => {
   if (!y || !m || !d) return iso;
   return new Date(y, m - 1, d).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
+// ⚠️ El campo `fechaPago` del análisis NO es ISO: el SP lo emite como 'dd/MM/yyyy HH:mm:ss'
+// (CONVERT(...,103) + ' ' + CONVERT(...,8), ej. '25/06/2026 18:20:54'). Helpers dedicados:
+//  - soloFechaPago: parte fecha 'dd/MM/yyyy' para MOSTRAR (sin hora), '' si no es válida.
+//  - fechaPagoToISO: 'yyyy-MM-dd' ordenable para comparar min/max lexicográficamente (nunca new Date).
+const soloFechaPago = (s?: string) => {
+  const raw = (s || '').slice(0, 10);
+  return /^\d{2}\/\d{2}\/\d{4}$/.test(raw) ? raw : '';
+};
+const fechaPagoToISO = (s?: string) => {
+  const raw = soloFechaPago(s);
+  return raw ? `${raw.slice(6, 10)}-${raw.slice(3, 5)}-${raw.slice(0, 2)}` : '';
+};
 // Rango del mes anterior (primer y último día) en YYYY-MM-DD.
 const prevMonthRange = (): { desde: string; hasta: string } => {
   const now = new Date();
@@ -35,6 +48,13 @@ const prevMonthRange = (): { desde: string; hasta: string } => {
   return { desde: `${prevYear}-${pad2(idx + 1)}-01`, hasta: `${prevYear}-${pad2(idx + 1)}-${pad2(lastDay)}` };
 };
 const CONSULTORIO_TODOS = -1;
+
+// Pseudo-médico institucional (cuenta del sa/clínica): agrupa los servicios SIN médico tratante.
+// Criterio ROBUSTO: es "sin médico tratante" ⟺ medicoId === 11. NO se usa la especialidad ('- - -')
+// como marcador — un médico real JAMÁS tiene id 11, pero podría tener especialidad vacía, y
+// bloquear a un médico real sería un fallo peor. Estos servicios se muestran pero NO son liquidables.
+const ID_SIN_MEDICO = 11;
+const esSinMedico = (medicoId: number) => medicoId === ID_SIN_MEDICO;
 
 // Fila del análisis con clave estable para la selección (v_ServiceId + consultorioId + índice).
 interface AnalisisRow extends AnalisisHonorarioRow { _key: string; }
@@ -56,12 +76,14 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
   // Catálogos conta
   const [consultorios, setConsultorios] = useState<HonorarioConsultorio[]>([]);
   const [formasPago, setFormasPago] = useState<FormaPagoRow[]>([]);
-  const [cuentas, setCuentas] = useState<CuentaBancaria[]>([]);
+  const [proveedores, setProveedores] = useState<ProveedorRow[]>([]);
 
   // Análisis
   const [rows, setRows] = useState<AnalisisRow[]>([]);
   const [analizado, setAnalizado] = useState(false);
   const [loadingAnalisis, setLoadingAnalisis] = useState(false);
+  // Tipo de producción a liquidar (mono-tipo): agrupa client-side; el radio filtra upstream (rowsTipo)
+  const [tipoProduccion, setTipoProduccion] = useState<'CLINICA' | 'SISOL'>('CLINICA');
 
   // Selección
   const [selectedMedicos, setSelectedMedicos] = useState<Set<number>>(new Set());
@@ -86,9 +108,26 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
   // Datos del pago
   const [fechaPago, setFechaPago] = useState(today());
   const [idFormaPago, setIdFormaPago] = useState(0);
-  const [idCuentaBancaria, setIdCuentaBancaria] = useState(0);
   const [porcRef, setPorcRef] = useState(65);
   const [glosa, setGlosa] = useState('');
+
+  // Comprobante (Factura / Recibo por Honorarios) — OBLIGATORIO para registrar
+  const [compTipo, setCompTipo] = useState<'' | '01' | '02'>('');
+  const [compIdProveedor, setCompIdProveedor] = useState<number | null>(null);
+  const [compRuc, setCompRuc] = useState('');
+  const [compRazon, setCompRazon] = useState('');
+  const [compSerie, setCompSerie] = useState('');
+  const [compNumero, setCompNumero] = useState('');
+  const [compFechaEmision, setCompFechaEmision] = useState(today());
+  const [compFechaVenc, setCompFechaVenc] = useState('');
+  const [compMoneda, setCompMoneda] = useState('PEN');
+  const [compTipoCambio, setCompTipoCambio] = useState(1);
+  const [compAplicaRetencion, setCompAplicaRetencion] = useState(false);
+  const [compAplicaDetraccion, setCompAplicaDetraccion] = useState(false);
+  const [compPorcDetraccion, setCompPorcDetraccion] = useState('');
+  const [compMontoDetraccion, setCompMontoDetraccion] = useState('');
+  const [compConstancia, setCompConstancia] = useState('');
+  const [compObs, setCompObs] = useState('');
 
   // Registro
   const [registrando, setRegistrando] = useState(false);
@@ -101,21 +140,25 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
     const r = prevMonthRange();
     setConsultorioId(CONSULTORIO_TODOS);
     setDesde(r.desde); setHasta(r.hasta);
-    setRows([]); setAnalizado(false);
+    setRows([]); setAnalizado(false); setTipoProduccion('CLINICA');
     setSelectedMedicos(new Set()); setSelectedKeys(new Set());
     setFiltros({ paciente: '', comprobante: '', precio: '', formaPago: 'Todos', estado: 'Todos' });
     setValidacionActiva(false); setValidKeys(new Set()); setErroresExcel([]); setShowErroresExcel(false);
     setVisaDiscountPercent(4); setIncludeIgv(true); setManualPercents([]); setManualInput('');
-    setFechaPago(today()); setIdFormaPago(0); setIdCuentaBancaria(0); setPorcRef(65); setGlosa('');
+    setFechaPago(today()); setIdFormaPago(0); setPorcRef(65); setGlosa('');
+    setCompTipo(''); setCompIdProveedor(null); setCompRuc(''); setCompRazon('');
+    setCompSerie(''); setCompNumero(''); setCompFechaEmision(today()); setCompFechaVenc('');
+    setCompMoneda('PEN'); setCompTipoCambio(1); setCompAplicaRetencion(false); setCompAplicaDetraccion(false);
+    setCompPorcDetraccion(''); setCompMontoDetraccion(''); setCompConstancia(''); setCompObs('');
     setRegistrando(false); setAntiDoblePago(null); setResultado(null);
     (async () => {
       try {
-        const [cons, fp, cb] = await Promise.all([
+        const [cons, fp, prov] = await Promise.all([
           contabilidadService.honorariosConsultorios(),
           contabilidadService.cajaFormasPago(),
-          contabilidadService.cuentasBancarias(true),
+          contabilidadService.proveedores(true),
         ]);
-        setConsultorios(cons); setFormasPago(fp); setCuentas(cb);
+        setConsultorios(cons); setFormasPago(fp); setProveedores(prov);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Error cargando catálogos');
       }
@@ -126,6 +169,7 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
   const analizar = async () => {
     if (!desde || !hasta) { toast.error('Seleccione el rango de fechas'); return; }
     setLoadingAnalisis(true);
+    setTipoProduccion('CLINICA');
     setValidacionActiva(false); setValidKeys(new Set()); setErroresExcel([]);
     setSelectedMedicos(new Set()); setSelectedKeys(new Set());
     setFiltros({ paciente: '', comprobante: '', precio: '', formaPago: 'Todos', estado: 'Todos' });
@@ -142,40 +186,53 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
     }
   };
 
+  // ---- Filtro upstream por tipo de producción (CLAVE) ----
+  // rows NUNCA se re-mapea (las _key deben quedar estables). Toda la cadena (medicos, kpi,
+  // rowsDeMedicos, selectedDetalles y el cruce Excel) cuelga de rowsTipo, no de rows.
+  // Las filas con TipoProduccion === null (sin service, no pagables) quedan fuera de ambos grupos.
+  const rowsTipo = useMemo(() => rows.filter((r) => r.TipoProduccion === tipoProduccion), [rows, tipoProduccion]);
+
   // ---- Agrupación por médico (KPIs + lista) ----
   const medicos = useMemo(() => {
     const map = new Map<number, {
       medicoId: number; nombre: string; especialidad: string; total: number; sumPrecios: number;
-      pendientes: number; primer: number; ultimo: number; porcRef: number | null;
+      pendientes: number; primer: string; ultimo: string; porcRef: number | null;
     }>();
-    rows.forEach((r) => {
-      const ts = new Date(r.fechaPago).getTime();
+    rowsTipo.forEach((r) => {
+      // Extremos del periodo como STRING YYYY-MM-DD (sin new Date → sin shift UTC ni locale del navegador).
+      // fechaPago llega como 'dd/MM/yyyy HH:mm:ss' → se normaliza a ISO ordenable. Orden lexicográfico
+      // de YYYY-MM-DD == orden cronológico. '' si el dato viene nulo/vacío/malformado.
+      const dia = fechaPagoToISO(r.fechaPago);
+      const diaOk = dia !== '';
       const prev = map.get(r.medicoId);
       if (!prev) {
         map.set(r.medicoId, {
           medicoId: r.medicoId, nombre: r.nombreMedico || 'N/A', especialidad: r.especialidadMedico || '—',
           total: 1, sumPrecios: r.precioServicio || 0, pendientes: r.esPagado === 1 ? 0 : 1,
-          primer: isNaN(ts) ? Infinity : ts, ultimo: isNaN(ts) ? -Infinity : ts, porcRef: r.PorcRef,
+          primer: diaOk ? dia : '', ultimo: diaOk ? dia : '', porcRef: r.PorcRef,
         });
       } else {
         prev.total += 1;
         prev.sumPrecios += r.precioServicio || 0;
         if (r.esPagado !== 1) prev.pendientes += 1;
-        if (!isNaN(ts)) { prev.primer = Math.min(prev.primer, ts); prev.ultimo = Math.max(prev.ultimo, ts); }
+        if (diaOk) {
+          prev.primer = !prev.primer || dia < prev.primer ? dia : prev.primer;
+          prev.ultimo = !prev.ultimo || dia > prev.ultimo ? dia : prev.ultimo;
+        }
       }
     });
     return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [rows]);
+  }, [rowsTipo]);
 
   // KPIs a nivel de análisis
   const kpi = useMemo(() => ({
-    totalServicios: rows.length,
-    sumPrecios: rows.reduce((s, r) => s + (r.precioServicio || 0), 0),
-    pendientes: rows.filter((r) => r.esPagado !== 1).length,
-  }), [rows]);
+    totalServicios: rowsTipo.length,
+    sumPrecios: rowsTipo.reduce((s, r) => s + (r.precioServicio || 0), 0),
+    pendientes: rowsTipo.filter((r) => r.esPagado !== 1).length,
+  }), [rowsTipo]);
 
   // Filas de los médicos seleccionados (base del grid)
-  const rowsDeMedicos = useMemo(() => rows.filter((r) => selectedMedicos.has(r.medicoId)), [rows, selectedMedicos]);
+  const rowsDeMedicos = useMemo(() => rowsTipo.filter((r) => selectedMedicos.has(r.medicoId) && !esSinMedico(r.medicoId)), [rowsTipo, selectedMedicos]);
 
   const formasPagoOpts = useMemo(() => {
     const set = new Set<string>();
@@ -200,9 +257,10 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
   }), [rowsDeMedicos, filtros]);
 
   // Detalles seleccionados (guardan su médico; sólo del médico seleccionado cuentan)
+  // Cuelga de rowsTipo (no de rows): un servicio del tipo oculto JAMÁS entra al resumen de registro.
   const selectedDetalles = useMemo(
-    () => rows.filter((r) => selectedKeys.has(r._key) && selectedMedicos.has(r.medicoId)),
-    [rows, selectedKeys, selectedMedicos],
+    () => rowsTipo.filter((r) => selectedKeys.has(r._key) && selectedMedicos.has(r.medicoId) && !esSinMedico(r.medicoId)),
+    [rowsTipo, selectedKeys, selectedMedicos],
   );
 
   // ---- Cálculo (PORT EXACTO de la lógica legacy) ----
@@ -217,8 +275,39 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
   const appliedTotalMedico = useMemo(() => totalSinIgv * (manualPercents.length ? manualFactor : 1), [totalSinIgv, manualPercents, manualFactor]);
   const totalServiciosSel = useMemo(() => selectedDetalles.reduce((s, d) => s + (d.precioServicio || 0), 0), [selectedDetalles]);
 
+  // ---- Comprobante: preview EN VIVO (el valor autoritativo lo devuelve el GET tras registrar) ----
+  // ImporteTotal NO editable = TotalPago del honorario ya calculado.
+  const compTotal = useMemo(() => round2(appliedTotalMedico), [appliedTotalMedico]);
+  const compBase = useMemo(() => (compTipo === '01' ? round2(compTotal / 1.18) : compTotal), [compTipo, compTotal]);
+  const compIgv = useMemo(() => (compTipo === '01' ? round2(compTotal - compBase) : 0), [compTipo, compTotal, compBase]);
+  const compRetencion = useMemo(
+    () => (compTipo === '02' && compAplicaRetencion ? round2(compTotal * 0.08) : 0),
+    [compTipo, compAplicaRetencion, compTotal],
+  );
+  const compDetraccion = useMemo(() => {
+    if (!compAplicaDetraccion) return 0;
+    if (compMontoDetraccion !== '') return round2(Number(compMontoDetraccion) || 0);
+    if (compPorcDetraccion !== '') return round2(compTotal * (Number(compPorcDetraccion) || 0) / 100);
+    return 0;
+  }, [compAplicaDetraccion, compMontoDetraccion, compPorcDetraccion, compTotal]);
+  const compNeto = useMemo(() => round2(compTotal - compRetencion - compDetraccion), [compTotal, compRetencion, compDetraccion]);
+  const comprobanteValido = (compTipo === '01' || compTipo === '02') && !!compFechaEmision;
+  const proveedorOpts = useMemo(
+    () => proveedores.map((p) => ({ value: p.i_IdProveedor, label: `${p.Ruc} · ${p.RazonSocial}` })),
+    [proveedores],
+  );
+  // Al elegir proveedor del catálogo: fija IdProveedor y autollena RUC/Razón (congelables al emitir).
+  const onSelectProveedor = (id: number | null) => {
+    setCompIdProveedor(id);
+    if (id != null) {
+      const p = proveedores.find((x) => x.i_IdProveedor === id);
+      if (p) { setCompRuc(p.Ruc || ''); setCompRazon(p.RazonSocial || ''); }
+    }
+  };
+
   // ---- Handlers de selección ----
   const toggleMedico = (medicoId: number, checked: boolean) => {
+    if (esSinMedico(medicoId)) return; // "Sin médico tratante": no seleccionable — no-op en todo path
     setSelectedMedicos((prev) => {
       const next = new Set(prev);
       if (checked) next.add(medicoId); else next.delete(medicoId);
@@ -264,6 +353,8 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
   const medicoUnico = selectedMedicos.size === 1 ? medicos.find((m) => selectedMedicos.has(m.medicoId)) : null;
   useEffect(() => {
     if (medicoUnico && medicoUnico.porcRef != null) setPorcRef(medicoUnico.porcRef);
+    // Prefill de la razón social del emisor con el nombre del médico (solo si no hay proveedor elegido).
+    if (medicoUnico && compIdProveedor == null) setCompRazon(medicoUnico.nombre);
   }, [medicoUnico?.medicoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- Validación Excel (opcional) ----
@@ -284,14 +375,15 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
       }
       if (items.length === 0) { toast.error('El Excel no tiene filas válidas (Fecha y Comprobante obligatorios)'); return; }
 
-      // Cruce: comprobante (primer token '|') + fecha ddMMyyyy
+      // Cruce: comprobante (primer token '|') + fecha ddMMyyyy — SOLO contra las filas del tipo activo.
       const nuevosValidos = new Set<string>();
       const medicosDeValidos = new Set<number>();
-      rows.forEach((row) => {
+      rowsTipo.forEach((row) => {
+        if (esSinMedico(row.medicoId)) return; // no autoseleccionar servicios sin médico tratante
         const compRow = getFirstComprobante(row.v_ComprobantePago);
         const it = items.find((x) => x.comprobante === compRow);
         if (it) {
-          if (formatDateToDDMMYYYY(it.fecha) === formatDateToDDMMYYYY(row.fechaPago)) {
+          if (formatDateToDDMMYYYY(it.fecha) === formatDateToDDMMYYYY(soloFechaPago(row.fechaPago))) {
             it.matched = true; it.motivo = '';
             nuevosValidos.add(row._key);
             if (row.esPagado !== 1) medicosDeValidos.add(row.medicoId);
@@ -311,7 +403,7 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
       setSelectedMedicos((prev) => { const n = new Set(prev); medicosDeValidos.forEach((m) => n.add(m)); return n; });
       setSelectedKeys(() => {
         const n = new Set<string>();
-        rows.forEach((row) => { if (nuevosValidos.has(row._key) && row.esPagado !== 1) n.add(row._key); });
+        rowsTipo.forEach((row) => { if (nuevosValidos.has(row._key) && row.esPagado !== 1 && !esSinMedico(row.medicoId)) n.add(row._key); });
         return n;
       });
 
@@ -329,13 +421,26 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
   };
   const limpiarValidacion = () => { setValidacionActiva(false); setValidKeys(new Set()); setErroresExcel([]); setShowErroresExcel(false); };
 
+  // Cambio de tipo de producción: resetea selección/filtros/validación Excel.
+  // NO toca manualPercents/visaDiscountPercent/includeIgv ni datos de pago/comprobante.
+  const cambiarTipoProduccion = (t: 'CLINICA' | 'SISOL') => {
+    if (t === tipoProduccion) return;
+    setTipoProduccion(t);
+    setSelectedMedicos(new Set());
+    setSelectedKeys(new Set());
+    setFiltros({ paciente: '', comprobante: '', precio: '', formaPago: 'Todos', estado: 'Todos' });
+    limpiarValidacion();
+  };
+
   // ---- Registrar ----
-  const puedeRegistrar = selectedMedicos.size === 1 && selectedDetalles.length > 0 && !!fechaPago && appliedTotalMedico > 0;
+  const puedeRegistrar = selectedMedicos.size === 1 && selectedDetalles.length > 0 && !!fechaPago && appliedTotalMedico > 0 && comprobanteValido;
   const registrar = async () => {
     setAntiDoblePago(null);
     if (selectedMedicos.size !== 1) { toast.error('Seleccione exactamente UN médico para registrar el pago'); return; }
     if (selectedDetalles.length === 0) { toast.error('Seleccione al menos un servicio'); return; }
     if (!fechaPago) { toast.error('Indique la fecha de pago'); return; }
+    if (compTipo !== '01' && compTipo !== '02') { toast.error('Seleccione el tipo de comprobante'); return; }
+    if (!compFechaEmision) { toast.error('Indique la fecha de emisión del comprobante'); return; }
     const medicoId = Array.from(selectedMedicos)[0];
     const medico = medicos.find((m) => m.medicoId === medicoId);
     if (!medico) { toast.error('Médico no encontrado'); return; }
@@ -347,6 +452,26 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
       Porc: porcRef,
     }));
 
+    // Comprobante anidado (OBLIGATORIO). El ImporteTotal autoritativo lo deriva el SP = TotalPago.
+    const comprobante: ComprobanteHonorarioInput = {
+      TipoComprobante: compTipo,
+      IdProveedor: compIdProveedor,
+      RucEmisor: compRuc.trim() || null,
+      RazonSocialEmisor: compRazon.trim() || null,
+      Serie: compSerie.trim() || null,
+      Numero: compNumero.trim() || null,
+      FechaEmision: compFechaEmision,
+      FechaVencimiento: compFechaVenc || null,
+      Moneda: compMoneda || 'PEN',
+      TipoCambio: compTipoCambio || 1,
+      AplicaRetencion: compTipo === '02' ? compAplicaRetencion : false,
+      AplicaDetraccion: compAplicaDetraccion,
+      PorcDetraccion: compAplicaDetraccion && compPorcDetraccion !== '' ? Number(compPorcDetraccion) : null,
+      MontoDetraccion: compAplicaDetraccion && compMontoDetraccion !== '' ? Number(compMontoDetraccion) : null,
+      ConstanciaDetraccion: compAplicaDetraccion ? (compConstancia.trim() || null) : null,
+      Observaciones: compObs.trim() || null,
+    };
+
     setRegistrando(true);
     try {
       const res = await contabilidadService.honorariosPagoCrear({
@@ -357,11 +482,13 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
         PorcMedico: porcRef,
         FechaPago: fechaPago,
         IdFormaPago: idFormaPago || null,
-        IdCuentaBancaria: idCuentaBancaria || null,
+        IdCuentaBancaria: null,
         Glosa: glosa.trim() || null,
         TotalServicios: round2(totalServiciosSel),
         TotalPago: round2(appliedTotalMedico),
         Servicios: servicios,
+        Comprobante: comprobante,
+        TipoProduccion: tipoProduccion,
       });
       toast.success(`Pago registrado (#${res.i_IdPago}) por S/ ${money(round2(appliedTotalMedico))}`);
       onRegistrado();
@@ -376,6 +503,10 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
         TotalPago: round2(appliedTotalMedico),
         Glosa: glosa.trim() || null,
         Estado: 'PAGADO',
+        TipoProduccion: tipoProduccion,
+        TipoComprobante: compTipo || null,
+        Serie: compSerie.trim() || null,
+        Numero: compNumero.trim() || null,
         Consultorios: (res.Consultorios || []).map((c) => ({
           Nombre: c.v_ConsultorioNombre, MontoServicios: c.d_MontoServicios, MontoPago: c.d_MontoPago,
         })),
@@ -470,6 +601,33 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
 
               {analizado && (
                 <>
+                  {/* ---- Tipo de producción a liquidar (mono-tipo; filtra toda la cadena) ---- */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Producción a liquidar:</span>
+                    <div className="inline-flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden">
+                      {(['CLINICA', 'SISOL'] as const).map((t) => (
+                        <label
+                          key={t}
+                          className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium cursor-pointer select-none transition-colors ${
+                            tipoProduccion === t
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="tipoProduccion"
+                            className="sr-only"
+                            checked={tipoProduccion === t}
+                            onChange={() => cambiarTipoProduccion(t)}
+                          />
+                          {t === 'CLINICA' ? 'Clínica' : 'SISOL'}
+                        </label>
+                      ))}
+                    </div>
+                    <span className="text-xs text-slate-400">Al cambiar se reinicia la selección, los filtros y la validación.</span>
+                  </div>
+
                   {/* ---- KPIs ---- */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Kpi title="Total servicios" value={String(kpi.totalServicios)} icon={<Activity className="h-5 w-5" />} tone="sky" />
@@ -499,21 +657,31 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
                         </thead>
                         <tbody>
                           {medicos.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">Sin médicos</td></tr>}
-                          {medicos.map((m) => (
+                          {medicos.map((m) => {
+                            const sinMedico = esSinMedico(m.medicoId);
+                            return (
                             <tr key={m.medicoId} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
                               <td className="px-3 py-2">
-                                <input type="checkbox" checked={selectedMedicos.has(m.medicoId)} onChange={(e) => toggleMedico(m.medicoId, e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                                <input
+                                  type="checkbox"
+                                  checked={selectedMedicos.has(m.medicoId)}
+                                  disabled={sinMedico}
+                                  onChange={(e) => toggleMedico(m.medicoId, e.target.checked)}
+                                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  title={sinMedico ? 'Sin médico tratante — no se puede liquidar honorario' : undefined}
+                                />
                               </td>
-                              <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-100">{m.nombre}</td>
-                              <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{m.especialidad}</td>
+                              <td className={`px-3 py-2 font-medium ${sinMedico ? 'italic text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'}`}>{sinMedico ? 'SIN MÉDICO TRATANTE' : m.nombre}</td>
+                              <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{sinMedico ? '—' : m.especialidad}</td>
                               <td className="px-3 py-2 text-right">{m.total}</td>
                               <td className="px-3 py-2 text-right">{m.pendientes}</td>
                               <td className="px-3 py-2 text-right">{money(m.sumPrecios)}</td>
                               <td className="px-3 py-2 text-xs text-slate-500">
-                                {isFinite(m.primer) ? new Date(m.primer).toLocaleDateString('es-PE') : '—'} - {isFinite(m.ultimo) ? new Date(m.ultimo).toLocaleDateString('es-PE') : '—'}
+                                {fmtFecha(m.primer)} - {fmtFecha(m.ultimo)}
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -548,6 +716,7 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
                               {validacionActiva && <th className="px-3 py-2 text-center">Válido</th>}
                               <th className="px-3 py-2">Paciente</th>
                               <th className="px-3 py-2">Comprobante</th>
+                              <th className="px-3 py-2">Cajero</th>
                               <th className="px-3 py-2">Forma pago</th>
                               <th className="px-3 py-2 text-right">Precio</th>
                               <th className="px-3 py-2">Estado</th>
@@ -555,7 +724,7 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
                           </thead>
                           <tbody>
                             {rowsVisibles.length === 0 && (
-                              <tr><td colSpan={validacionActiva ? 8 : 7} className="px-3 py-8 text-center text-slate-400"><AlertCircle className="h-8 w-8 mx-auto mb-2" />Sin servicios</td></tr>
+                              <tr><td colSpan={validacionActiva ? 9 : 8} className="px-3 py-8 text-center text-slate-400"><AlertCircle className="h-8 w-8 mx-auto mb-2" />Sin servicios</td></tr>
                             )}
                             {rowsVisibles.map((r) => {
                               const pac = `${r.apPaternoPaciente || ''} ${r.apMaternoPaciente || ''} ${r.nombresPaciente || ''}`.trim() || 'N/A';
@@ -564,7 +733,7 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
                                   <td className="px-3 py-2">
                                     <input type="checkbox" disabled={r.esPagado === 1} checked={selectedKeys.has(r._key)} onChange={(e) => toggleServicio(r._key, e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40" />
                                   </td>
-                                  <td className="px-3 py-2 text-slate-500">{fmtFecha(r.fechaPago)}</td>
+                                  <td className="px-3 py-2 text-slate-500">{soloFechaPago(r.fechaPago) || '—'}</td>
                                   {validacionActiva && (
                                     <td className="px-3 py-2 text-center">
                                       {validKeys.has(r._key) ? <Check className="h-4 w-4 text-emerald-500 mx-auto" /> : <XCircle className="h-4 w-4 text-rose-400 mx-auto" />}
@@ -572,6 +741,7 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
                                   )}
                                   <td className="px-3 py-2 max-w-[180px] truncate" title={pac}>{pac}</td>
                                   <td className="px-3 py-2 text-slate-500" title={r.v_ComprobantePago}>{getFirstComprobante(r.v_ComprobantePago) || '—'}</td>
+                                  <td className="px-3 py-2 text-slate-500 whitespace-nowrap max-w-[140px] truncate" title={r.UsuarioCajero}>{r.UsuarioCajero || '—'}</td>
                                   <td className="px-3 py-2">{r.formaPagoName || '-'}</td>
                                   <td className="px-3 py-2 text-right font-medium">S/ {money(r.precioServicio || 0)}</td>
                                   <td className="px-3 py-2">
@@ -643,14 +813,99 @@ const GenerarPagoHonorarioModal: React.FC<Props> = ({ isOpen, onClose, onRegistr
                               {formasPago.map((f) => <option key={f.i_IdFormaPago} value={f.i_IdFormaPago}>{f.FormaPago}</option>)}
                             </select>
                           </Field>
-                          <Field label="Cuenta bancaria">
-                            <select value={idCuentaBancaria} onChange={(e) => setIdCuentaBancaria(Number(e.target.value))} className={selCls}>
-                              <option value={0}>—</option>
-                              {cuentas.map((c) => <option key={c.i_IdCuentaBancaria} value={c.i_IdCuentaBancaria}>{c.v_Banco} · {c.v_NroCuenta}</option>)}
-                            </select>
-                          </Field>
                           <Field label="Glosa" full><input value={glosa} onChange={(e) => setGlosa(e.target.value)} placeholder="Opcional" className={selCls} /></Field>
                         </div>
+                      </div>
+
+                      {/* ---- Comprobante (Factura / Recibo por Honorarios) — OBLIGATORIO ---- */}
+                      <div className="pt-4 border-t border-slate-100 dark:border-slate-700/50 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-emerald-600" />
+                          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Comprobante</span>
+                          <span className="text-xs text-rose-500">* obligatorio</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <Field label="Tipo comprobante *">
+                            <select value={compTipo} onChange={(e) => setCompTipo(e.target.value as '' | '01' | '02')} className={selCls}>
+                              <option value="">Seleccione...</option>
+                              <option value="01">Factura</option>
+                              <option value="02">Recibo por Honorarios</option>
+                            </select>
+                          </Field>
+                          <Field label="Emisor (proveedor)">
+                            <SearchableSelect value={compIdProveedor} options={proveedorOpts} onChange={onSelectProveedor} placeholder="Buscar proveedor..." className={selCls} />
+                          </Field>
+                          <Field label="Importe total (= total del honorario)">
+                            <input value={`S/ ${money(compTotal)}`} readOnly tabIndex={-1} className={`${selCls} bg-slate-100 dark:bg-slate-900/40 cursor-not-allowed`} />
+                          </Field>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <Field label="RUC emisor">
+                            <input value={compRuc} onChange={(e) => { setCompRuc(e.target.value); setCompIdProveedor(null); }} placeholder="RUC (texto libre si no hay proveedor)" className={selCls} />
+                          </Field>
+                          <Field label="Razón social emisor">
+                            <input value={compRazon} onChange={(e) => { setCompRazon(e.target.value); setCompIdProveedor(null); }} placeholder="Razón social" className={selCls} />
+                          </Field>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <Field label="Serie"><input value={compSerie} onChange={(e) => setCompSerie(e.target.value.toUpperCase())} placeholder="Ej: F001" className={selCls} /></Field>
+                          <Field label="Número"><input value={compNumero} onChange={(e) => setCompNumero(e.target.value)} placeholder="Ej: 1234" className={selCls} /></Field>
+                          <Field label="Fecha emisión *"><input type="date" max={today()} value={compFechaEmision} onChange={(e) => setCompFechaEmision(e.target.value)} className={selCls} /></Field>
+                          <Field label="Fecha vencimiento"><input type="date" value={compFechaVenc} onChange={(e) => setCompFechaVenc(e.target.value)} className={selCls} /></Field>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                          <Field label="Moneda">
+                            <select value={compMoneda} onChange={(e) => setCompMoneda(e.target.value)} className={selCls}>
+                              <option value="PEN">PEN (S/)</option>
+                              <option value="USD">USD ($)</option>
+                            </select>
+                          </Field>
+                          <Field label="Tipo de cambio">
+                            <input type="number" min={0} step={0.001} value={compTipoCambio} onChange={(e) => setCompTipoCambio(Number(e.target.value) || 1)} className={selCls} />
+                          </Field>
+                          {compTipo === '02' && (
+                            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 h-[38px]">
+                              <input type="checkbox" checked={compAplicaRetencion} onChange={(e) => setCompAplicaRetencion(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                              Aplica retención (8%)
+                            </label>
+                          )}
+                          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 h-[38px]">
+                            <input type="checkbox" checked={compAplicaDetraccion} onChange={(e) => setCompAplicaDetraccion(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                            Aplica detracción
+                          </label>
+                        </div>
+
+                        {compAplicaDetraccion && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <Field label="% detracción">
+                              <input type="number" min={0} max={100} step={0.01} value={compPorcDetraccion} onChange={(e) => setCompPorcDetraccion(e.target.value)} placeholder="Ej: 12" className={selCls} />
+                            </Field>
+                            <Field label="Monto detracción (prioritario)">
+                              <input type="number" min={0} step={0.01} value={compMontoDetraccion} onChange={(e) => setCompMontoDetraccion(e.target.value)} placeholder="Ej: 120.00" className={selCls} />
+                            </Field>
+                            <Field label="N° constancia">
+                              <input value={compConstancia} onChange={(e) => setCompConstancia(e.target.value)} placeholder="Constancia de depósito" className={selCls} />
+                            </Field>
+                          </div>
+                        )}
+
+                        <Field label="Observaciones"><input value={compObs} onChange={(e) => setCompObs(e.target.value)} placeholder="Opcional" className={selCls} /></Field>
+
+                        {/* mini-desglose (preview en vivo; el valor autoritativo lo devuelve el GET tras registrar) */}
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                          <Stat label="Base imponible" value={`S/ ${money(compBase)}`} />
+                          <Stat label="IGV" value={`S/ ${money(compIgv)}`} />
+                          <Stat label="Retención" value={`S/ ${money(compRetencion)}`} />
+                          <Stat label="Detracción" value={`S/ ${money(compDetraccion)}`} />
+                          <Stat label="Neto a pagar" value={`S/ ${money(compNeto)}`} />
+                        </div>
+                        {!comprobanteValido && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">Indique el tipo de comprobante y la fecha de emisión para poder registrar.</p>
+                        )}
                       </div>
 
                       {/* anti-doble-pago */}
