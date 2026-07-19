@@ -162,7 +162,8 @@ BEGIN
         cd.i_IdFormaPago,
         ISNULL(dh46.v_Value1, 'SIN FORMA DE PAGO') AS FormaPago,
         CAST(CASE WHEN dh41.v_Value1 = 'CREDITO' THEN 1 ELSE 0 END AS BIT) AS EsCobranzaCredito,
-        SUM(cd.d_ImporteSoles) AS Monto
+        SUM(cd.d_ImporteSoles) AS Monto,
+        ISNULL(su.v_UserName, 'SIN CAJERO') AS UsuarioCajero
     FROM dbo.cobranzadetalle cd
     INNER JOIN dbo.venta v        ON v.v_IdVenta = cd.v_IdVenta AND ISNULL(v.i_Eliminado,0) = 0
     LEFT  JOIN dbo.documento doc  ON doc.i_CodigoDocumento = v.i_IdTipoDocumento AND ISNULL(doc.i_Eliminado,0) = 0
@@ -170,6 +171,9 @@ BEGIN
     LEFT  JOIN dbo.tipocaja tc    ON tc.i_IdTipoCaja = tcct.i_IdTipoCaja
     LEFT  JOIN dbo.datahierarchy dh46 ON dh46.i_GroupId = 46 AND dh46.i_ItemId = cd.i_IdFormaPago
     LEFT  JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId = 41 AND dh41.i_ItemId = v.i_IdCondicionPago
+    -- usuario que inserto la VENTA (cajero), replicando SAMBHS. dbo.systemuser MISMA BD, PK i_SystemUserId.
+    -- SOLO LECTURA sobre dbo; jamas leer v_Password; nunca cross-DB a SigesoftDesarrollo_2 (id-space distinto).
+    LEFT  JOIN dbo.systemuser su  ON su.i_SystemUserId = v.i_InsertaIdUsuario
     WHERE ISNULL(cd.i_Eliminado,0) = 0
       AND cd.t_InsertaFecha >= @Fecha AND cd.t_InsertaFecha < @fin
       AND ( @FormasPago IS NULL OR LTRIM(RTRIM(@FormasPago)) = ''
@@ -177,7 +181,8 @@ BEGIN
       AND ( @IncluirCredito = 1 OR ISNULL(dh41.v_Value1,'') <> 'CREDITO' )
     GROUP BY doc.v_Siglas, v.v_SerieDocumento, v.v_CorrelativoDocumento,
              tc.v_NombreTipoCaja, cd.i_IdFormaPago, dh46.v_Value1,
-             CASE WHEN dh41.v_Value1 = 'CREDITO' THEN 1 ELSE 0 END
+             CASE WHEN dh41.v_Value1 = 'CREDITO' THEN 1 ELSE 0 END,
+             v.i_InsertaIdUsuario, su.v_UserName
     ORDER BY FormaPago, Documento;
 
     -- RS2: EGRESOS del dia a nivel registro (3 fuentes, NUNCA filtrados)
@@ -187,17 +192,23 @@ BEGIN
                e.v_SerieNumero AS Documento,
                ISNULL(cc.v_Nombre,'ADMINISTRACION') AS CentroCosto,
                e.v_Glosa AS Concepto,
-               e.d_MontoBruto * e.d_TipoCambio AS Monto
+               e.d_MontoBruto * e.d_TipoCambio AS Monto,
+               cc.i_IdTipoCaja,
+               ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD') AS Unidad
         FROM conta.egreso e
         LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = e.i_IdCentroCosto
+        LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cc.i_IdTipoCaja
         WHERE e.v_Estado = 'PAGADO' AND e.t_FechaPago >= @Fecha AND e.t_FechaPago < @fin
 
         UNION ALL
         -- 2) costos de personal PAGADOS
         SELECT 'PERSONAL', NULL, ISNULL(cc.v_Nombre,'ADMINISTRACION'),
-               cpm.v_Concepto, cpm.d_Monto
+               cpm.v_Concepto, cpm.d_Monto,
+               cc.i_IdTipoCaja,
+               ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD')
         FROM conta.costo_personal_mensual cpm
         LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = cpm.i_IdCentroCosto
+        LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cc.i_IdTipoCaja
         WHERE cpm.v_Estado = 'PAGADO' AND cpm.t_FechaPago >= @Fecha AND cpm.t_FechaPago < @fin
 
         UNION ALL
@@ -209,9 +220,12 @@ BEGIN
                LTRIM(RTRIM(cm.v_NumeroDocumento)),
                ISNULL(cc.v_Nombre,'ADMINISTRACION'),
                LTRIM(RTRIM(cm.v_ConceptoMovimiento)),
-               cm.d_Total
+               cm.d_Total,
+               cm.i_IdTipoCaja,
+               ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD')
         FROM dbo.cajamayor_movimiento cm
         LEFT JOIN conta.centro_costo cc ON cc.i_IdTipoCaja = cm.i_IdTipoCaja AND cc.b_Activo = 1
+        LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cm.i_IdTipoCaja
         WHERE cm.v_TipoMovimiento = 'E'
           AND cm.t_FechaMovimiento >= @Fecha AND cm.t_FechaMovimiento < @fin
     ) x ORDER BY x.Origen, x.Documento;

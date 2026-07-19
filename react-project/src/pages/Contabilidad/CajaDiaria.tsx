@@ -2,16 +2,23 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
-import { Wallet, TrendingUp, TrendingDown, RefreshCw, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, RefreshCw, ArrowUpCircle, ArrowDownCircle, Boxes, FileSpreadsheet, FileText } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 import type { CajaDiaRow, CajaIndicadores, FormaPagoRow, CuadreDiaResponse } from '../../services/contabilidad/contaTypes';
 import MediosPagoFilterCard from './components/MediosPagoFilterCard';
 import ReconciliacionCajaMayorCard from './components/ReconciliacionCajaMayorCard';
+import { unidadCorto, unidadColor } from './components/dashboard/dashHelpers';
+import { exportarCuadreCajaExcel, type CuadreExportData } from './components/caja/excelCuadreCaja';
+import { abrirCierreCajaPDF } from './components/caja/CierreCajaPDF';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pad = (n: number) => String(n).padStart(2, '0');
 const RULE = '─'.repeat(80);
+// El backend puede marcar el origen del egreso como 'CAJA LEGACY' (pipeline de caja mayor). "Legacy" es
+// jerga interna y NO debe verse en la UI: se muestra como 'CAJA MAYOR' y se limpia cualquier resto del término.
+const labelOrigen = (o?: string) =>
+  (o ?? '').replace(/CAJA\s+LEGACY/i, 'CAJA MAYOR').replace(/\bLEGACY\b/gi, '').replace(/\s+/g, ' ').trim();
 
 const CajaDiaria: React.FC = () => {
   const now = new Date();
@@ -24,6 +31,10 @@ const CajaDiaria: React.FC = () => {
   // Cuadre de caja diario: el dia se elige por click en el grafico o en la serie (un unico estado).
   const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null);
   const [cuadre, setCuadre] = useState<CuadreDiaResponse | null>(null);
+
+  // Filtro por TIPO DE CAJA (unidad) — 100% client-side sobre los Ingresos del cuadre ya en memoria.
+  // Se deriva del propio día (distinct de Unidad); todos ON por default; mínimo 1; toggle en vivo (sin Aplicar).
+  const [unidadesSel, setUnidadesSel] = useState<string[]>([]);
 
   // Filtro por medio de pago (estado local propio de la pantalla, D4: sin persistencia/context).
   const [medios, setMedios] = useState<FormaPagoRow[]>([]);
@@ -65,7 +76,9 @@ const CajaDiaria: React.FC = () => {
   useEffect(() => { load(); }, [load]);
 
   // Cuadre del dia seleccionado (server-side): re-fetch al cambiar de dia o el filtro.
-  // Es 1 dia -> barato re-consultar. Ingresos vienen filtrados; egresos SIEMPRE totales (D4).
+  // Es 1 dia -> barato re-consultar. Ingresos vienen filtrados por MEDIO DE PAGO desde el server;
+  // egresos vienen totales (sin filtro de medio de pago). El filtro por TIPO DE CAJA es client-side
+  // y aplica a AMBOS (ingresos y egresos) via unidadesSel.
   useEffect(() => {
     if (!diaSeleccionado) { setCuadre(null); return; }
     const formasPagoParam = medios.length > 0 && seleccion.length < medios.length ? seleccion.join(',') : undefined;
@@ -78,6 +91,40 @@ const CajaDiaria: React.FC = () => {
       .catch((e) => { if (!cancelado) toast.error(e instanceof Error ? e.message : 'Error cargando el cuadre del día'); });
     return () => { cancelado = true; };
   }, [diaSeleccionado, seleccion, incluirCredito, medios]);
+
+  // --- Filtro por tipo de caja (unidad): CLIENT-SIDE sobre el cuadre en memoria (ingresos + egresos) ---
+  // Opción A: los chips se derivan del día -> distinct de las unidades presentes en ingresos ∪ egresos.
+  // Una unidad que solo aparece en egresos (p.ej. FARMACIA sin ingreso ese día) igual tiene su chip.
+  const unidadesDisponibles = useMemo(
+    () =>
+      cuadre
+        ? [...new Set([...cuadre.Ingresos.map((i) => i.Unidad), ...cuadre.Egresos.map((e) => e.Unidad || 'SIN UNIDAD')])].sort()
+        : [],
+    [cuadre],
+  );
+  // Al cambiar de día (nuevo cuadre) resetea la selección a "todas las unidades disponibles".
+  useEffect(() => {
+    if (cuadre) setUnidadesSel(unidadesDisponibles);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuadre]);
+  // Ingresos visibles = solo las unidades seleccionadas.
+  const ingresosVisibles = useMemo(
+    () => (cuadre ? cuadre.Ingresos.filter((i) => unidadesSel.includes(i.Unidad)) : []),
+    [cuadre, unidadesSel],
+  );
+  // Egresos visibles = solo las unidades seleccionadas (la fila trae Unidad; null/'' -> 'SIN UNIDAD').
+  const egresosVisibles = useMemo(
+    () => (cuadre ? cuadre.Egresos.filter((e) => unidadesSel.includes(e.Unidad || 'SIN UNIDAD')) : []),
+    [cuadre, unidadesSel],
+  );
+  // Mínimo 1: no permite desmarcar la última unidad seleccionada (mismo comportamiento que FiltroDashboardCard).
+  const toggleUnidad = (u: string) => {
+    const has = unidadesSel.includes(u);
+    if (has && unidadesSel.length === 1) return;
+    setUnidadesSel(has ? unidadesSel.filter((x) => x !== u) : [...unidadesSel, u]);
+  };
+  // Vista filtrada por tipo de caja (coexiste con `filtroActivo`, el de medios de pago; son independientes).
+  const filtroTipoCajaActivo = cuadre != null && unidadesSel.length < unidadesDisponibles.length;
 
   const totalIngresos = useMemo(() => dias.reduce((s, d) => s + d.Ingresos, 0), [dias]);
   const totalEgresos = useMemo(() => dias.reduce((s, d) => s + d.Egresos, 0), [dias]);
@@ -92,33 +139,68 @@ const CajaDiaria: React.FC = () => {
 
   // Lineas *****TOTAL***** por forma de pago (GroupBy client-side sobre Ingresos del cuadre, D5).
   const totalesPorFormaPago = useMemo(() => {
-    if (!cuadre) return [] as [string, number][];
     const map = new Map<string, number>();
-    cuadre.Ingresos.forEach((i) => {
+    ingresosVisibles.forEach((i) => {
       const k = i.FormaPago || 'SIN FORMA DE PAGO';
       map.set(k, (map.get(k) || 0) + i.Monto);
     });
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
-  }, [cuadre]);
+  }, [ingresosVisibles]);
 
   // Cuadre agrupado por TIPO DE CAJA (unidad: asistencial, ocupacional, farmacia, ...).
   // GroupBy client-side sobre los Ingresos del cuadre (el detalle ya trae Unidad, D5), orden desc.
   const totalesPorTipoCaja = useMemo(() => {
-    if (!cuadre) return [] as [string, number][];
     const map = new Map<string, number>();
-    cuadre.Ingresos.forEach((i) => {
+    ingresosVisibles.forEach((i) => {
       const k = i.Unidad || 'SIN TIPO DE CAJA';
       map.set(k, (map.get(k) || 0) + i.Monto);
     });
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
-  }, [cuadre]);
+  }, [ingresosVisibles]);
   const maxTipoCaja = totalesPorTipoCaja.length ? totalesPorTipoCaja[0][1] : 0;
   const maxFormaPago = totalesPorFormaPago.length ? totalesPorFormaPago[0][1] : 0;
 
-  const totalIngresosCuadre = useMemo(() => (cuadre ? cuadre.Ingresos.reduce((s, i) => s + i.Monto, 0) : 0), [cuadre]);
-  const totalEgresosCuadre = useMemo(() => (cuadre ? cuadre.Egresos.reduce((s, e) => s + e.Monto, 0) : 0), [cuadre]);
+  const totalIngresosCuadre = useMemo(() => ingresosVisibles.reduce((s, i) => s + i.Monto, 0), [ingresosVisibles]);
+  const totalEgresosCuadre = useMemo(() => egresosVisibles.reduce((s, e) => s + e.Monto, 0), [egresosVisibles]);
   const netoDia = totalIngresosCuadre - totalEgresosCuadre;
   const cuadreVacio = cuadre != null && cuadre.Ingresos.length === 0 && cuadre.Egresos.length === 0;
+
+  // Payload WYSIWYG del export (Excel/PDF). Se arma on-click desde los MISMOS memos de pantalla
+  // (nada re-consultado ni re-sumado desde el cuadre crudo). Origen de egreso YA traducido con
+  // labelOrigen (§R2: "legacy" jamás visible). generadoPor sale de la sesión conta (§R4).
+  const buildExportData = (): CuadreExportData => {
+    let generadoPor = '—';
+    try {
+      const raw = localStorage.getItem('conta_user');
+      if (raw) generadoPor = JSON.parse(raw).Username || '—';
+    } catch { /* fallback '—' */ }
+    return {
+      fecha: diaSeleccionado ?? '',
+      generadoPor,
+      ingresos: ingresosVisibles.map((r) => ({
+        Documento: r.Documento ?? '—',
+        Unidad: r.Unidad,
+        FormaPago: r.FormaPago,
+        Condicion: r.EsCobranzaCredito ? 'CRÉDITO' : 'CONTADO',
+        Cajero: r.UsuarioCajero,
+        Monto: r.Monto,
+      })),
+      egresos: egresosVisibles.map((r) => ({
+        Origen: labelOrigen(r.Origen),
+        Documento: r.Documento ?? '—',
+        Unidad: r.Unidad || 'SIN UNIDAD',
+        Concepto: r.Concepto ?? '—',
+        Monto: r.Monto,
+      })),
+      totalesPorFormaPago,
+      totalesPorTipoCaja,
+      totalIngresos: totalIngresosCuadre,
+      totalEgresos: totalEgresosCuadre,
+      neto: netoDia,
+      filtroUnidades: filtroTipoCajaActivo ? unidadesSel.map(unidadCorto) : null,
+      filtroMedios: filtroActivo ? `${seleccion.length} de ${medios.length} medios${!incluirCredito ? ' · crédito excluido' : ''}` : null,
+    };
+  };
 
   return (
     <div className="p-6">
@@ -210,10 +292,45 @@ const CajaDiaria: React.FC = () => {
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
               Cuadre de caja diario{diaSeleccionado ? ` — ${diaSeleccionado}` : ''}
             </h3>
-            {filtroActivo && (
+            {(filtroActivo || filtroTipoCajaActivo) && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">vista filtrada</span>
             )}
           </div>
+
+          {/* Filtro por tipo de caja (unidad): chips derivados del día (ingresos ∪ egresos), toggle EN VIVO. */}
+          {cuadre && unidadesDisponibles.length > 0 && (
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Tipos de caja (unidades)</label>
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 px-2 py-0.5 rounded-full">
+                  <Boxes className="h-3 w-3" /> {unidadesSel.length}/{unidadesDisponibles.length} cajas
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {unidadesDisponibles.map((u) => {
+                  const on = unidadesSel.includes(u);
+                  const esUltimo = on && unidadesSel.length === 1;
+                  const color = unidadColor(u);
+                  return (
+                    <label
+                      key={u}
+                      title={esUltimo ? 'Elige al menos un tipo de caja' : undefined}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] font-medium select-none transition-colors ${on ? 'border-transparent text-white' : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-transparent'} ${esUltimo ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                      style={on ? { backgroundColor: color } : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => toggleUnidad(u)}
+                        className="h-3 w-3 rounded border-slate-300 accent-slate-700"
+                      />
+                      {unidadCorto(u)}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {!diaSeleccionado ? (
             <p className="text-sm text-slate-400 py-6 text-center">Haz click en un día del gráfico o de la serie para ver su cuadre</p>
@@ -226,17 +343,18 @@ const CajaDiaria: React.FC = () => {
               {/* detalle largo: scrollea; los bloques TOTAL/pie quedan fijos fuera del scroll */}
               <div className="max-h-[380px] overflow-y-auto font-mono text-xs tabular-nums pr-1">
                 {/* INGRESOS */}
-                {cuadre.Ingresos.length > 0 && (
+                {ingresosVisibles.length > 0 && (
                   <>
                     <div className="mb-1 text-[11px] font-sans font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wide">Ingresos</div>
                     <table className="w-full">
                       <tbody>
-                        {cuadre.Ingresos.map((r, i) => (
+                        {ingresosVisibles.map((r, i) => (
                           <tr key={`i-${i}`} className="border-b border-slate-50 dark:border-slate-700/30">
                             <td className="py-0.5 pr-2 text-right text-slate-400 w-7">{i + 1}</td>
                             <td className="py-0.5 pr-2 text-slate-600 dark:text-slate-300 whitespace-nowrap">{r.Documento ?? '—'}</td>
                             <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400">{r.Unidad}</td>
                             <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400">{r.FormaPago}</td>
+                            <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400 whitespace-nowrap truncate max-w-[120px]">{r.UsuarioCajero}</td>
                             <td className="py-0.5 text-right text-slate-700 dark:text-slate-200 whitespace-nowrap">{money(r.Monto)}</td>
                           </tr>
                         ))}
@@ -244,8 +362,9 @@ const CajaDiaria: React.FC = () => {
                     </table>
                   </>
                 )}
-                {/* EGRESOS (siempre totales; rotulado cuando hay filtro activo) */}
-                {cuadre.Egresos.length > 0 && (
+                {/* EGRESOS: filtrados por tipo de caja (client-side); el filtro de MEDIOS DE PAGO NO
+                    se refleja en egresos -> la nota "(totales…)" solo aplica cuando `filtroActivo`. */}
+                {egresosVisibles.length > 0 && (
                   <>
                     <div className="mt-3 mb-1 text-[11px] font-sans font-semibold text-rose-500 dark:text-rose-400 uppercase tracking-wide">
                       Egresos
@@ -253,11 +372,12 @@ const CajaDiaria: React.FC = () => {
                     </div>
                     <table className="w-full">
                       <tbody>
-                        {cuadre.Egresos.map((r, i) => (
+                        {egresosVisibles.map((r, i) => (
                           <tr key={`e-${i}`} className="border-b border-slate-50 dark:border-slate-700/30">
                             <td className="py-0.5 pr-2 text-right text-slate-400 w-7">{i + 1}</td>
-                            <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">{r.Origen}</td>
+                            <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">{labelOrigen(r.Origen)}</td>
                             <td className="py-0.5 pr-2 text-slate-600 dark:text-slate-300 whitespace-nowrap">{r.Documento ?? '—'}</td>
+                            <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400">{unidadCorto(r.Unidad || 'SIN UNIDAD')}</td>
                             <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400">{r.Concepto ?? '—'}</td>
                             <td className="py-0.5 text-right text-rose-500 whitespace-nowrap">−{money(r.Monto)}</td>
                           </tr>
@@ -311,7 +431,7 @@ const CajaDiaria: React.FC = () => {
                     <div className="mb-1.5 flex items-baseline justify-between font-sans">
                       <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
                         Cuadre por tipo de caja
-                        {filtroActivo && <span className="ml-1 normal-case font-normal text-amber-500">(ingresos filtrados)</span>}
+                        {(filtroActivo || filtroTipoCajaActivo) && <span className="ml-1 normal-case font-normal text-amber-500">(ingresos filtrados)</span>}
                       </span>
                       <span className="text-[10px] text-slate-400">ingresos por unidad</span>
                     </div>
@@ -337,6 +457,25 @@ const CajaDiaria: React.FC = () => {
                         );
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* Exportar el cuadre del día (WYSIWYG): Excel se descarga, PDF se abre en pestaña nueva.
+                    Bajo guard de cuadre con movimientos (ingresos o egresos visibles). */}
+                {(ingresosVisibles.length > 0 || egresosVisibles.length > 0) && (
+                  <div className="mt-3 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-2 font-sans">
+                    <button
+                      onClick={() => exportarCuadreCajaExcel(buildExportData())}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-[#217346] hover:bg-[#1a5c38]"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" /> Excel
+                    </button>
+                    <button
+                      onClick={() => { abrirCierreCajaPDF(buildExportData()).catch(() => toast.error('No se pudo generar el PDF')); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-[#F40F02] hover:bg-[#c50c01]"
+                    >
+                      <FileText className="h-4 w-4" /> PDF
+                    </button>
                   </div>
                 )}
 
