@@ -500,6 +500,8 @@ namespace Contabilidad.Models
         public decimal Monto { get; set; }
         public int? i_IdTipoCaja { get; set; }
         public string Unidad { get; set; }
+        public string TipoGasto { get; set; }   // hoja tipo_gasto del overlay (NULL si no tipificado) - tipificacion caja SAMBHS
+        public string Receptor { get; set; }     // entidad/proveedor del overlay (NULL si no tipificado) - tipificacion caja SAMBHS
     }
     public class CuadreDiaDto
     {
@@ -793,6 +795,7 @@ namespace Contabilidad.Models
         public int NroServicios { get; set; }
         public string v_Estado { get; set; }
         public string v_TipoProduccion { get; set; }     // 'CLINICA' | 'SISOL' (ultima columna del RS2)
+        public string v_Origen { get; set; }             // 'WEB' | 'CAJA' (tipificacion egreso caja SAMBHS)
     }
     // Cabecera del pago (sp_PagoHonorario_Get, RS1).
     public class PagoHonorarioCabecera
@@ -818,6 +821,7 @@ namespace Contabilidad.Models
         public int? i_ActualizaIdUsuario { get; set; }
         public DateTime? t_ActualizaFecha { get; set; }
         public string v_TipoProduccion { get; set; }     // 'CLINICA' | 'SISOL' (ultima columna de la cabecera)
+        public string v_Origen { get; set; }             // 'WEB' | 'CAJA' (tipificacion egreso caja SAMBHS)
     }
     // Detalle por consultorio (Get RS2 + Insert RS2 -> mismos nombres; en Insert i_Id=0 y EgresoEstado=null).
     public class PagoHonorarioConsultorioRow
