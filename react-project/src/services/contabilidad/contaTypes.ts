@@ -262,13 +262,17 @@ export interface CuadreDiaIngresoRow {
   Monto: number;
 }
 export interface CuadreDiaEgresoRow {
-  Origen: 'EGRESO CONTA' | 'PERSONAL' | 'CAJA LEGACY' | string;
+  Origen: 'EGRESO CONTA' | 'PERSONAL' | 'CAJA LEGACY' | string; // origen de CAJA (fuente del dinero), NO confundir con el Origen WEB/CAJA del pago de honorario
   Documento: string | null;
   CentroCosto: string;
   Concepto: string | null;
   Monto: number;
   i_IdTipoCaja: number | null;
   Unidad: string;
+  // Tipificación del egreso desde el SAMBHS (overlay conta.egreso_caja_clasificacion, PLAN_TIPIFICACION §2.3-3):
+  // hoja de tipo_gasto real y receptor (entidad/proveedor). NULL cuando el egreso aún no está tipificado.
+  TipoGasto: string | null;
+  Receptor: string | null;
 }
 export interface CuadreDiaResponse {
   Ingresos: CuadreDiaIngresoRow[];
@@ -632,6 +636,11 @@ export interface HonorarioPagoListItem {
   NroServicios: number;
   v_Estado: 'PAGADO' | 'ANULADO' | string;
   v_TipoProduccion: string; // 'CLINICA' | 'SISOL' (lo expone tanto la lista como la cabecera del Get)
+  // Canal de origen del pago (PLAN_TIPIFICACION_EGRESOS §4). 'WEB' = registrado desde el BI (flujo normal);
+  // 'CAJA' = registrado desde el SAMBHS al tipificar un egreso de caja (sin egreso espejo; anulación web bloqueada).
+  // Columna `ph.v_Origen` proyectada SIN alias por sp_PagoHonorario_List/_Get (Dapper mapea por nombre exacto);
+  // la expone tanto la lista como la cabecera del Get (HonorarioPagoCabecera lo hereda).
+  v_Origen: 'WEB' | 'CAJA' | string;
 }
 export interface HonorarioPagosResponse {
   Total: number;

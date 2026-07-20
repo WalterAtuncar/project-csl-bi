@@ -379,6 +379,14 @@ const CajaDiaria: React.FC = () => {
                             <td className="py-0.5 pr-2 text-slate-600 dark:text-slate-300 whitespace-nowrap">{r.Documento ?? '—'}</td>
                             <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400">{unidadCorto(r.Unidad || 'SIN UNIDAD')}</td>
                             <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400">{r.Concepto ?? '—'}</td>
+                            {/* Tipificación del egreso desde el SAMBHS (overlay conta): hoja de gasto real + receptor.
+                                NULL = egreso aún sin tipificar (se muestra '—'). */}
+                            <td className="py-0.5 pr-2 text-slate-500 dark:text-slate-400">
+                              {r.TipoGasto
+                                ? <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] font-medium">{r.TipoGasto}</span>
+                                : <span className="text-slate-400">—</span>}
+                              {r.Receptor && <span className="ml-1 text-[10px] text-slate-400">· {r.Receptor}</span>}
+                            </td>
                             <td className="py-0.5 text-right text-rose-500 whitespace-nowrap">−{money(r.Monto)}</td>
                           </tr>
                         ))}

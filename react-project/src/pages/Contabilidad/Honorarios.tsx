@@ -33,6 +33,10 @@ const tipoProduccionBadge: Record<string, string> = {
 };
 const tipoProduccionLabel = (t: string) => (t === 'CLINICA' ? 'Clínica' : t === 'SISOL' ? 'SISOL' : t || '—');
 
+// Badge del canal de origen del pago (ámbar). Solo se pinta cuando el pago se registró desde caja
+// (SAMBHS, tipificación de egreso): no tiene egreso espejo y su anulación web está bloqueada (PLAN §4/D6).
+const origenCajaBadgeCls = 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300';
+
 const tipoComprobanteLabel = (t: string) => (t === '01' ? 'Factura' : t === '02' ? 'Recibo por Honorarios' : t);
 
 const selCls = 'w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-sm outline-none focus:ring-2 focus:ring-emerald-500';
@@ -250,7 +254,14 @@ const Honorarios: React.FC = () => {
               <tr key={p.i_IdPago} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
                 <td className="px-3 py-2 text-slate-400">{p.i_IdPago}</td>
                 <td className="px-3 py-2">{fmtFecha(p.t_FechaPago)}</td>
-                <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-100">{p.v_MedicoNombre}</td>
+                <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-100">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span>{p.v_MedicoNombre}</span>
+                    {p.v_Origen === 'CAJA' && (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${origenCajaBadgeCls}`}>PAGADO POR CAJA</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tipoProduccionBadge[p.v_TipoProduccion] || 'bg-slate-100 text-slate-600'}`}>{tipoProduccionLabel(p.v_TipoProduccion)}</span></td>
                 <td className="px-3 py-2 text-xs text-slate-500">{fmtFecha(p.t_PeriodoDesde)} - {fmtFecha(p.t_PeriodoHasta)}</td>
                 <td className="px-3 py-2 text-right font-semibold text-emerald-600">S/ {money(p.d_TotalPago)}</td>
@@ -261,7 +272,9 @@ const Honorarios: React.FC = () => {
                   <div className="flex items-center justify-end gap-1">
                     <button title="Ver" onClick={() => verDetalle(p.i_IdPago)} className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600"><Eye className="h-4 w-4 text-slate-500" /></button>
                     <button title="Imprimir recibo" onClick={() => imprimir(p.i_IdPago)} className="p-1.5 rounded hover:bg-sky-100 dark:hover:bg-sky-900/40"><Printer className="h-4 w-4 text-sky-600" /></button>
-                    {canWrite && p.v_Estado === 'PAGADO' && (
+                    {/* Los pagos origen CAJA (SAMBHS) NO se anulan desde la web: el dinero salió por la venta EC.
+                        El SP igual lo rechaza (D6) — aquí se oculta el botón como defensa en profundidad. */}
+                    {canWrite && p.v_Estado === 'PAGADO' && p.v_Origen !== 'CAJA' && (
                       <button title="Anular" onClick={() => { setAnularId(p.i_IdPago); setMotivo(''); }} className="p-1.5 rounded hover:bg-rose-100 dark:hover:bg-rose-900/40"><Ban className="h-4 w-4 text-rose-500" /></button>
                     )}
                   </div>
@@ -292,7 +305,12 @@ const Honorarios: React.FC = () => {
         <div className="fixed inset-0 z-[70] flex items-start justify-center bg-black/40 p-4 overflow-y-auto" onClick={() => setDetalle(null)}>
           <div className="w-full max-w-3xl my-4 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700">
-              <h3 className="font-semibold text-slate-800 dark:text-slate-100">Pago #{detalle.Cabecera.i_IdPago} · {detalle.Cabecera.v_MedicoNombre}</h3>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                <span>Pago #{detalle.Cabecera.i_IdPago} · {detalle.Cabecera.v_MedicoNombre}</span>
+                {detalle.Cabecera.v_Origen === 'CAJA' && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${origenCajaBadgeCls}`}>PAGADO POR CAJA</span>
+                )}
+              </h3>
               <button onClick={() => setDetalle(null)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"><X className="h-5 w-5 text-slate-400" /></button>
             </div>
             <div className="p-5 space-y-4">
@@ -346,11 +364,18 @@ const Honorarios: React.FC = () => {
 
               <div>
                 <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Consultorios y egresos</div>
+                {/* Los pagos origen CAJA (SAMBHS) NO tienen egresos espejo: el dinero ya salió por la venta EC.
+                    La columna Egreso queda en '—' y se aclara con esta nota (PLAN §4). */}
+                {detalle.Cabecera.v_Origen === 'CAJA' && (
+                  <div className="mb-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-md px-2.5 py-1.5">
+                    Pagado por caja (SAMBHS) — sin egreso espejo.
+                  </div>
+                )}
                 <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
                     <thead><tr className="text-left text-slate-500 border-b border-slate-200 dark:border-slate-700"><th className="px-3 py-1.5">Consultorio</th><th className="px-3 py-1.5 text-right">Servicios</th><th className="px-3 py-1.5 text-right">Pago</th><th className="px-3 py-1.5 text-center">Egreso</th><th className="px-3 py-1.5">Estado egreso</th></tr></thead>
                     <tbody>
-                      {detalle.Consultorios.map((c) => (
+                      {(detalle.Consultorios ?? []).map((c) => (
                         <tr key={c.i_IdConsultorio} className="border-b border-slate-100 dark:border-slate-700/50">
                           <td className="px-3 py-1.5">{c.v_ConsultorioNombre}</td>
                           <td className="px-3 py-1.5 text-right">S/ {money(c.d_MontoServicios)}</td>
@@ -359,6 +384,9 @@ const Honorarios: React.FC = () => {
                           <td className="px-3 py-1.5 text-xs text-slate-500">{c.EgresoEstado ?? '—'}</td>
                         </tr>
                       ))}
+                      {(detalle.Consultorios ?? []).length === 0 && (
+                        <tr><td colSpan={5} className="px-3 py-3 text-center text-xs text-slate-400">Sin consultorios registrados</td></tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
