@@ -83,20 +83,29 @@ BEGIN
     UNION ALL
 
     -- Egresos de la caja mayor legacy (dbo.cajamayor_movimiento, v_TipoMovimiento='E'):
-    -- efectivo ya consumado (ECA asistencial / ECF farmacia; ~98% pagos a medicos) -> seccion MEDICO.
-    -- Monto = d_Total (bruto). Centro por i_IdTipoCaja del movimiento (fallback ADMINISTRACION).
-    -- No se filtra por estado: la caja mayor no tiene POR_PAGAR (ya es efectivo).
-    SELECT 'MEDICO' AS Seccion,
-           ISNULL(cc.i_IdCentroCosto, 1) AS i_IdCentroCosto,
-           ISNULL(cc.v_Nombre, 'ADMINISTRACION') AS CentroCosto,
+    -- efectivo ya consumado (ECA asistencial / ECF farmacia). Monto = d_Total (bruto).
+    -- RELABEL ADITIVO (tipificacion caja): si la venta EC esta clasificada (overlay ACTIVO) -> la
+    -- SECCION es la raiz del tipo_gasto del overlay (fallback 'MEDICO') y el CENTRO = overlay, fallback
+    -- al centro por i_IdTipoCaja del movimiento, fallback 1. Overlay VACIO -> identico al comportamiento
+    -- previo (invariancia GATE2a). No se filtra por estado: la caja mayor no tiene POR_PAGAR.
+    SELECT ISNULL(rov.v_SeccionFlujo, 'MEDICO') AS Seccion,
+           COALESCE(ov.i_IdCentroCosto, cc.i_IdCentroCosto, 1) AS i_IdCentroCosto,
+           ISNULL(cc2.v_Nombre, 'ADMINISTRACION') AS CentroCosto,
            CAST(cm.t_FechaMovimiento AS DATE) AS Dia,
            CAST(0 AS BIT) AS EsIngreso,
            SUM(cm.d_Total) AS Monto
     FROM dbo.cajamayor_movimiento cm
-    LEFT JOIN conta.centro_costo cc ON cc.i_IdTipoCaja = cm.i_IdTipoCaja AND cc.b_Activo = 1
+    LEFT JOIN conta.egreso_caja_clasificacion ov
+           ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'
+    LEFT JOIN tg_root rov ON rov.i_IdTipoGasto = ov.i_IdTipoGasto
+    LEFT JOIN conta.centro_costo cc  ON cc.i_IdTipoCaja = cm.i_IdTipoCaja AND cc.b_Activo = 1
+    LEFT JOIN conta.centro_costo cc2 ON cc2.i_IdCentroCosto = COALESCE(ov.i_IdCentroCosto, cc.i_IdCentroCosto, 1)
     WHERE cm.v_TipoMovimiento = 'E'
       AND cm.t_FechaMovimiento >= @Desde AND cm.t_FechaMovimiento < @fin
-    GROUP BY ISNULL(cc.i_IdCentroCosto,1), ISNULL(cc.v_Nombre,'ADMINISTRACION'), CAST(cm.t_FechaMovimiento AS DATE);
+    GROUP BY ISNULL(rov.v_SeccionFlujo, 'MEDICO'),
+             COALESCE(ov.i_IdCentroCosto, cc.i_IdCentroCosto, 1),
+             ISNULL(cc2.v_Nombre, 'ADMINISTRACION'),
+             CAST(cm.t_FechaMovimiento AS DATE);
 END
 GO
 
@@ -185,7 +194,10 @@ BEGIN
              v.i_InsertaIdUsuario, su.v_UserName
     ORDER BY FormaPago, Documento;
 
-    -- RS2: EGRESOS del dia a nivel registro (3 fuentes, NUNCA filtrados)
+    -- RS2: EGRESOS del dia a nivel registro (3 fuentes, NUNCA filtrados).
+    -- RELABEL ADITIVO (tipificacion caja): la rama 3 (CAJA LEGACY) proyecta 2 columnas nuevas AL FINAL
+    -- (TipoGasto/Receptor del overlay ACTIVO) y centro/unidad por COALESCE(overlay, tipocaja del
+    -- movimiento). Overlay VACIO -> montos/centro/unidad identicos + TipoGasto/Receptor NULL (invariancia).
     SELECT * FROM (
         -- 1) egreso conta PAGADO (bruto = d_MontoBruto * d_TipoCambio, igual que sp_Caja_Egresos)
         SELECT 'EGRESO CONTA' AS Origen,
@@ -194,7 +206,9 @@ BEGIN
                e.v_Glosa AS Concepto,
                e.d_MontoBruto * e.d_TipoCambio AS Monto,
                cc.i_IdTipoCaja,
-               ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD') AS Unidad
+               ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD') AS Unidad,
+               CAST(NULL AS NVARCHAR(400)) AS TipoGasto,
+               CAST(NULL AS NVARCHAR(400)) AS Receptor
         FROM conta.egreso e
         LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = e.i_IdCentroCosto
         LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cc.i_IdTipoCaja
@@ -205,27 +219,36 @@ BEGIN
         SELECT 'PERSONAL', NULL, ISNULL(cc.v_Nombre,'ADMINISTRACION'),
                cpm.v_Concepto, cpm.d_Monto,
                cc.i_IdTipoCaja,
-               ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD')
+               ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD'),
+               CAST(NULL AS NVARCHAR(400)), CAST(NULL AS NVARCHAR(400))
         FROM conta.costo_personal_mensual cpm
         LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = cpm.i_IdCentroCosto
         LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cc.i_IdTipoCaja
         WHERE cpm.v_Estado = 'PAGADO' AND cpm.t_FechaPago >= @Fecha AND cpm.t_FechaPago < @fin
 
         UNION ALL
-        -- 3) egresos de la caja mayor legacy (efectivo consumado, ECA/ECF; ~98% pagos a medicos).
-        --    Documento/Concepto de las columnas PROPIAS del movimiento (mas legibles que el
-        --    join a venta: v_NumeroDocumento='ECA-00027737', v_ConceptoMovimiento=glosa real).
-        --    Monto = d_Total (bruto), igual que sp_Caja_Egresos/sp_Caja_Diaria. Centro por i_IdTipoCaja.
+        -- 3) egresos de la caja mayor legacy (efectivo consumado, ECA/ECF).
+        --    Documento/Concepto de las columnas PROPIAS del movimiento. Monto = d_Total (bruto).
+        --    Centro/unidad por COALESCE(overlay, tipocaja del movimiento). TipoGasto/Receptor del overlay.
         SELECT 'CAJA LEGACY',
                LTRIM(RTRIM(cm.v_NumeroDocumento)),
-               ISNULL(cc.v_Nombre,'ADMINISTRACION'),
+               ISNULL(cc2.v_Nombre,'ADMINISTRACION'),
                LTRIM(RTRIM(cm.v_ConceptoMovimiento)),
                cm.d_Total,
-               cm.i_IdTipoCaja,
-               ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD')
+               COALESCE(ccov.i_IdTipoCaja, cm.i_IdTipoCaja),
+               ISNULL(tc2.v_NombreTipoCaja,'SIN UNIDAD'),
+               tg.v_Nombre,
+               COALESCE(ent.v_Nombre, prov.razon_social)
         FROM dbo.cajamayor_movimiento cm
-        LEFT JOIN conta.centro_costo cc ON cc.i_IdTipoCaja = cm.i_IdTipoCaja AND cc.b_Activo = 1
-        LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cm.i_IdTipoCaja
+        LEFT JOIN conta.egreso_caja_clasificacion ov
+               ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'
+        LEFT JOIN conta.tipo_gasto  tg   ON tg.i_IdTipoGasto   = ov.i_IdTipoGasto
+        LEFT JOIN conta.entidad     ent  ON ent.i_IdEntidad    = ov.i_IdEntidad
+        LEFT JOIN dbo.proveedores   prov ON prov.id_proveedor  = ov.i_IdProveedor
+        LEFT JOIN conta.centro_costo ccm  ON ccm.i_IdTipoCaja   = cm.i_IdTipoCaja AND ccm.b_Activo = 1
+        LEFT JOIN conta.centro_costo ccov ON ccov.i_IdCentroCosto = ov.i_IdCentroCosto
+        LEFT JOIN conta.centro_costo cc2  ON cc2.i_IdCentroCosto  = COALESCE(ov.i_IdCentroCosto, ccm.i_IdCentroCosto, 1)
+        LEFT JOIN dbo.tipocaja       tc2  ON tc2.i_IdTipoCaja     = COALESCE(ccov.i_IdTipoCaja, cm.i_IdTipoCaja)
         WHERE cm.v_TipoMovimiento = 'E'
           AND cm.t_FechaMovimiento >= @Fecha AND cm.t_FechaMovimiento < @fin
     ) x ORDER BY x.Origen, x.Documento;
@@ -376,12 +399,22 @@ BEGIN
     FROM conta.costo_personal_mensual cpm
     WHERE cpm.v_Estado='PAGADO' AND cpm.t_FechaPago >= @iniAnio AND cpm.t_FechaPago < @finAnio
     GROUP BY MONTH(cpm.t_FechaPago);
-    -- egresos de la caja mayor legacy (efectivo consumado; ~98% pagos a medicos ECA) -> seccion MEDICO
+    -- egresos de la caja mayor legacy (efectivo consumado). RELABEL ADITIVO: la SECCION sale de la raiz
+    -- del tipo_gasto del overlay ACTIVO (fallback 'MEDICO'). Overlay VACIO -> todo 'MEDICO' (invariancia
+    -- GATE2a); un GASTO ADM-TRA migra de EgrMedico->EgrAdmin sin cambiar TotalEgresosOp -> SaldoDeCaja igual.
+    ;WITH tg_root2 AS (
+        SELECT i_IdTipoGasto, i_IdPadre, v_SeccionFlujo FROM conta.tipo_gasto WHERE i_IdPadre IS NULL
+        UNION ALL
+        SELECT c.i_IdTipoGasto, c.i_IdPadre, r.v_SeccionFlujo FROM conta.tipo_gasto c JOIN tg_root2 r ON c.i_IdPadre=r.i_IdTipoGasto
+    )
     INSERT INTO @egrMes
-    SELECT MONTH(cm.t_FechaMovimiento), 'MEDICO', SUM(cm.d_Total)
+    SELECT MONTH(cm.t_FechaMovimiento), ISNULL(rov.v_SeccionFlujo,'MEDICO'), SUM(cm.d_Total)
     FROM dbo.cajamayor_movimiento cm
+    LEFT JOIN conta.egreso_caja_clasificacion ov
+           ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'
+    LEFT JOIN tg_root2 rov ON rov.i_IdTipoGasto = ov.i_IdTipoGasto
     WHERE cm.v_TipoMovimiento='E' AND cm.t_FechaMovimiento >= @iniAnio AND cm.t_FechaMovimiento < @finAnio
-    GROUP BY MONTH(cm.t_FechaMovimiento);
+    GROUP BY MONTH(cm.t_FechaMovimiento), ISNULL(rov.v_SeccionFlujo,'MEDICO');
 
     -- resumen mensual ancho con cadena de saldos
     ;WITH meses AS (
@@ -537,6 +570,29 @@ BEGIN
 
     UNION ALL
 
+    -- RELABEL ADITIVO: lo CLASIFICADO (overlay ACTIVO) sale de MED-LEG a su hoja real (tg.v_Codigo/
+    -- v_Nombre) + receptor (entidad/proveedor). Overlay VACIO -> 0 filas aqui (invariancia GATE2a).
+    SELECT MONTH(cm.t_FechaMovimiento) AS Mes,
+           ISNULL(rov.v_SeccionFlujo,'MEDICO') AS Seccion,
+           tg.v_Codigo AS CodigoHoja,
+           tg.v_Nombre AS Hoja,
+           ov.i_IdEntidad AS i_IdEntidad,
+           COALESCE(ent.v_Nombre, prov.razon_social) AS Entidad,
+           SUM(cm.d_Total) AS Monto
+    FROM dbo.cajamayor_movimiento cm
+    JOIN conta.egreso_caja_clasificacion ov
+         ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'
+    JOIN conta.tipo_gasto tg ON tg.i_IdTipoGasto = ov.i_IdTipoGasto
+    LEFT JOIN tg_root rov ON rov.i_IdTipoGasto = ov.i_IdTipoGasto
+    LEFT JOIN conta.entidad ent ON ent.i_IdEntidad = ov.i_IdEntidad
+    LEFT JOIN dbo.proveedores prov ON prov.id_proveedor = ov.i_IdProveedor
+    WHERE cm.v_TipoMovimiento='E' AND cm.t_FechaMovimiento >= @iniAnio AND cm.t_FechaMovimiento < @finAnio
+    GROUP BY MONTH(cm.t_FechaMovimiento), ISNULL(rov.v_SeccionFlujo,'MEDICO'),
+             tg.v_Codigo, tg.v_Nombre, ov.i_IdEntidad, COALESCE(ent.v_Nombre, prov.razon_social)
+
+    UNION ALL
+
+    -- lo NO clasificado sigue en el bucket MED-LEG (identico al comportamiento previo).
     SELECT MONTH(cm.t_FechaMovimiento) AS Mes,
            'MEDICO' AS Seccion,
            'MED-LEG' AS CodigoHoja,
@@ -545,7 +601,10 @@ BEGIN
            CAST(NULL AS NVARCHAR(400)) AS Entidad,
            SUM(cm.d_Total) AS Monto
     FROM dbo.cajamayor_movimiento cm
+    LEFT JOIN conta.egreso_caja_clasificacion ov
+           ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'
     WHERE cm.v_TipoMovimiento='E' AND cm.t_FechaMovimiento >= @iniAnio AND cm.t_FechaMovimiento < @finAnio
+      AND ov.i_IdClasificacion IS NULL
     GROUP BY MONTH(cm.t_FechaMovimiento)
     ORDER BY Mes, Seccion, CodigoHoja
     OPTION (MAXRECURSION 100);

@@ -404,6 +404,10 @@ BEGIN
     BEGIN RAISERROR('El pago de honorarios no existe.', 16, 1); RETURN; END
     IF NOT EXISTS (SELECT 1 FROM conta.pago_honorario WHERE i_IdPago = @IdPago AND v_Estado = 'PAGADO')
     BEGIN RAISERROR('Solo se pueden anular pagos en estado PAGADO.', 16, 1); RETURN; END
+    -- D6: los pagos registrados desde caja (SAMBHS) NO se anulan por la web (el dinero salio por la venta EC);
+    -- se revierten des-tipificando el egreso (conta.sp_EgresoCaja_Destipificar).
+    IF EXISTS (SELECT 1 FROM conta.pago_honorario WHERE i_IdPago = @IdPago AND v_Origen = 'CAJA')
+    BEGIN RAISERROR('Este pago se registro desde caja (SAMBHS). Anulelo desde el proceso de caja (des-tipificacion del egreso).', 16, 1); RETURN; END
 
     BEGIN TRY
         BEGIN TRAN;
@@ -476,7 +480,7 @@ BEGIN
            ph.t_PeriodoDesde, ph.t_PeriodoHasta, ph.d_TotalPago, ph.d_TotalServicios,
            (SELECT COUNT(*) FROM conta.pago_honorario_consultorio c WHERE c.i_IdPago = ph.i_IdPago) AS NroConsultorios,
            (SELECT COUNT(*) FROM conta.pago_honorario_servicio s WHERE s.i_IdPago = ph.i_IdPago) AS NroServicios,
-           ph.v_Estado, ph.v_TipoProduccion
+           ph.v_Estado, ph.v_TipoProduccion, ph.v_Origen
     FROM conta.pago_honorario ph
     WHERE (@Desde IS NULL OR ph.t_FechaPago >= @Desde)
       AND (@Hasta IS NULL OR ph.t_FechaPago <= @Hasta)
@@ -501,7 +505,8 @@ BEGIN
            ph.t_PeriodoDesde, ph.t_PeriodoHasta, ph.d_PorcMedico, ph.d_TotalServicios, ph.d_TotalPago,
            ph.v_Estado, ph.t_FechaPago, ph.i_IdFormaPago, ph.i_IdCuentaBancaria, ph.v_Glosa,
            ph.v_MotivoAnulacion, ph.i_InsertaIdUsuario, ph.t_InsertaFecha,
-           ph.i_ActualizaIdUsuario, ph.t_ActualizaFecha, ph.v_TipoProduccion
+           ph.i_ActualizaIdUsuario, ph.t_ActualizaFecha, ph.v_TipoProduccion,
+           ph.v_Origen, ph.v_IdVentaCaja
     FROM conta.pago_honorario ph
     LEFT JOIN conta.entidad ent ON ent.i_IdEntidad = ph.i_IdEntidad
     WHERE ph.i_IdPago = @IdPago;

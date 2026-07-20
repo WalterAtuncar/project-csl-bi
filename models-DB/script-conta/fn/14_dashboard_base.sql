@@ -134,17 +134,26 @@ RETURN (
         JOIN tg_root r ON c.i_IdPadre = r.i_IdTipoGasto
     ),
     base AS (
-        -- 1) LEGACY (caja mayor legacy, salidas 'E')
+        -- 1) LEGACY (caja mayor legacy, salidas 'E').
+        --    RELABEL ADITIVO (tipificacion caja): si la venta EC esta clasificada (overlay ACTIVO) ->
+        --    IdTipoCaja/Unidad por el centro del overlay (walk mapc) con fallback a cm.i_IdTipoCaja, y
+        --    Categoria = raiz del tipo_gasto (RootNombre) en vez de 'EGRESO CAJA <unidad>'. Overlay
+        --    VACIO -> identico al comportamiento previo (invariancia GATE2a).
         SELECT
             CAST(cm.t_FechaMovimiento AS DATE)                              AS Fecha,
-            cm.i_IdTipoCaja                                                 AS IdTipoCaja,
-            ISNULL(tc.v_NombreTipoCaja, 'ADMINISTRACION')                   AS Unidad,
+            COALESCE(mcov.i_IdTipoCaja, cm.i_IdTipoCaja)                    AS IdTipoCaja,
+            ISNULL(tcov.v_NombreTipoCaja, 'ADMINISTRACION')                AS Unidad,
             CAST(COALESCE(NULLIF(cm.d_Subtotal, 0), cm.d_Total) AS DECIMAL(18,2)) AS Monto,
             CAST('LEGACY' AS VARCHAR(10))                                   AS Fuente,
-            CAST('EGRESO CAJA ' + ISNULL(tc.v_NombreTipoCaja, 'ADMINISTRACION') AS NVARCHAR(420)) AS Categoria,
+            CAST(COALESCE(tgov.RootNombre,
+                          'EGRESO CAJA ' + ISNULL(tcov.v_NombreTipoCaja, 'ADMINISTRACION')) AS NVARCHAR(420)) AS Categoria,
             CAST(0 AS BIT)                                                  AS EsMensual
         FROM dbo.cajamayor_movimiento cm
-        LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cm.i_IdTipoCaja
+        LEFT JOIN conta.egreso_caja_clasificacion ov
+               ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'
+        LEFT JOIN mapc mcov ON mcov.i_IdCentroCosto = ov.i_IdCentroCosto
+        LEFT JOIN dbo.tipocaja tcov ON tcov.i_IdTipoCaja = COALESCE(mcov.i_IdTipoCaja, cm.i_IdTipoCaja)
+        LEFT JOIN tg_root tgov ON tgov.i_IdTipoGasto = ov.i_IdTipoGasto
         WHERE cm.v_TipoMovimiento = 'E'
           AND cm.t_FechaMovimiento >= @Desde
           AND cm.t_FechaMovimiento <  DATEADD(DAY, 1, @Hasta)

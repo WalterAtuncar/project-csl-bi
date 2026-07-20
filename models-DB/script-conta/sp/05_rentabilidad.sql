@@ -105,12 +105,16 @@ RETURN (
         WHERE cpm.n_Anio=@Anio AND cpm.n_Mes=@Mes
         UNION ALL
         -- Egresos de la caja mayor legacy (dbo.cajamayor_movimiento, v_TipoMovimiento='E') por
-        -- t_FechaMovimiento. Estos movimientos NO desglosan IGV (d_Subtotal=d_IGV=0: honorarios
-        -- medicos ECA/ECF, sin IGV) -> el neto de rentabilidad es el propio d_Total. No son SISOL
-        -- (tipocaja 1/6), asi que la exclusion Hospital-SISOL no los afecta. Centro por i_IdTipoCaja.
-        SELECT ISNULL(cc.i_IdCentroCosto, 1), COALESCE(NULLIF(cm.d_Subtotal, 0), cm.d_Total)
+        -- t_FechaMovimiento. Estos movimientos NO desglosan IGV (d_Subtotal=d_IGV=0) -> el neto es el
+        -- propio d_Total. RELABEL ADITIVO: el CENTRO sale del overlay ACTIVO si la venta EC esta
+        -- clasificada, con fallback al centro por i_IdTipoCaja del movimiento, fallback 1. Overlay VACIO
+        -- -> ISNULL(cc.i_IdCentroCosto,1) (invariancia GATE2a). Un GASTO ADM-TRA de ECA cae en CC-ASIS
+        -- (misma unidad tipocaja 1) -> el total por unidad NO cambia.
+        SELECT COALESCE(ov.i_IdCentroCosto, cc.i_IdCentroCosto, 1), COALESCE(NULLIF(cm.d_Subtotal, 0), cm.d_Total)
         FROM dbo.cajamayor_movimiento cm
         LEFT JOIN conta.centro_costo cc ON cc.i_IdTipoCaja = cm.i_IdTipoCaja AND cc.b_Activo = 1
+        LEFT JOIN conta.egreso_caja_clasificacion ov
+               ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'
         WHERE cm.v_TipoMovimiento = 'E'
           AND cm.t_FechaMovimiento >= DATEFROMPARTS(@Anio,@Mes,1)
           AND cm.t_FechaMovimiento <  DATEADD(MONTH,1,DATEFROMPARTS(@Anio,@Mes,1))
