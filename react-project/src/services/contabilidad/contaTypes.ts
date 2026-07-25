@@ -273,6 +273,9 @@ export interface CuadreDiaEgresoRow {
   // hoja de tipo_gasto real y receptor (entidad/proveedor). NULL cuando el egreso aún no está tipificado.
   TipoGasto: string | null;
   Receptor: string | null;
+  // Tipo del receptor (v_Tipo de la entidad/persona que recibió el efectivo): PERSONAL / MEDICO /
+  // PROVEEDOR / otros o NULL (F1 paridad egresos T1.5b). PascalCase = calca ReceptorTipo del DTO C#.
+  ReceptorTipo?: string | null;
 }
 export interface CuadreDiaResponse {
   Ingresos: CuadreDiaIngresoRow[];

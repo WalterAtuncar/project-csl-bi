@@ -20,6 +20,13 @@ const RULE = '─'.repeat(80);
 const labelOrigen = (o?: string) =>
   (o ?? '').replace(/CAJA\s+LEGACY/i, 'CAJA MAYOR').replace(/\bLEGACY\b/gi, '').replace(/\s+/g, ' ').trim();
 
+// Badge del tipo de receptor del egreso (F1 paridad egresos T1.5c): PERSONAL resaltado (violet),
+// el resto (MEDICO/PROVEEDOR/…) con tono neutro (slate). ReceptorTipo NULL/'' -> sin badge.
+const receptorTipoBadgeCls = (t?: string | null) =>
+  (t ?? '').toUpperCase() === 'PERSONAL'
+    ? 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300'
+    : 'bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300';
+
 const CajaDiaria: React.FC = () => {
   const now = new Date();
   const [anio, setAnio] = useState(now.getFullYear());
@@ -386,6 +393,10 @@ const CajaDiaria: React.FC = () => {
                                 ? <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] font-medium">{r.TipoGasto}</span>
                                 : <span className="text-slate-400">—</span>}
                               {r.Receptor && <span className="ml-1 text-[10px] text-slate-400">· {r.Receptor}</span>}
+                              {/* Badge del TIPO de receptor (F1 paridad egresos T1.5c): PERSONAL resaltado. NULL = sin badge. */}
+                              {r.ReceptorTipo && (
+                                <span className={`ml-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${receptorTipoBadgeCls(r.ReceptorTipo)}`}>{r.ReceptorTipo}</span>
+                              )}
                             </td>
                             <td className="py-0.5 text-right text-rose-500 whitespace-nowrap">−{money(r.Monto)}</td>
                           </tr>

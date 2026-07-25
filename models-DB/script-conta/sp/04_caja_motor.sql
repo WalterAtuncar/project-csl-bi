@@ -208,7 +208,8 @@ BEGIN
                cc.i_IdTipoCaja,
                ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD') AS Unidad,
                CAST(NULL AS NVARCHAR(400)) AS TipoGasto,
-               CAST(NULL AS NVARCHAR(400)) AS Receptor
+               CAST(NULL AS NVARCHAR(400)) AS Receptor,
+               CAST(NULL AS NVARCHAR(50)) AS ReceptorTipo
         FROM conta.egreso e
         LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = e.i_IdCentroCosto
         LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cc.i_IdTipoCaja
@@ -220,7 +221,8 @@ BEGIN
                cpm.v_Concepto, cpm.d_Monto,
                cc.i_IdTipoCaja,
                ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD'),
-               CAST(NULL AS NVARCHAR(400)), CAST(NULL AS NVARCHAR(400))
+               CAST(NULL AS NVARCHAR(400)), CAST(NULL AS NVARCHAR(400)),
+               CAST(NULL AS NVARCHAR(50))
         FROM conta.costo_personal_mensual cpm
         LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = cpm.i_IdCentroCosto
         LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cc.i_IdTipoCaja
@@ -238,7 +240,10 @@ BEGIN
                COALESCE(ccov.i_IdTipoCaja, cm.i_IdTipoCaja),
                ISNULL(tc2.v_NombreTipoCaja,'SIN UNIDAD'),
                tg.v_Nombre,
-               COALESCE(ent.v_Nombre, prov.razon_social)
+               COALESCE(ent.v_Nombre, prov.razon_social),
+               CAST(CASE WHEN ov.i_IdEntidad   IS NOT NULL THEN ent.v_Tipo
+                         WHEN ov.i_IdProveedor IS NOT NULL THEN 'PROVEEDOR'
+                         ELSE NULL END AS NVARCHAR(50))
         FROM dbo.cajamayor_movimiento cm
         LEFT JOIN conta.egreso_caja_clasificacion ov
                ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'

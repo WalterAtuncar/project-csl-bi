@@ -234,6 +234,46 @@ BEGIN
             IF @IdEntidad IS NOT NULL AND NOT EXISTS (SELECT 1 FROM conta.entidad WHERE i_IdEntidad = @IdEntidad)
             BEGIN RAISERROR('Entidad inexistente.', 16, 1); RETURN; END
 
+            -- Caso 2 (DN1): si NO vino receptor explicito, AUTO-DERIVAR del beneficiario de la venta
+            -- EC (el personal que recibio el efectivo). Fuente = dbo.cliente por dbo.venta.v_IdCliente.
+            -- La derivacion es puramente aditiva: si vino proveedor/entidad se respeta intacto.
+            IF @IdProveedor IS NULL AND @IdEntidad IS NULL
+            BEGIN
+                DECLARE @BenefDoc NVARCHAR(20), @BenefTipoPersona INT, @BenefNombre NVARCHAR(400);
+                SELECT TOP 1
+                    @BenefTipoPersona = c.i_IdTipoPersona,
+                    @BenefDoc         = LTRIM(RTRIM(ISNULL(c.v_NroDocIdentificacion, ''))),
+                    @BenefNombre      = CASE
+                        WHEN c.i_IdTipoPersona = 2 THEN LTRIM(RTRIM(ISNULL(c.v_RazonSocial, '')))
+                        ELSE LTRIM(RTRIM(ISNULL(c.v_ApePaterno, '') + ' ' + ISNULL(c.v_ApeMaterno, '')))
+                             + ', ' + LTRIM(RTRIM(ISNULL(c.v_PrimerNombre, '')))
+                    END
+                FROM dbo.venta v
+                JOIN dbo.cliente c ON c.v_IdCliente = v.v_IdCliente
+                WHERE LTRIM(RTRIM(v.v_IdVenta)) = @IdVenta COLLATE DATABASE_DEFAULT;
+
+                -- Derivar SOLO persona natural, con documento y nombre validos, que no sea la propia
+                -- clinica (RUC 20495666973). Juridica / doc vacio / nombre vacio -> @IdEntidad queda
+                -- NULL (no se deriva; el flujo continua sin receptor, como antes).
+                IF ISNULL(@BenefTipoPersona, 1) <> 2
+                   AND @BenefDoc <> '' AND @BenefDoc <> '20495666973'
+                   AND LTRIM(RTRIM(REPLACE(@BenefNombre, ',', ''))) <> ''
+                BEGIN
+                    -- Upsert entidad PERSONAL por (v_Documento, v_Tipo) = patron del upsert MEDICO, por documento.
+                    SELECT TOP 1 @IdEntidad = i_IdEntidad FROM conta.entidad
+                        WHERE v_Documento = @BenefDoc AND v_Tipo = 'PERSONAL' ORDER BY i_IdEntidad;
+                    IF @IdEntidad IS NULL
+                    BEGIN
+                        INSERT INTO conta.entidad (v_Nombre, v_Tipo, v_Documento, b_Activo, i_InsertaIdUsuario)
+                        VALUES (@BenefNombre, 'PERSONAL', @BenefDoc, 1, @IdUsuario);
+                        SET @IdEntidad = SCOPE_IDENTITY();
+                    END
+                    ELSE
+                        UPDATE conta.entidad SET b_Activo = 1, i_ActualizaIdUsuario = @IdUsuario, t_ActualizaFecha = GETDATE()
+                        WHERE i_IdEntidad = @IdEntidad AND b_Activo = 0;
+                END
+            END
+
             INSERT INTO conta.egreso_caja_clasificacion
                 (v_IdVenta, v_TipoEgreso, i_IdTipoGasto, i_IdCentroCosto, i_IdProveedor, i_IdEntidad,
                  v_Estado, v_Glosa, i_InsertaIdUsuario)
