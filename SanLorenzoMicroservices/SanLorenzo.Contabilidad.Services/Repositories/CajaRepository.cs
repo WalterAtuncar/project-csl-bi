@@ -78,7 +78,7 @@ namespace Contabilidad.Repositories
                     Anio = anio,
                     FormasPago = string.IsNullOrWhiteSpace(formasPago) ? null : formasPago,
                     IncluirCredito = incluirCredito
-                }, commandType: CommandType.StoredProcedure);
+                }, commandType: CommandType.StoredProcedure, commandTimeout: 60);
             return new FlujoDetalladoDto
             {
                 Ingresos = multi.Read<FlujoDetalleIngresoDto>().AsList(),
@@ -97,7 +97,7 @@ namespace Contabilidad.Repositories
                     Fecha = fecha,
                     FormasPago = string.IsNullOrWhiteSpace(formasPago) ? null : formasPago,
                     IncluirCredito = incluirCredito
-                }, commandType: CommandType.StoredProcedure);
+                }, commandType: CommandType.StoredProcedure, commandTimeout: 60);
             return new CuadreDiaDto
             {
                 Ingresos = multi.Read<CuadreDiaIngresoDto>().AsList(),
@@ -132,6 +132,20 @@ namespace Contabilidad.Repositories
             using var cn = _db.Open();
             return cn.Query<SaldoBancoRow>("conta.sp_SaldoBanco_List",
                 new { Anio = anio, Mes = mes }, commandType: CommandType.StoredProcedure);
+        }
+
+        /// <summary>
+        /// Remedia clasificaciones ACTIVO de egresos EC cuya venta legacy quedo anulada:
+        /// destipifica cada una (overlay/pago -> ANULADO) via conta.sp_EgresoCaja_Destipificar.
+        /// RS del SP: v_IdVenta, TipoEgreso, resultado (DESTIPIFICADO | YA_NO_ACTIVO | ERROR: ...).
+        /// </summary>
+        public EgresoCajaConsistenciaResponse EgresosEcConsistenciaRemediar(int idUsuario)
+        {
+            using var cn = _db.Open();
+            var filas = cn.Query<EgresoCajaConsistenciaRow>("conta.sp_EgresoCaja_ConsistenciaRemediar",
+                new { IdUsuario = idUsuario },
+                commandType: CommandType.StoredProcedure, commandTimeout: 120).AsList();
+            return new EgresoCajaConsistenciaResponse { Remediadas = filas, Total = filas.Count };
         }
 
         public void SaldoBancoUpsert(SaldoBancoUpsertRequest r, int idUsuario)

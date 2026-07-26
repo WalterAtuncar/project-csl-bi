@@ -7,6 +7,12 @@ using Contabilidad.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Secretos fuera del repo: appsettings.Local.json (NO versionado, ver .gitignore) sobreescribe
+// appsettings.json. Se re-agregan las variables de entorno para que sigan ganando sobre el Local
+// (precedencia final: appsettings.json < appsettings.{Env}.json < Local < env vars).
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddEnvironmentVariables();
+
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = null); // JSON = nombres C# (i_IdEgreso, Receptor...)
 builder.Services.AddEndpointsApiExplorer();
@@ -88,25 +94,37 @@ builder.Services.AddHttpClient<LegacyAuthClient>((sp, client) =>
 
 var app = builder.Build();
 
-// Manejo global de errores: convierte RAISERROR de los SP en 400 con mensaje legible.
+// Manejo global de errores: negocio (RAISERROR de SP / ContaBusinessException) -> 400 {message};
+// infraestructura -> 500 SIN detalles internos (se loguean server-side con ILogger).
 app.Use(async (ctx, next) =>
 {
     try { await next(); }
     catch (Contabilidad.Infrastructure.ContaBusinessException ex)
     {
         // Error de negocio ya traducido a texto para el usuario (mismo shape que un RAISERROR).
+        app.Logger.LogWarning("Error de negocio en {Path}: {Message}", ctx.Request.Path, ex.Message);
+        ctx.Response.StatusCode = 400;
+        await ctx.Response.WriteAsJsonAsync(new { message = ex.Message });
+    }
+    catch (System.Data.SqlClient.SqlException ex) when (ex.Number >= 50000)
+    {
+        // RAISERROR/THROW de los SP (Number >= 50000): mensaje redactado para el usuario.
+        app.Logger.LogWarning("RAISERROR de SP en {Path}: {Message}", ctx.Request.Path, ex.Message);
         ctx.Response.StatusCode = 400;
         await ctx.Response.WriteAsJsonAsync(new { message = ex.Message });
     }
     catch (System.Data.SqlClient.SqlException ex)
     {
-        ctx.Response.StatusCode = 400;
-        await ctx.Response.WriteAsJsonAsync(new { message = ex.Message });
+        // Infraestructura SQL (timeout -2, conexion, login, deadlock 1205...): no filtrar internals.
+        app.Logger.LogError(ex, "Error de base de datos en {Path} (Number={Number})", ctx.Request.Path, ex.Number);
+        ctx.Response.StatusCode = 500;
+        await ctx.Response.WriteAsJsonAsync(new { message = "Error de base de datos" });
     }
     catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Error no controlado en {Path}", ctx.Request.Path);
         ctx.Response.StatusCode = 500;
-        await ctx.Response.WriteAsJsonAsync(new { message = ex.Message });
+        await ctx.Response.WriteAsJsonAsync(new { message = "Error interno del servidor" });
     }
 });
 

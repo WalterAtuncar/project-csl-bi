@@ -18,7 +18,11 @@ namespace Contabilidad.Controllers
 
         [HttpGet]
         public IActionResult List([FromQuery] short anio, [FromQuery] byte mes)
-            => Ok(_repo.CostoPersonalList(anio, mes));
+        {
+            if (anio < 2000 || anio > 2100 || mes < 1 || mes > 12)
+                return BadRequest(new { message = "Parametros invalidos: anio (2000-2100) y mes (1-12) son requeridos." });
+            return Ok(_repo.CostoPersonalList(anio, mes));
+        }
 
         [HttpPost]
         [Authorize(Roles = ESCRITURA)]

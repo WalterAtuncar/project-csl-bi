@@ -65,3 +65,6 @@ storybook-static/
 
 # Build artifact del BI (no versionar)
 react-project/bi-react.zip
+
+# Secretos locales del API conta (no versionar; sobreescribe appsettings.json)
+**/appsettings.Local.json

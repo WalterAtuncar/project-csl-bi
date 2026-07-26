@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Contabilidad.Models
 {
     // ---------- Auth ----------
@@ -313,16 +315,16 @@ namespace Contabilidad.Models
     }
     public class CostoPersonalUpsertRequest
     {
-        public short Anio { get; set; }
-        public byte Mes { get; set; }
+        [Range(2000, 2100)] public short Anio { get; set; }
+        [Range(1, 12)] public byte Mes { get; set; }
         public int IdCentroCosto { get; set; }
-        public string Concepto { get; set; }
-        public decimal Monto { get; set; }
+        [Required(AllowEmptyStrings = false)] public string Concepto { get; set; }
+        [Range(typeof(decimal), "0", "999999999")] public decimal Monto { get; set; }
     }
     public class CostoPersonalPagarRequest
     {
-        public short Anio { get; set; }
-        public byte Mes { get; set; }
+        [Range(2000, 2100)] public short Anio { get; set; }
+        [Range(1, 12)] public byte Mes { get; set; }
         public int? IdCentroCosto { get; set; }
         public DateTime FechaPago { get; set; }
     }
@@ -509,6 +511,20 @@ namespace Contabilidad.Models
     {
         public List<CuadreDiaIngresoDto> Ingresos { get; set; } = new();
         public List<CuadreDiaEgresoDto> Egresos { get; set; } = new();
+    }
+
+    // ---------- Consistencia de egresos EC (tipificacion caja SAMBHS) ----------
+    // RS de conta.sp_EgresoCaja_ConsistenciaRemediar: nombres = columnas exactas del SP.
+    public class EgresoCajaConsistenciaRow
+    {
+        public string v_IdVenta { get; set; }
+        public string TipoEgreso { get; set; }
+        public string resultado { get; set; }   // DESTIPIFICADO | YA_NO_ACTIVO | ERROR: ...
+    }
+    public class EgresoCajaConsistenciaResponse
+    {
+        public List<EgresoCajaConsistenciaRow> Remediadas { get; set; } = new();
+        public int Total { get; set; }
     }
 
     // ---------- Rentabilidad ----------

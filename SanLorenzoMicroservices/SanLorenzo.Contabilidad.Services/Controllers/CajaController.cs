@@ -70,6 +70,15 @@ namespace Contabilidad.Controllers
             return Ok(new { ok = true });
         }
 
+        /// <summary>
+        /// Remedia clasificaciones de egresos EC (tipificacion caja) cuya venta legacy quedo anulada:
+        /// las destipifica y libera (sp_EgresoCaja_ConsistenciaRemediar). Idempotente; vacio = todo sano.
+        /// </summary>
+        [HttpPost("egresos-ec/consistencia")]
+        [Authorize(Roles = ESCRITURA)]
+        public IActionResult EgresosEcConsistencia()
+            => Ok(_repo.EgresosEcConsistenciaRemediar(User.UserId()));
+
         [HttpGet("/api/conta/saldos-banco")]
         public IActionResult SaldosBanco([FromQuery] short anio, [FromQuery] byte mes)
             => Ok(_repo.SaldosBanco(anio, mes));
