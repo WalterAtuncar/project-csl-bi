@@ -503,6 +503,7 @@ namespace Contabilidad.Models
         public string TipoGasto { get; set; }   // hoja tipo_gasto del overlay (NULL si no tipificado) - tipificacion caja SAMBHS
         public string Receptor { get; set; }     // entidad/proveedor del overlay (NULL si no tipificado) - tipificacion caja SAMBHS
         public string ReceptorTipo { get; set; } // v_Tipo de la entidad receptora: PERSONAL/MEDICO/PROVEEDOR/otros o NULL (F1 paridad egresos T1.5b)
+        public string Beneficiario { get; set; } // quien recibio el efectivo (rendidor, momento T1); persiste aunque Receptor cambie a proveedor (F5 tipificacion caja SAMBHS)
     }
     public class CuadreDiaDto
     {

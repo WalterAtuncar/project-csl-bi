@@ -209,7 +209,8 @@ BEGIN
                ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD') AS Unidad,
                CAST(NULL AS NVARCHAR(400)) AS TipoGasto,
                CAST(NULL AS NVARCHAR(400)) AS Receptor,
-               CAST(NULL AS NVARCHAR(50)) AS ReceptorTipo
+               CAST(NULL AS NVARCHAR(50)) AS ReceptorTipo,
+               CAST(NULL AS NVARCHAR(400)) AS Beneficiario
         FROM conta.egreso e
         LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = e.i_IdCentroCosto
         LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cc.i_IdTipoCaja
@@ -222,7 +223,8 @@ BEGIN
                cc.i_IdTipoCaja,
                ISNULL(tc.v_NombreTipoCaja,'SIN UNIDAD'),
                CAST(NULL AS NVARCHAR(400)), CAST(NULL AS NVARCHAR(400)),
-               CAST(NULL AS NVARCHAR(50))
+               CAST(NULL AS NVARCHAR(50)),
+               CAST(NULL AS NVARCHAR(400))
         FROM conta.costo_personal_mensual cpm
         LEFT JOIN conta.centro_costo cc ON cc.i_IdCentroCosto = cpm.i_IdCentroCosto
         LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = cc.i_IdTipoCaja
@@ -243,12 +245,14 @@ BEGIN
                COALESCE(ent.v_Nombre, prov.razon_social),
                CAST(CASE WHEN ov.i_IdEntidad   IS NOT NULL THEN ent.v_Tipo
                          WHEN ov.i_IdProveedor IS NOT NULL THEN 'PROVEEDOR'
-                         ELSE NULL END AS NVARCHAR(50))
+                         ELSE NULL END AS NVARCHAR(50)),
+               benef.v_Nombre
         FROM dbo.cajamayor_movimiento cm
         LEFT JOIN conta.egreso_caja_clasificacion ov
                ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'
         LEFT JOIN conta.tipo_gasto  tg   ON tg.i_IdTipoGasto   = ov.i_IdTipoGasto
         LEFT JOIN conta.entidad     ent  ON ent.i_IdEntidad    = ov.i_IdEntidad
+        LEFT JOIN conta.entidad     benef ON benef.i_IdEntidad = ov.i_IdBeneficiarioEfectivo
         LEFT JOIN dbo.proveedores   prov ON prov.id_proveedor  = ov.i_IdProveedor
         LEFT JOIN conta.centro_costo ccm  ON ccm.i_IdTipoCaja   = cm.i_IdTipoCaja AND ccm.b_Activo = 1
         LEFT JOIN conta.centro_costo ccov ON ccov.i_IdCentroCosto = ov.i_IdCentroCosto

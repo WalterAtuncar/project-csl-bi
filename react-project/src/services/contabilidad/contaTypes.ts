@@ -276,6 +276,9 @@ export interface CuadreDiaEgresoRow {
   // Tipo del receptor (v_Tipo de la entidad/persona que recibió el efectivo): PERSONAL / MEDICO /
   // PROVEEDOR / otros o NULL (F1 paridad egresos T1.5b). PascalCase = calca ReceptorTipo del DTO C#.
   ReceptorTipo?: string | null;
+  // Beneficiario = el rendidor que recibió el efectivo en caja (momento T1), distinto del Receptor del
+  // comprobante (proveedor/entidad, momento T2) (F5). NULL/'' cuando no aplica. PascalCase = DTO C#.
+  Beneficiario?: string | null;
 }
 export interface CuadreDiaResponse {
   Ingresos: CuadreDiaIngresoRow[];

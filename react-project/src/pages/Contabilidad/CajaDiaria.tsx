@@ -397,6 +397,11 @@ const CajaDiaria: React.FC = () => {
                               {r.ReceptorTipo && (
                                 <span className={`ml-1 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${receptorTipoBadgeCls(r.ReceptorTipo)}`}>{r.ReceptorTipo}</span>
                               )}
+                              {/* Beneficiario = rendidor que recibió el efectivo (T1), distinto del Receptor del
+                                  comprobante (T2) (F5). NULL/'' = no se muestra (comportamiento actual intacto). */}
+                              {r.Beneficiario && (
+                                <span className="ml-1 inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 dark:bg-slate-700/40 dark:text-slate-400 text-[10px]">Rendido por: {r.Beneficiario}</span>
+                              )}
                             </td>
                             <td className="py-0.5 text-right text-rose-500 whitespace-nowrap">−{money(r.Monto)}</td>
                           </tr>

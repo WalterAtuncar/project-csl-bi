@@ -54,6 +54,8 @@ BEGIN
         prov.razon_social                             AS ProveedorRazonSocial,
         ov.i_IdEntidad,
         ent.v_Nombre                                  AS EntidadNombre,
+        ov.i_IdBeneficiarioEfectivo,
+        benef.v_Nombre                                AS BeneficiarioNombre,
         ov.i_IdConsultorio,
         spp.v_Value1 COLLATE DATABASE_DEFAULT         AS ConsultorioNombre,
         ov.i_IdPago,
@@ -73,6 +75,7 @@ BEGIN
     LEFT JOIN conta.centro_costo cc   ON cc.i_IdCentroCosto = ov.i_IdCentroCosto
     LEFT JOIN dbo.proveedores    prov ON prov.id_proveedor  = ov.i_IdProveedor
     LEFT JOIN conta.entidad      ent  ON ent.i_IdEntidad    = ov.i_IdEntidad
+    LEFT JOIN conta.entidad      benef ON benef.i_IdEntidad = ov.i_IdBeneficiarioEfectivo
     LEFT JOIN SigesoftDesarrollo_2.dbo.systemparameter spp ON spp.i_GroupId = 403 AND spp.i_ParameterId = ov.i_IdConsultorio
     WHERE ov.v_IdVenta = @IdVenta AND ov.v_Estado = 'ACTIVO';
 END
@@ -293,6 +296,7 @@ BEGIN
         ov.v_TipoEgreso                                         AS TipoEgreso,
         tg.v_Nombre                                             AS TipoGasto,
         COALESCE(ent.v_Nombre, prov.razon_social)               AS Receptor,
+        benef.v_Nombre                                          AS Beneficiario,
         CAST(CASE WHEN ov.v_EstadoCompra = 'COMPLETO' THEN 1 ELSE 0 END AS BIT) AS CompraRegistrada,
         ov.v_TipoDocCompra,
         ov.v_SerieNumeroCompra,
@@ -306,6 +310,7 @@ BEGIN
     LEFT JOIN conta.tipo_gasto   tg   ON tg.i_IdTipoGasto   = ov.i_IdTipoGasto
     LEFT JOIN conta.entidad      ent  ON ent.i_IdEntidad    = ov.i_IdEntidad
     LEFT JOIN dbo.proveedores    prov ON prov.id_proveedor  = ov.i_IdProveedor
+    LEFT JOIN conta.entidad      benef ON benef.i_IdEntidad = ov.i_IdBeneficiarioEfectivo
     LEFT JOIN conta.centro_costo ccov ON ccov.i_IdCentroCosto = ov.i_IdCentroCosto
     LEFT JOIN dbo.tipocaja       tc   ON tc.i_IdTipoCaja     = COALESCE(ccov.i_IdTipoCaja, ec.i_IdTipoCaja)
     LEFT JOIN dbo.venta          v    ON LTRIM(RTRIM(v.v_IdVenta)) = ec.v_IdVenta COLLATE DATABASE_DEFAULT
