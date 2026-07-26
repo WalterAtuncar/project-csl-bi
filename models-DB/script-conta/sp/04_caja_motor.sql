@@ -524,9 +524,13 @@ BEGIN
              cd.i_IdFormaPago, dh46.v_Value1, CASE WHEN dh41.v_Value1='CREDITO' THEN 1 ELSE 0 END
     ORDER BY Mes, Unidad, FormaPago, EsCredito;
 
-    -- RS2: PERSONAL mes x unidad x concepto (PAGADO por t_FechaPago). NO se filtra por formas/credito.
+    -- RS2: PERSONAL mes x unidad x concepto (PAGADO). NO se filtra por formas/credito.
+    -- v2 (2026-07-25, auditoria db-experto): agrupa por el MES CONTABILIZADO (n_Anio/n_Mes),
+    -- NO por MONTH(t_FechaPago): el hecho es "costo DEL mes M" y asi el RS es inmune a
+    -- fechas de pago mal cargadas (bug real de mayo pagado en julio) y al edge cross-anio.
+    -- t_FechaPago queda documental (sp_CostoPersonal_Pagar v2 la deriva EOMONTH server-side).
     -- Unidad = tipocaja del centro via walk mapc (identico a 05_rentabilidad fn_Rentabilidad_Gastos);
-    -- centro sin unidad -> 'ADMINISTRACION' (D6).
+    -- centro sin unidad -> 'ADMINISTRACION' (D6). Contrato de columnas identico (Mes INT).
     ;WITH walk AS (
         SELECT c.i_IdCentroCosto AS origen, c.i_IdPadre, c.i_IdTipoCaja
         FROM conta.centro_costo c
@@ -539,15 +543,15 @@ BEGIN
         SELECT origen AS i_IdCentroCosto, MAX(i_IdTipoCaja) AS i_IdTipoCaja
         FROM walk GROUP BY origen
     )
-    SELECT MONTH(cpm.t_FechaPago) AS Mes,
+    SELECT CAST(cpm.n_Mes AS INT) AS Mes,
            ISNULL(tc.v_NombreTipoCaja,'ADMINISTRACION') AS Unidad,
            cpm.v_Concepto AS Concepto,
            SUM(cpm.d_Monto) AS Monto
     FROM conta.costo_personal_mensual cpm
     LEFT JOIN mapc m ON m.i_IdCentroCosto = cpm.i_IdCentroCosto
     LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = m.i_IdTipoCaja
-    WHERE cpm.v_Estado='PAGADO' AND cpm.t_FechaPago >= @iniAnio AND cpm.t_FechaPago < @finAnio
-    GROUP BY MONTH(cpm.t_FechaPago), tc.v_NombreTipoCaja, cpm.v_Concepto
+    WHERE cpm.v_Estado='PAGADO' AND cpm.n_Anio = @Anio
+    GROUP BY cpm.n_Mes, tc.v_NombreTipoCaja, cpm.v_Concepto
     ORDER BY Mes, Unidad, Concepto
     OPTION (MAXRECURSION 100);
 

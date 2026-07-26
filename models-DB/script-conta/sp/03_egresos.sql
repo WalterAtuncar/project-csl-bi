@@ -237,6 +237,11 @@ END
 GO
 
 -- ---------------- COSTOS DE PERSONAL ----------------
+-- v2 (2026-07-25, auditoria db-experto): validaciones de dominio (@Mes 1-12,
+-- @Monto>=0, @Concepto no vacio), GUARD de inmutabilidad (una fila PAGADO no se
+-- modifica: el flujo historico ya la sumo), patron completo XACT_ABORT+TRY/CATCH+
+-- TRAN (ddl/18 agrega ademas CK_cpm_mes / CK_cpm_estado), y auditoria con el
+-- i_Id REAL de la fila (antes se auditaba con el id del centro).
 IF OBJECT_ID('conta.sp_CostoPersonal_Upsert','P') IS NOT NULL DROP PROCEDURE conta.sp_CostoPersonal_Upsert;
 GO
 CREATE PROCEDURE conta.sp_CostoPersonal_Upsert
@@ -244,15 +249,46 @@ CREATE PROCEDURE conta.sp_CostoPersonal_Upsert
 AS
 BEGIN
     SET NOCOUNT ON;
-    IF EXISTS (SELECT 1 FROM conta.costo_personal_mensual
-               WHERE n_Anio=@Anio AND n_Mes=@Mes AND i_IdCentroCosto=@IdCentroCosto AND v_Concepto=@Concepto)
-        UPDATE conta.costo_personal_mensual SET d_Monto=@Monto, i_ActualizaIdUsuario=@IdUsuario, t_ActualizaFecha=GETDATE()
-        WHERE n_Anio=@Anio AND n_Mes=@Mes AND i_IdCentroCosto=@IdCentroCosto AND v_Concepto=@Concepto;
-    ELSE
-        INSERT INTO conta.costo_personal_mensual (n_Anio, n_Mes, i_IdCentroCosto, v_Concepto, d_Monto, i_InsertaIdUsuario)
-        VALUES (@Anio, @Mes, @IdCentroCosto, @Concepto, @Monto, @IdUsuario);
-    EXEC conta.sp_Auditoria_Insert 'conta.costo_personal_mensual', @IdCentroCosto, 'UPSERT', @Concepto, @IdUsuario;
-    SELECT 1 AS ok;
+    SET XACT_ABORT ON;
+    SET @Concepto = LTRIM(RTRIM(ISNULL(@Concepto, '')));
+
+    IF @Mes IS NULL OR @Mes NOT BETWEEN 1 AND 12
+    BEGIN RAISERROR('El mes debe estar entre 1 y 12.', 16, 1); RETURN; END
+    IF @Monto IS NULL OR @Monto < 0
+    BEGIN RAISERROR('El monto no puede ser negativo.', 16, 1); RETURN; END
+    IF @Concepto = ''
+    BEGIN RAISERROR('Debe indicar el concepto.', 16, 1); RETURN; END
+
+    DECLARE @Id INT, @Estado NVARCHAR(30);
+    SELECT @Id = i_Id, @Estado = v_Estado
+    FROM conta.costo_personal_mensual
+    WHERE n_Anio=@Anio AND n_Mes=@Mes AND i_IdCentroCosto=@IdCentroCosto AND v_Concepto=@Concepto;
+
+    -- Inmutabilidad post-pago: lo PAGADO ya esta en el flujo historico.
+    IF @Estado = 'PAGADO'
+    BEGIN RAISERROR('El concepto ya esta PAGADO; no se puede modificar.', 16, 1); RETURN; END
+
+    BEGIN TRY
+        BEGIN TRAN;
+        IF @Id IS NOT NULL
+            UPDATE conta.costo_personal_mensual
+            SET d_Monto=@Monto, i_ActualizaIdUsuario=@IdUsuario, t_ActualizaFecha=GETDATE()
+            WHERE i_Id=@Id;
+        ELSE
+        BEGIN
+            INSERT INTO conta.costo_personal_mensual (n_Anio, n_Mes, i_IdCentroCosto, v_Concepto, d_Monto, i_InsertaIdUsuario)
+            VALUES (@Anio, @Mes, @IdCentroCosto, @Concepto, @Monto, @IdUsuario);
+            SET @Id = SCOPE_IDENTITY();
+        END
+        EXEC conta.sp_Auditoria_Insert 'conta.costo_personal_mensual', @Id, 'UPSERT', @Concepto, @IdUsuario;
+        COMMIT TRAN;
+        SELECT 1 AS ok;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+        DECLARE @em NVARCHAR(2048) = ERROR_MESSAGE(), @es INT = ERROR_SEVERITY(), @est INT = ERROR_STATE();
+        RAISERROR(@em, @es, @est);
+    END CATCH
 END
 GO
 
@@ -271,6 +307,12 @@ BEGIN
 END
 GO
 
+-- v2 (2026-07-25, auditoria db-experto): @FechaPago se CONSERVA en la firma por
+-- compatibilidad de contrato con la API pero se IGNORA: t_FechaPago se deriva
+-- SIEMPRE server-side como EOMONTH del mes contabilizado (fin de mes de
+-- @Anio/@Mes). Motivo: bug real 2026-07 (mayo pagado con fecha de julio ->
+-- aparecia en julio en el flujo; fix maintenance/2026-07-26_fix_fechapago_
+-- personal_mayo2026.sql). Se agrega auditoria (antes no auditaba).
 IF OBJECT_ID('conta.sp_CostoPersonal_Pagar','P') IS NOT NULL DROP PROCEDURE conta.sp_CostoPersonal_Pagar;
 GO
 CREATE PROCEDURE conta.sp_CostoPersonal_Pagar
@@ -278,10 +320,39 @@ CREATE PROCEDURE conta.sp_CostoPersonal_Pagar
 AS
 BEGIN
     SET NOCOUNT ON;
-    UPDATE conta.costo_personal_mensual
-    SET v_Estado = 'PAGADO', t_FechaPago = @FechaPago, i_ActualizaIdUsuario = @IdUsuario, t_ActualizaFecha = GETDATE()
-    WHERE n_Anio = @Anio AND n_Mes = @Mes AND v_Estado = 'POR_PAGAR'
-      AND (@IdCentroCosto IS NULL OR i_IdCentroCosto = @IdCentroCosto);
-    SELECT @@ROWCOUNT AS pagadas;
+    SET XACT_ABORT ON;
+
+    IF @Mes IS NULL OR @Mes NOT BETWEEN 1 AND 12
+    BEGIN RAISERROR('El mes debe estar entre 1 y 12.', 16, 1); RETURN; END
+
+    -- Derivacion server-side: fin de mes del periodo contabilizado (ignora @FechaPago).
+    DECLARE @FechaPagoReal DATE = EOMONTH(DATEFROMPARTS(@Anio, @Mes, 1));
+
+    BEGIN TRY
+        BEGIN TRAN;
+        DECLARE @n INT;
+        UPDATE conta.costo_personal_mensual
+        SET v_Estado = 'PAGADO', t_FechaPago = @FechaPagoReal, i_ActualizaIdUsuario = @IdUsuario, t_ActualizaFecha = GETDATE()
+        WHERE n_Anio = @Anio AND n_Mes = @Mes AND v_Estado = 'POR_PAGAR'
+          AND (@IdCentroCosto IS NULL OR i_IdCentroCosto = @IdCentroCosto);
+        SET @n = @@ROWCOUNT;
+
+        IF @n > 0
+        BEGIN
+            DECLARE @detalle NVARCHAR(200) =
+                CAST(@Anio AS NVARCHAR(4)) + '-' + RIGHT('0' + CAST(@Mes AS NVARCHAR(2)), 2)
+                + ' | centro=' + ISNULL(CAST(@IdCentroCosto AS NVARCHAR(10)), 'TODOS')
+                + ' | filas=' + CAST(@n AS NVARCHAR(10))
+                + ' | fechaPago=' + CONVERT(NVARCHAR(10), @FechaPagoReal, 120);
+            EXEC conta.sp_Auditoria_Insert 'conta.costo_personal_mensual', @Anio, 'PAGAR', @detalle, @IdUsuario;
+        END
+        COMMIT TRAN;
+        SELECT @n AS pagadas;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+        DECLARE @em NVARCHAR(2048) = ERROR_MESSAGE(), @es INT = ERROR_SEVERITY(), @est INT = ERROR_STATE();
+        RAISERROR(@em, @es, @est);
+    END CATCH
 END
 GO

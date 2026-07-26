@@ -4,10 +4,14 @@
 -- Continua sp/18 (Tipificar/Resolver/Destipificar/Consistencia). SQL Server 2012.
 -- Idempotente IF OBJECT_ID DROP / GO / CREATE.
 --
---   sp_EgresoCaja_GetClasificacion       (lectura; prellena el modal editar: fila ACTIVO + nombres + compra)
---   sp_EgresoCaja_ActualizarTipificacion (escritura GASTO; edita tipo_gasto/receptor; RECHAZA HONORARIO)
---   sp_EgresoCaja_RegistrarCompra        (escritura GASTO; enriquece overlay con el comprobante)
+--   sp_EgresoCaja_GetClasificacion       (lectura; prellena el modal editar: fila ACTIVO + nombres + compra
+--                                         + VentaAnulada; v2: fallback MontoCaja excluye ventas anuladas)
+--   sp_EgresoCaja_ActualizarTipificacion (escritura GASTO; edita tipo_gasto/receptor; RECHAZA HONORARIO;
+--                                         v2: exige venta viva en dbo)
+--   sp_EgresoCaja_RegistrarCompra        (escritura GASTO; enriquece overlay con el comprobante;
+--                                         v2: exige venta viva en dbo)
 --   sp_EgresoCaja_Bandeja                (lectura; grid de egresos EC con flags de clasificacion/compra)
+--   sp_EgresoCaja_AnularCompra           (escritura GASTO; v2: revierte T2 -> post-T1 SIN_COMPROBANTE)
 --
 -- PRINCIPIO RECTOR: RegistrarCompra ENRIQUECE el overlay, JAMAS crea conta.egreso (el egreso EC ya se
 -- suma como cm.d_Total en las 6 superficies; crear egreso = doble conteo). El monto de caja MANDA (DD1):
@@ -32,11 +36,19 @@ BEGIN
     SET @IdVenta = LTRIM(RTRIM(@IdVenta));
 
     -- Monto de caja de referencia = lo que suman las 6 superficies (SUM de cajamayor 'E'), fallback venta.
+    -- v2 (2026-07-25): el fallback EXCLUYE ventas anuladas (una EC anulada ya no tiene movimiento
+    -- en cajamayor; su d_Total no debe mostrarse como monto de caja) + flag VentaAnulada al final.
     DECLARE @MontoCaja DECIMAL(18,2) =
         ISNULL((SELECT SUM(cm.d_Total) FROM dbo.cajamayor_movimiento cm
                 WHERE LTRIM(RTRIM(cm.v_IdVenta)) = @IdVenta COLLATE DATABASE_DEFAULT AND cm.v_TipoMovimiento = 'E'),
                (SELECT TOP 1 v.d_Total FROM dbo.venta v
-                WHERE LTRIM(RTRIM(v.v_IdVenta)) = @IdVenta COLLATE DATABASE_DEFAULT));
+                WHERE LTRIM(RTRIM(v.v_IdVenta)) = @IdVenta COLLATE DATABASE_DEFAULT
+                  AND ISNULL(v.i_Eliminado, 0) = 0));
+
+    DECLARE @VentaAnulada BIT =
+        ISNULL((SELECT TOP 1 CAST(CASE WHEN ISNULL(v.i_Eliminado, 0) = 1 THEN 1 ELSE 0 END AS BIT)
+                FROM dbo.venta v
+                WHERE LTRIM(RTRIM(v.v_IdVenta)) = @IdVenta COLLATE DATABASE_DEFAULT), 0);
 
     SELECT
         ov.i_IdClasificacion,
@@ -69,7 +81,8 @@ BEGIN
         CAST(CASE WHEN ov.v_EstadoCompra = 'COMPLETO' THEN 1 ELSE 0 END AS BIT) AS CompraRegistrada,
         @MontoCaja                                    AS MontoCaja,
         CASE WHEN ov.v_EstadoCompra = 'COMPLETO' AND ov.d_MontoBrutoCompra IS NOT NULL
-             THEN ov.d_MontoBrutoCompra - @MontoCaja END AS DiferenciaMonto
+             THEN ov.d_MontoBrutoCompra - @MontoCaja END AS DiferenciaMonto,
+        @VentaAnulada                                 AS VentaAnulada
     FROM conta.egreso_caja_clasificacion ov
     LEFT JOIN conta.tipo_gasto   tg   ON tg.i_IdTipoGasto   = ov.i_IdTipoGasto
     LEFT JOIN conta.centro_costo cc   ON cc.i_IdCentroCosto = ov.i_IdCentroCosto
@@ -108,6 +121,12 @@ BEGIN
     BEGIN RAISERROR('No hay clasificacion activa para este egreso.', 16, 1); RETURN; END
     IF @TipoEgreso <> 'GASTO'
     BEGIN RAISERROR('La edicion de un HONORARIO se hace des-tipificando y re-tipificando (no por esta via).', 16, 1); RETURN; END
+
+    -- v2 (2026-07-25): la venta EC debe seguir VIVA en dbo (pudo anularse despues de T1).
+    IF NOT EXISTS (SELECT 1 FROM dbo.venta v
+                   WHERE LTRIM(RTRIM(v.v_IdVenta)) = @IdVenta COLLATE DATABASE_DEFAULT
+                     AND ISNULL(v.i_Eliminado, 0) = 0)
+    BEGIN RAISERROR('La venta esta anulada; ejecute la consistencia o destipifique.', 16, 1); RETURN; END
 
     -- tipo de gasto: hoja + visible en caja + activa.
     IF @IdTipoGasto IS NULL BEGIN RAISERROR('Debe indicar el tipo de gasto.', 16, 1); RETURN; END
@@ -194,6 +213,12 @@ BEGIN
     BEGIN RAISERROR('No hay clasificacion activa para este egreso; tipifiquelo primero.', 16, 1); RETURN; END
     IF @TipoEgreso <> 'GASTO'
     BEGIN RAISERROR('Solo se puede registrar compra sobre un egreso tipificado como GASTO.', 16, 1); RETURN; END
+
+    -- v2 (2026-07-25): la venta EC debe seguir VIVA en dbo (pudo anularse despues de T1).
+    IF NOT EXISTS (SELECT 1 FROM dbo.venta v
+                   WHERE LTRIM(RTRIM(v.v_IdVenta)) = @IdVenta COLLATE DATABASE_DEFAULT
+                     AND ISNULL(v.i_Eliminado, 0) = 0)
+    BEGIN RAISERROR('La venta esta anulada; ejecute la consistencia o destipifique.', 16, 1); RETURN; END
 
     -- receptor presente y unico (proveedor XOR entidad).
     IF @IdProveedor IS NULL AND @IdEntidad IS NULL
@@ -322,5 +347,69 @@ BEGIN
         OR (@Estado = 'SIN_COMPRA'     AND ov.i_IdClasificacion IS NOT NULL
                                        AND (ov.v_EstadoCompra IS NULL OR ov.v_EstadoCompra <> 'COMPLETO')))
     ORDER BY ec.Fecha, ec.Documento;
+END
+GO
+
+-- =====================================================================
+-- 5) sp_EgresoCaja_AnularCompra  (escritura GASTO; revierte T2 -> estado post-T1)
+--    v2 (2026-07-25, auditoria db-experto). Exige overlay ACTIVO con
+--    v_EstadoCompra='COMPLETO'. Revierte SOLO los campos documentales del
+--    comprobante (ddl/15): v_TipoDocCompra / v_SerieNumeroCompra /
+--    t_FechaDocCompra / d_MontoBrutoCompra / d_IGVCompra -> NULL y
+--    v_EstadoCompra='SIN_COMPROBANTE' (el estado post-T1 REAL: es el default de
+--    ddl/15 y el unico valor no-COMPLETO que admite CK_ecc_estadocompra; no
+--    existe 'PENDIENTE' en el dominio). NO toca receptor (i_IdProveedor /
+--    i_IdEntidad), ni i_IdBeneficiarioEfectivo, ni i_IdTipoGasto, ni i_IdPago.
+--    @Motivo va a la auditoria (accion ANULAR_COMPRA).
+-- =====================================================================
+IF OBJECT_ID('conta.sp_EgresoCaja_AnularCompra','P') IS NOT NULL DROP PROCEDURE conta.sp_EgresoCaja_AnularCompra;
+GO
+CREATE PROCEDURE conta.sp_EgresoCaja_AnularCompra
+    @IdVenta   NCHAR(16),
+    @IdUsuario INT,
+    @Motivo    NVARCHAR(300) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    SET @IdVenta = LTRIM(RTRIM(@IdVenta));
+
+    DECLARE @IdClasificacion INT, @TipoEgreso NVARCHAR(20), @EstadoCompra NVARCHAR(20);
+    SELECT @IdClasificacion = i_IdClasificacion, @TipoEgreso = v_TipoEgreso, @EstadoCompra = v_EstadoCompra
+    FROM conta.egreso_caja_clasificacion WHERE v_IdVenta = @IdVenta AND v_Estado = 'ACTIVO';
+
+    IF @IdClasificacion IS NULL
+    BEGIN RAISERROR('No hay clasificacion activa para este egreso.', 16, 1); RETURN; END
+    IF @TipoEgreso <> 'GASTO'
+    BEGIN RAISERROR('Solo un egreso GASTO tiene compra que anular.', 16, 1); RETURN; END
+    IF @EstadoCompra <> 'COMPLETO'
+    BEGIN RAISERROR('Este egreso no tiene una compra registrada que anular.', 16, 1); RETURN; END
+
+    BEGIN TRY
+        BEGIN TRAN;
+        -- Reversion documental T2 -> post-T1. Receptor/beneficiario/tipo de gasto INTACTOS.
+        UPDATE conta.egreso_caja_clasificacion
+        SET v_TipoDocCompra      = NULL,
+            v_SerieNumeroCompra  = NULL,
+            t_FechaDocCompra     = NULL,
+            d_MontoBrutoCompra   = NULL,
+            d_IGVCompra          = NULL,
+            v_EstadoCompra       = 'SIN_COMPROBANTE',
+            i_ActualizaIdUsuario = @IdUsuario,
+            t_ActualizaFecha     = GETDATE()
+        WHERE i_IdClasificacion = @IdClasificacion;
+
+        DECLARE @detalle NVARCHAR(400) = @IdVenta + ISNULL(' | ' + LTRIM(RTRIM(@Motivo)), '');
+        EXEC conta.sp_Auditoria_Insert 'conta.egreso_caja_clasificacion', @IdClasificacion, 'ANULAR_COMPRA',
+             @detalle, @IdUsuario;
+        COMMIT TRAN;
+
+        EXEC conta.sp_EgresoCaja_GetClasificacion @IdVenta;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRAN;
+        DECLARE @em NVARCHAR(2048) = ERROR_MESSAGE(), @es INT = ERROR_SEVERITY(), @est INT = ERROR_STATE();
+        RAISERROR(@em, @es, @est);
+    END CATCH
 END
 GO
