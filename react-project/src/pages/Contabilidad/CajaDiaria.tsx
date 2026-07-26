@@ -10,9 +10,9 @@ import ReconciliacionCajaMayorCard from './components/ReconciliacionCajaMayorCar
 import { unidadCorto, unidadColor } from './components/dashboard/dashHelpers';
 import { exportarCuadreCajaExcel, type CuadreExportData } from './components/caja/excelCuadreCaja';
 import { abrirCierreCajaPDF } from './components/caja/CierreCajaPDF';
+import { money } from '../../utils/money';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
-const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pad = (n: number) => String(n).padStart(2, '0');
 const RULE = '─'.repeat(80);
 // El backend puede marcar el origen del egreso como 'CAJA LEGACY' (pipeline de caja mayor). "Legacy" es

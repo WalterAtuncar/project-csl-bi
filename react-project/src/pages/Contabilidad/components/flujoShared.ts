@@ -3,11 +3,12 @@
 // (refactor puro, sin cambio de comportamiento): misma matriz Ene..Dic + Total, primera
 // columna sticky, tabular-nums. Una sola fuente para ambas tablas.
 
+import { moneyDash } from '../../../utils/money';
+
 export const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 
-// 0 se pinta como '—' (fiel al formato impreso del gerente).
-export const money = (n: number) =>
-  n === 0 ? '—' : n.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+// 0 se pinta como '—' (fiel al formato impreso del gerente). Re-export del util único.
+export const money = moneyDash;
 
 export type RowKind = 'header' | 'detail' | 'total' | 'saldo';
 export interface Row {

@@ -14,12 +14,14 @@ import type {
 import { descargarPlantillaAtenciones, getFirstComprobante, parsePlantilla, matchPlantilla } from './excelHonorarios';
 import type { FilaSistema } from './excelHonorarios';
 import { abrirReciboHonorarioPDF, type ReciboHonorarioData } from './ReciboPDF';
+import { todayLima } from '../../../../utils/fechas';
 
 // ---- helpers ----
 const money = (n: number) => (n ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const pad2 = (n: number) => String(n).padStart(2, '0');
-const today = () => new Date().toISOString().slice(0, 10);
+// HOY de Lima (antes toISOString = fecha UTC: desde las 19:00 hora Lima daba el dia siguiente).
+const today = todayLima;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
 const fmtFecha = (iso: string) => {
   if (!iso) return '—';

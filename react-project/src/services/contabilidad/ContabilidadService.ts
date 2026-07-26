@@ -73,8 +73,11 @@ class ContabilidadService {
           this.clearToken();
           window.dispatchEvent(new CustomEvent('conta:logout'));
         }
-        const data = error.response?.data as { message?: string } | undefined;
-        return Promise.reject(new Error(data?.message || error.message || 'Error de conexion'));
+        // El API responde 400 con dos shapes: {message} (negocio/RAISERROR) o
+        // ValidationProblemDetails {errors:{Campo:[...]},title} (DataAnnotations).
+        const data = error.response?.data as { message?: string; title?: string; errors?: Record<string, string[]> } | undefined;
+        const validacion = data?.errors ? Object.values(data.errors).flat().join('; ') : undefined;
+        return Promise.reject(new Error(data?.message || validacion || data?.title || error.message || 'Error de conexion'));
       }
     );
   }
@@ -184,14 +187,8 @@ class ContabilidadService {
   }
 
   // ---- Motor de caja ----
-  async cajaIngresos(desde: string, hasta: string): Promise<import('./contaTypes').CajaIngresoRow[]> {
-    const { data } = await this.http.get<import('./contaTypes').CajaIngresoRow[]>('/caja/ingresos', { params: { desde, hasta } });
-    return data;
-  }
-  async cajaEgresos(desde: string, hasta: string): Promise<import('./contaTypes').CajaEgresoRow[]> {
-    const { data } = await this.http.get<import('./contaTypes').CajaEgresoRow[]>('/caja/egresos', { params: { desde, hasta } });
-    return data;
-  }
+  // [ELIMINADOS 2026-07-25] cajaIngresos/cajaEgresos (GET /caja/ingresos|egresos): sin consumidor
+  // en ninguna pantalla (dead code verificado en la auditoria; los endpoints siguen vivos en el API).
   // Catalogo de medios de pago con uso reciente (para el filtro de liquidez).
   async cajaFormasPago(): Promise<FormaPagoRow[]> {
     const { data } = await this.http.get<FormaPagoRow[]>('/caja/formas-pago');

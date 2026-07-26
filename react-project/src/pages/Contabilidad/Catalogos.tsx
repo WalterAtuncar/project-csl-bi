@@ -6,6 +6,7 @@ import { useContaAuth } from '../../context/ContaAuthContext';
 import type {
   CentroCosto, TipoGasto, Entidad, CuentaBancaria, SisolParticipacion, ConfigRow,
 } from '../../services/contabilidad/contaTypes';
+import { todayLima } from '../../utils/fechas';
 
 type Tab = 'centros' | 'tipos' | 'entidades' | 'cuentas' | 'sisol' | 'config';
 const TABS: { key: Tab; label: string }[] = [
@@ -194,10 +195,10 @@ const SisolTab: React.FC<{ canWrite: boolean }> = ({ canWrite }) => {
   const [rows, setRows] = useState<SisolParticipacion[]>([]);
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<SisolParticipacion | null>(null);
-  const [form, setForm] = useState({ PorcClinica: 70, VigenciaDesde: new Date().toISOString().slice(0, 10) });
+  const [form, setForm] = useState({ PorcClinica: 70, VigenciaDesde: todayLima() });
   const load = useCallback(async () => { try { setRows(await contabilidadService.sisolParticipacionList()); } catch (e) { toast.error(String(e)); } }, []);
   useEffect(() => { load(); }, [load]);
-  const openNew = () => { setEdit(null); setForm({ PorcClinica: 70, VigenciaDesde: new Date().toISOString().slice(0, 10) }); setOpen(true); };
+  const openNew = () => { setEdit(null); setForm({ PorcClinica: 70, VigenciaDesde: todayLima() }); setOpen(true); };
   const openEdit = (r: SisolParticipacion) => { setEdit(r); setForm({ PorcClinica: r.d_PorcClinica, VigenciaDesde: r.t_VigenciaDesde?.slice(0, 10) || '' }); setOpen(true); };
   const save = async () => {
     const porcHospital = Math.round((100 - form.PorcClinica) * 100) / 100;

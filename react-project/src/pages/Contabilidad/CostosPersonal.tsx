@@ -3,12 +3,11 @@ import toast from 'react-hot-toast';
 import { Save, CreditCard } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 import { useContaAuth } from '../../context/ContaAuthContext';
-import { CONCEPTOS_PERSONAL } from '../../services/contabilidad/contaTypes';
+import { CONCEPTOS_PERSONAL, conceptoLabel } from '../../services/contabilidad/contaTypes';
 import type { CentroCosto, CostoPersonal } from '../../services/contabilidad/contaTypes';
+import { money } from '../../utils/money';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
-const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const conceptoLabel = (c: string) => c.replace(/_/g, ' ');
 
 const CostosPersonal: React.FC = () => {
   const { canWrite } = useContaAuth();
@@ -22,6 +21,8 @@ const CostosPersonal: React.FC = () => {
 
   const key = (centroId: number, concepto: string) => `${centroId}|${concepto}`;
 
+  // Carga COMPLETA (cambio de periodo / post-pagar). NO se usa tras guardar una celda: reconstruir
+  // el draft desde el server pisaba lo que el usuario estuviera tipeando en otra celda (carrera D2).
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -46,24 +47,61 @@ const CostosPersonal: React.FC = () => {
     })();
   }, []);
 
-  const estadoDe = (centroId: number, concepto: string) =>
-    data.find((r) => r.i_IdCentroCosto === centroId && r.v_Concepto === concepto)?.v_Estado;
+  const rowDe = (centroId: number, concepto: string) =>
+    data.find((r) => r.i_IdCentroCosto === centroId && r.v_Concepto === concepto);
+
+  // Dirty-check: hay un valor valido tipeado y difiere de lo persistido. Dinero se compara en
+  // CENTAVOS ENTEROS (regla del proyecto: jamas por diferencia de floats). PAGADO nunca es dirty.
+  const esDirty = (centroId: number, concepto: string): boolean => {
+    const raw = draft[key(centroId, concepto)];
+    if (raw == null || raw === '') return false;
+    const monto = Number(raw);
+    if (isNaN(monto)) return false;
+    const row = rowDe(centroId, concepto);
+    if (row?.v_Estado === 'PAGADO') return false;
+    if (!row) return true; // celda nueva con valor
+    return Math.round(monto * 100) !== Math.round(row.d_Monto * 100);
+  };
 
   const guardarCelda = async (centroId: number, concepto: string) => {
-    const raw = draft[key(centroId, concepto)];
-    const monto = Number(raw);
-    if (raw == null || raw === '' || isNaN(monto)) return;
+    if (!canWrite) return;
+    if (!esDirty(centroId, concepto)) return; // blur sin cambio real => NO postea (dirty-check D2)
+    const monto = Number(draft[key(centroId, concepto)]);
     try {
       await contabilidadService.costoPersonalUpsert({ Anio: anio, Mes: mes, IdCentroCosto: centroId, Concepto: concepto, Monto: monto });
+      // Actualiza SOLO esta celda en el estado local (sin load() completo): preserva lo que el
+      // usuario este tipeando en otras celdas. Updates funcionales para no pisar estado concurrente.
+      setData((prev) => {
+        const idx = prev.findIndex((r) => r.i_IdCentroCosto === centroId && r.v_Concepto === concepto);
+        if (idx >= 0) return prev.map((r, i) => (i === idx ? { ...r, d_Monto: monto } : r));
+        const centro = centros.find((c) => c.i_IdCentroCosto === centroId);
+        return [...prev, {
+          i_Id: 0, n_Anio: anio, n_Mes: mes, i_IdCentroCosto: centroId,
+          CentroCosto: centro?.v_Nombre ?? '', v_Concepto: concepto, d_Monto: monto,
+          v_Estado: 'POR_PAGAR', t_FechaPago: null,
+        }];
+      });
+      setDraft((d) => ({ ...d, [key(centroId, concepto)]: String(monto) }));
       toast.success('Guardado', { id: 'cp-save' });
-      load();
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al guardar'); }
   };
 
   const pagarMes = async () => {
+    // Flush ANTES de pagar: persiste cualquier celda editada aun sin guardar (p.ej. la celda
+    // enfocada, cuyo blur corre en carrera con este click) para que el pago no deje montos afuera.
+    const pendientes: [number, string][] = [];
+    centros.forEach((c) => CONCEPTOS_PERSONAL.forEach((con) => {
+      if (esDirty(c.i_IdCentroCosto, con)) pendientes.push([c.i_IdCentroCosto, con]);
+    }));
+    for (const [cId, con] of pendientes) await guardarCelda(cId, con);
     if (!window.confirm(`Marcar como PAGADO todos los costos POR PAGAR de ${MESES[mes - 1]} ${anio}?`)) return;
     try {
-      const n = await contabilidadService.costoPersonalPagar(anio, mes, new Date().toISOString().slice(0, 10));
+      // FechaPago = ultimo dia del mes contabilizado (NO hoy). El flujo detallado agrupa por MONTH(t_FechaPago),
+      // asi el costo de un mes cae en ESE mes aunque el pago se registre despues. (El SP ademas la
+      // deriva server-side; el contrato del service se mantiene intacto.)
+      const ultimoDia = new Date(anio, mes, 0).getDate();
+      const fechaPago = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+      const n = await contabilidadService.costoPersonalPagar(anio, mes, fechaPago);
       toast.success(`${n} conceptos pagados`);
       load();
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Error al pagar'); }
@@ -113,23 +151,38 @@ const CostosPersonal: React.FC = () => {
                 <td className="px-3 py-1.5 sticky left-0 bg-white dark:bg-slate-800 font-medium text-slate-700 dark:text-slate-200">{c.v_Nombre}</td>
                 {CONCEPTOS_PERSONAL.map((concepto) => {
                   const k = key(c.i_IdCentroCosto, concepto);
-                  const est = estadoDe(c.i_IdCentroCosto, concepto);
+                  const row = rowDe(c.i_IdCentroCosto, concepto);
+                  const pagado = row?.v_Estado === 'PAGADO';
+                  const dirty = esDirty(c.i_IdCentroCosto, concepto);
                   return (
                     <td key={concepto} className="px-1 py-1 text-right">
                       <input
                         type="number" step="0.01"
-                        disabled={!canWrite || est === 'PAGADO'}
+                        disabled={!canWrite}
+                        // PAGADO: readOnly (el SP rechaza el upsert de un concepto pagado con 400 — se previene en UI).
+                        readOnly={pagado}
                         value={draft[k] ?? ''}
-                        onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}
+                        onChange={(e) => { if (pagado) return; setDraft((d) => ({ ...d, [k]: e.target.value })); }}
                         onBlur={() => guardarCelda(c.i_IdCentroCosto, concepto)}
                         onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                         className={`w-24 px-2 py-1 rounded border text-right text-xs outline-none focus:ring-2 focus:ring-emerald-500 ${
-                          est === 'PAGADO'
-                            ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700'
+                          pagado
+                            ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 cursor-default'
                             : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100'
                         }`}
                         placeholder="0.00"
                       />
+                      {/* affordance por celda: PAGADO / sin guardar (dirty) / ✓ guardado. Aclara el flujo
+                          "guardar celda (blur) vs Pagar mes" sin rediseñar la grilla. */}
+                      <div className="h-3 pr-1 text-right text-[9px] leading-3">
+                        {pagado
+                          ? <span className="text-emerald-600 dark:text-emerald-400">PAGADO</span>
+                          : dirty
+                            ? <span className="text-amber-500">● sin guardar</span>
+                            : row
+                              ? <span className="text-slate-400">✓ guardado</span>
+                              : null}
+                      </div>
                     </td>
                   );
                 })}
@@ -146,7 +199,7 @@ const CostosPersonal: React.FC = () => {
           </tfoot>
         </table>
       </div>
-      <p className="text-xs text-slate-400 mt-2 flex items-center gap-1"><Save className="h-3 w-3" /> Los montos en verde ya fueron pagados y no se editan. "Pagar mes" impacta la caja del mes seleccionado.</p>
+      <p className="text-xs text-slate-400 mt-2 flex items-center gap-1"><Save className="h-3 w-3" /> Los montos en verde ya fueron pagados y no se editan. "Pagar mes" guarda primero cualquier celda pendiente e impacta la caja del mes seleccionado.</p>
     </div>
   );
 };

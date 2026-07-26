@@ -1,9 +1,11 @@
 // Helpers puros del Dashboard Gerencial/Contable (formatters es-PE, paletas, utilidades de charts).
 // Sin JSX ni React aquí (ver DashUI.tsx para los componentes visuales).
 
+import { moneyPEN } from '../../../../utils/money';
+
 // ---- Moneda / números (convención conta: es-PE, prefijo S/) ----
-export const money = (n: number | null | undefined): string =>
-  `S/ ${(n ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// Re-export del util único (misma semántica que la copia local que había antes).
+export const money = moneyPEN;
 
 // Moneda compacta para tooltips/labels donde el ancho manda.
 export const moneyC = (n: number | null | undefined): string =>

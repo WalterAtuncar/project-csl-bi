@@ -1,4 +1,6 @@
-export { default as ContaLogin } from './ContaLogin';
+// [SOFT-DELETE 2026-07-25] ContaLogin (breakglass) fuera del barrel: no tiene ruta desde el
+// routing unificado (App.tsx no registra /conta/login). La pagina queda INTACTA en disco;
+// restaurar = re-agregar este export y su <Route>.
 export { default as ContaLayout } from './ContaLayout';
 export { default as Dashboard } from './Dashboard';
 export { default as Egresos } from './Egresos';

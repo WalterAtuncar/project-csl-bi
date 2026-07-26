@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import type { FlujoDetallado, FlujoMesRow } from '../../../services/contabilidad/contaTypes';
+import { CONCEPTOS_PERSONAL, conceptoLabel } from '../../../services/contabilidad/contaTypes';
 import { MESES, money, rowClass, cellBg } from './flujoShared';
 import type { Row, RowKind } from './flujoShared';
 
@@ -27,7 +28,9 @@ const PERS_UNITS: { unidad: string; label: string }[] = [
   { unidad: 'FARMACIA', label: 'FARMACIA' },
   { unidad: 'SISOL', label: 'SISOL' },
 ];
-const CONCEPTOS = ['REMUNERACIONES', 'GRATIFICACIONES', 'CTS', 'UTILIDADES', 'BENEFICIOS SOCIALES', 'PERSONAL ADICIONAL'];
+// Conceptos: MISMA lista canonica que graba CostosPersonal (conta.costo_personal_mensual.v_Concepto).
+// Antes estaba hardcodeada en plural ('REMUNERACIONES'...) y NO matcheaba lo grabado ('REMUNERACION'...) -> celdas vacias.
+// conceptoLabel viene de contaTypes (definicion UNICA, junto a CONCEPTOS_PERSONAL).
 
 // Etiquetas de seccion (nodos raiz del catalogo conta.tipo_gasto). Las HOJAS salen del catalogo
 // del backend (extensibles, D2); solo estos encabezados estructurales son fijos.
@@ -134,10 +137,10 @@ const FlujoDetalladoSection: React.FC<Props> = ({ detalle, resumen, filtroActivo
       ...persExtra.sort().map((unidad) => ({ unidad, label: prettyUnidad(unidad), extra: true as const })),
     ];
     for (const u of persUnits) {
-      const conceptRows = CONCEPTOS.map((c) => ({ c, m: persMonths(u.unidad, c) }));
+      const conceptRows = CONCEPTOS_PERSONAL.map((c) => ({ label: conceptoLabel(c), m: persMonths(u.unidad, c) }));
       if ('extra' in u && u.extra && !conceptRows.some((r) => sumArr(r.m) !== 0)) continue;  // ADMINISTRACION solo si != 0 (D6)
       push(u.label, emptyMonths(), 'header', 2);
-      conceptRows.forEach((r) => push(r.c, r.m, 'detail', 3));
+      conceptRows.forEach((r) => push(r.label, r.m, 'detail', 3));
     }
 
     // Egresos por seccion × hoja. Cada seccion: hojas del catalogo (orden del seed) + hojas
@@ -177,6 +180,15 @@ const FlujoDetalladoSection: React.FC<Props> = ({ detalle, resumen, filtroActivo
     push('CAJA OPERATIVA + FINANCIAMIENTO', val((r) => r.CajaOpFinanciamiento), 'total');
     pushSeccion('OTROS_EGRESOS', 1, 2);
     pushSeccion('OTROS_INGRESOS', 1, 2);
+    // Secciones NO contempladas en el layout fijo (nodo raiz NUEVO en conta.tipo_gasto): se
+    // renderizan al final con el patron "extra" (como persExtra) en vez de caerse en silencio.
+    // Antes, los rubros de una seccion nueva desaparecian del detalle y este dejaba de cuadrar
+    // con el consolidado sin ningun aviso (brecha A6 de la auditoria 2026-07-25).
+    const seccionesFijas = new Set(['ADMIN', 'MEDICO', 'TRIBUTOS', 'RENTA', 'INVERSION', 'FINANCIAMIENTO', 'OTROS_EGRESOS', 'OTROS_INGRESOS']);
+    const seccionesExtra: string[] = [];
+    catalogo.forEach((c) => { if (!seccionesFijas.has(c.Seccion) && !seccionesExtra.includes(c.Seccion)) seccionesExtra.push(c.Seccion); });
+    egresos.forEach((x) => { if (!seccionesFijas.has(x.Seccion) && !seccionesExtra.includes(x.Seccion)) seccionesExtra.push(x.Seccion); });
+    seccionesExtra.sort().forEach((s) => pushSeccion(s, 1, 2));
     push('SALDO DE CAJA', val((r) => r.SaldoDeCaja), 'total');
     const saldoIni = val((r) => r.SaldoInicial);
     const saldoFin = val((r) => r.SaldoFinal);

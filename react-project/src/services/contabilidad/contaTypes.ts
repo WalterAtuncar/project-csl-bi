@@ -208,6 +208,10 @@ export const CONCEPTOS_PERSONAL = [
   'PERSONAL_ADICIONAL',
 ] as const;
 
+// Etiqueta legible de un concepto canonico ('BENEFICIOS_SOCIALES' -> 'BENEFICIOS SOCIALES').
+// UNICA definicion (antes duplicada byte a byte en CostosPersonal.tsx y FlujoDetalladoSection.tsx).
+export const conceptoLabel = (c: string): string => c.replace(/_/g, ' ');
+
 // ---- Motor de caja ----
 // Catalogo dinamico de medios de pago con uso reciente (conta.sp_Caja_FormasPago).
 export interface FormaPagoRow {
@@ -215,24 +219,8 @@ export interface FormaPagoRow {
   FormaPago: string;
 }
 
-export interface CajaIngresoRow {
-  i_IdTipoCaja: number | null;
-  Unidad: string | null;
-  i_IdFormaPago: number | null;
-  FormaPago: string | null;
-  EsCobranzaCredito: boolean;
-  Dia: string;
-  Monto: number;
-}
-
-export interface CajaEgresoRow {
-  Seccion: string;
-  i_IdCentroCosto: number | null;
-  CentroCosto: string | null;
-  Dia: string;
-  EsIngreso: boolean;
-  Monto: number;
-}
+// [ELIMINADOS 2026-07-25] CajaIngresoRow/CajaEgresoRow: tipos de /caja/ingresos y /caja/egresos,
+// endpoints que ninguna pantalla consume (dead code verificado en la auditoria; el API los conserva).
 
 export interface CajaDiaRow {
   Dia: string;
@@ -401,16 +389,8 @@ export interface RentabilidadGastoRow {
   CentroCosto: string | null;
   Gasto: number;
 }
-export interface RentabilidadIngresoRow {
-  i_IdTipoCaja: number | null;
-  Unidad: string;
-  BrutoConIGV: number;
-  IGV: number;
-  NetoSinIGV: number;
-  PorcClinica: number;
-  NetoRentabilidad: number;
-  ParticipacionHospital: number;
-}
+// [ELIMINADO 2026-07-25] RentabilidadIngresoRow: tipo de GET /rentabilidad/ingresos, endpoint sin
+// metodo en el service ni consumidor en UI (dead code verificado en la auditoria; el API lo conserva).
 export interface ComparativaMesRow {
   Mes: number;
   Ingresos: number;

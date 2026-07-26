@@ -6,13 +6,12 @@ import {
 import contabilidadService from '../../../services/contabilidad/ContabilidadService';
 import type { ReconEstadoResponse, ReconLogRow } from '../../../services/contabilidad/contaTypes';
 import { useContaAuth } from '../../../context/ContaAuthContext';
+import { money } from '../../../utils/money';
 
 // Indicador del estado de la RECONCILIACIÓN DE LA CAJA MAYOR LEGACY (dbo.cajamayor_*), mantenida por
 // el BackgroundService del API conta (PLAN_RECONCILIACION_CIERRE_DIARIO — RESULTADOS FASE 2/3).
 // IMPORTANTE: es una tubería DISTINTA de la Caja Diaria del módulo conta; el rótulo lo deja claro.
 // Vive con el JWT conta (usa contabilidadService / useContaAuth).
-
-const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Timestamps: t_Inicio del log llega en hora local (reloj SQL = Lima, sin 'Z'); ProximoHorarioUtc
 // llega en UTC (con 'Z'). new Date() interpreta cada caso según lleve o no zona, y toLocale* siempre

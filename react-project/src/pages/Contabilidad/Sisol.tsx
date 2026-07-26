@@ -7,6 +7,7 @@ import { Calculator, CreditCard, Plus, Trash2, Building2, HeartPulse, RefreshCw 
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 import { useContaAuth } from '../../context/ContaAuthContext';
 import type { SisolDetalle, SisolEspecialistaInput } from '../../services/contabilidad/contaTypes';
+import { todayLima } from '../../utils/fechas';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -46,7 +47,7 @@ const Sisol: React.FC = () => {
 
   const pagar = async () => {
     if (!liq) return;
-    const fecha = window.prompt('Fecha de pago (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
+    const fecha = window.prompt('Fecha de pago (YYYY-MM-DD):', todayLima());
     if (!fecha) return;
     try {
       await contabilidadService.sisolPagar(liq.i_IdLiquidacion, fecha);

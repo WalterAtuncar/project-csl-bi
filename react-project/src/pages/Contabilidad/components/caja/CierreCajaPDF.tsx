@@ -8,8 +8,7 @@ import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/r
 import { CLINICA, LOGO_URL } from '../honorarios/ReciboPDF';
 import { unidadCorto } from '../dashboard/dashHelpers';
 import { CuadreExportData, resumenPorUnidad } from './excelCuadreCaja';
-
-const money = (n: number) => `S/ ${(n ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { moneyPEN as money } from '../../../../utils/money';
 
 // YYYY-MM-DD -> "dd - mm - yyyy" por SPLIT del string (nunca new Date('YYYY-MM-DD'): shift UTC->Lima).
 const fechaGuiones = (iso: string): string => {

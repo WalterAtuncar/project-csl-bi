@@ -8,8 +8,7 @@ import { Tag, CheckCircle2, RefreshCw, X } from 'lucide-react';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 import { useContaAuth } from '../../context/ContaAuthContext';
 import type { CompraRow, CentroCosto, TipoGasto } from '../../services/contabilidad/contaTypes';
-
-const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+import { money } from '../../utils/money';
 
 const Compras: React.FC = () => {
   const { canWrite } = useContaAuth();

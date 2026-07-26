@@ -11,6 +11,8 @@ import type {
   Egreso, CentroCosto, TipoGasto, Entidad, CuentaBancaria, ProveedorRow, ProveedorCreate,
   EgresoCreate, EgresoCargaFila, EgresoCargaResultado, EstadoEgreso,
 } from '../../services/contabilidad/contaTypes';
+import { money } from '../../utils/money';
+import { todayLima } from '../../utils/fechas';
 
 const PAGE_SIZE = 15;
 const FORMAS_PAGO = [
@@ -18,8 +20,9 @@ const FORMAS_PAGO = [
   { id: 9, label: 'Deposito' },
   { id: 6, label: 'Cheque' },
 ];
-const money = (n: number) => n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const today = () => new Date().toISOString().slice(0, 10);
+// Fecha default = HOY de Lima (todayLima). Antes: toISOString() = fecha UTC -> desde las 19:00
+// hora Lima daba el dia siguiente y el egreso caia en la caja de manana.
+const today = todayLima;
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 // ---- Periodo (D2): el selector año/mes es AYUDA DE CAPTURA. No se envia al backend (el periodo
@@ -85,6 +88,10 @@ const Egresos: React.FC = () => {
   const [pagoInicial, setPagoInicial] = useState({ FechaPago: today(), IdFormaPago: 1, IdCuentaBancaria: 0 });
   const [pagarFor, setPagarFor] = useState<Egreso | null>(null);
   const [pago, setPago] = useState({ FechaPago: today(), IdFormaPago: 1, IdCuentaBancaria: 0 });
+  // Anulacion con modal propio (patron Modal de esta misma pagina; antes window.prompt con default
+  // 'error de tipeo'): motivo OBLIGATORIO, boton deshabilitado si esta vacio.
+  const [anularFor, setAnularFor] = useState<Egreso | null>(null);
+  const [motivoAnular, setMotivoAnular] = useState('');
   const [cargaResult, setCargaResult] = useState<EgresoCargaResultado | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -276,12 +283,13 @@ const Egresos: React.FC = () => {
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Error al pagar'); }
   };
 
-  const doAnular = async (e: Egreso) => {
-    const motivo = window.prompt(`Anular egreso #${e.i_IdEgreso}. Motivo:`, 'error de tipeo');
-    if (motivo === null) return;
+  const doAnular = async () => {
+    if (!anularFor) return;
+    if (!motivoAnular.trim()) { toast.error('El motivo es obligatorio'); return; }
     try {
-      await contabilidadService.egresoAnular(e.i_IdEgreso, motivo);
+      await contabilidadService.egresoAnular(anularFor.i_IdEgreso, motivoAnular.trim());
       toast.success('Egreso anulado');
+      setAnularFor(null); setMotivoAnular('');
       load();
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Error al anular'); }
   };
@@ -463,7 +471,7 @@ const Egresos: React.FC = () => {
                       <>
                         <button title="Editar" onClick={() => openEditar(e.i_IdEgreso)} className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600"><Pencil className="h-4 w-4 text-slate-500" /></button>
                         <button title="Pagar" onClick={() => { setPagarFor(e); setPago({ FechaPago: today(), IdFormaPago: 1, IdCuentaBancaria: 0 }); }} className="p-1.5 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/40"><CreditCard className="h-4 w-4 text-emerald-600" /></button>
-                        <button title="Anular" onClick={() => doAnular(e)} className="p-1.5 rounded hover:bg-rose-100 dark:hover:bg-rose-900/40"><Ban className="h-4 w-4 text-rose-500" /></button>
+                        <button title="Anular" onClick={() => { setAnularFor(e); setMotivoAnular(''); }} className="p-1.5 rounded hover:bg-rose-100 dark:hover:bg-rose-900/40"><Ban className="h-4 w-4 text-rose-500" /></button>
                       </>
                     )}
                   </div>
@@ -686,6 +694,31 @@ const Egresos: React.FC = () => {
             </Field>
           </div>
           <p className="text-xs text-slate-400 mt-2">Al confirmar, el egreso pasa a PAGADO y su monto bruto impacta la caja en la fecha de pago.</p>
+        </Modal>
+      )}
+
+      {/* modal anular: motivo obligatorio (sin window.prompt ni motivo por defecto) */}
+      {anularFor && (
+        <Modal
+          title={`Anular egreso #${anularFor.i_IdEgreso}`}
+          onClose={() => setAnularFor(null)}
+          onSave={doAnular}
+          saveLabel="Confirmar anulación"
+          saveDisabled={!motivoAnular.trim()}
+        >
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+            {anularFor.Receptor} · S/ {money(anularFor.d_MontoNeto)} ({anularFor.v_TipoDocumento}{anularFor.v_SerieNumero ? ` ${anularFor.v_SerieNumero}` : ''})
+          </p>
+          <Field label="Motivo de anulación" full required>
+            <textarea
+              value={motivoAnular}
+              onChange={(e) => setMotivoAnular(e.target.value)}
+              rows={3}
+              placeholder="Explique el motivo de la anulación"
+              className={selCls}
+            />
+          </Field>
+          <p className="text-xs text-slate-400 mt-2">La anulación queda auditada con su usuario y el motivo.</p>
         </Modal>
       )}
 
