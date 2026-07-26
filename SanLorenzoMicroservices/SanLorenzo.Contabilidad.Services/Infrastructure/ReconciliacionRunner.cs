@@ -14,12 +14,16 @@ namespace Contabilidad.Infrastructure
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ReconciliacionOptions _opt;
+        private readonly ILogger<ReconciliacionRunner> _logger;
         private readonly SemaphoreSlim _gate = new(1, 1);
 
-        public ReconciliacionRunner(IServiceScopeFactory scopeFactory, IOptions<ReconciliacionOptions> opt)
+        public ReconciliacionRunner(
+            IServiceScopeFactory scopeFactory, IOptions<ReconciliacionOptions> opt,
+            ILogger<ReconciliacionRunner> logger)
         {
             _scopeFactory = scopeFactory;
             _opt = opt.Value;
+            _logger = logger;
         }
 
         public async Task<List<ReconLogRow>> EjecutarTickAsync(
@@ -32,6 +36,28 @@ namespace Contabilidad.Infrastructure
                 var repo = scope.ServiceProvider.GetRequiredService<ReconciliacionRepository>();
                 var maxId = await repo.MaxLogIdAsync();
                 await repo.RunTickAsync(modo, barridoProfundo, origen, idUsuario, _opt.CommandTimeoutSeconds);
+
+                // Remediacion de consistencia EC (solo ESCRITURA): cierra el residuo HONORARIO/overlay
+                // de ventas EC anuladas post-tipificacion — el mismo evento (anulacion) que dispara la
+                // re-reconciliacion por huella. Un fallo aqui NO tumba el tick (la reconciliacion ya corrio).
+                if (ReconciliacionScheduler.NormalizeModo(modo) == "ESCRITURA")
+                {
+                    try
+                    {
+                        var caja = scope.ServiceProvider.GetRequiredService<CajaRepository>();
+                        var rem = caja.EgresosEcConsistenciaRemediar(idUsuario);
+                        if (rem.Total > 0)
+                            _logger.LogInformation(
+                                "[Reconciliacion] Consistencia EC: {Total} clasificacion(es) remediada(s) tras el tick.",
+                                rem.Total);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "[Reconciliacion] Fallo la remediacion de consistencia EC tras el tick (el tick NO se marca fallido).");
+                    }
+                }
+
                 return (await repo.LogSinceAsync(maxId)).ToList();
             }
             finally { _gate.Release(); }
