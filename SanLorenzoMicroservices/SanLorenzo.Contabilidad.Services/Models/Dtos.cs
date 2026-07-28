@@ -1487,4 +1487,174 @@ namespace Contabilidad.Models
         public List<DashHonorarioConsultorioRow> HonorariosConsultorio { get; set; } = new();
         public List<DashSisolLiquidacionRow> SisolLiquidaciones { get; set; } = new();
     }
+
+    // ---------- NLQ (consulta a BD en lenguaje natural) — §3.3 del PLAN_NLQ_CONTA ----------
+    // JSON = nombres C# exactos (PropertyNamingPolicy=null). El front espeja estos shapes.
+
+    /// <summary>Metadato de una columna del resultado para que el front formatee sin adivinar.</summary>
+    public class NlqColumnaDto
+    {
+        public string Nombre { get; set; }
+        public string Tipo { get; set; }      // tipo de dato SQL (nvarchar, decimal, datetime...)
+        public string Formato { get; set; }   // money | date | int | pct | text
+    }
+
+    /// <summary>Respuesta del endpoint POST /api/conta/nlq/preguntar.</summary>
+    public class NlqRespuestaDto
+    {
+        public string Sql { get; set; }
+        public List<NlqColumnaDto> Columnas { get; set; } = new();
+        public List<List<object>> Filas { get; set; } = new();
+        public string ChartSugerido { get; set; }   // bar | line | pie | scatter | kpi | tabla
+        public decimal Confianza { get; set; }       // 0..1
+        public string Fuente { get; set; }           // cache_guardada | cache_sem | generado
+        public int TokensIn { get; set; }
+        public int TokensOut { get; set; }
+        public string Error { get; set; }            // mensaje legible si no se pudo ejecutar
+        public string Advertencia { get; set; }      // drift de esquema, confianza baja, cap alcanzado...
+    }
+
+    /// <summary>Request de POST /api/conta/nlq/guardadas (guardar una consulta).</summary>
+    public class NlqGuardarDto
+    {
+        [Required, MaxLength(120)]
+        public string Nombre { get; set; }
+        [MaxLength(500)]
+        public string Descripcion { get; set; }
+        [Required]
+        public string Sql { get; set; }
+        [Required, MaxLength(20)]
+        public string ChartTipo { get; set; }
+        public string ChartConfig { get; set; }      // JSON opcional
+        public string Params { get; set; }           // JSON opcional (contrato §3.5: @p_* nombrados)
+    }
+
+    /// <summary>Item de GET /api/conta/nlq/guardadas.</summary>
+    public class NlqGuardadaDto
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; }
+        public string Descripcion { get; set; }
+        public string ChartTipo { get; set; }
+        public string Params { get; set; }
+        public bool DesactualizadaFlag { get; set; }  // el fingerprint de esquema difiere del actual
+    }
+
+    /// <summary>Datos de una consulta ejecutada (guardadas/{id}/ejecutar). Sin SQL/tokens (0 tokens).</summary>
+    public class NlqDatosDto
+    {
+        public List<NlqColumnaDto> Columnas { get; set; } = new();
+        public List<List<object>> Filas { get; set; } = new();
+        public string ChartTipo { get; set; }
+        public string ChartConfig { get; set; }
+    }
+
+    /// <summary>Conteo por dominio del catalogo activo (para la vista admin GET /api/conta/nlq/catalogo).</summary>
+    public class NlqCatalogoDominioDto
+    {
+        public string Dominio { get; set; }
+        public int Tablas { get; set; }
+        public int Columnas { get; set; }
+    }
+
+    /// <summary>Resumen del catalogo activo.</summary>
+    public class NlqCatalogoDto
+    {
+        public string Fingerprint { get; set; }
+        public int TotalObjetos { get; set; }
+        public int TotalColumnas { get; set; }
+        public List<NlqCatalogoDominioDto> Dominios { get; set; } = new();
+    }
+
+    // ---------- NLQ requests ----------
+    public class NlqPreguntarRequest { public string Pregunta { get; set; } }
+    public class NlqEjecutarGuardadaRequest { public Dictionary<string, object> Params { get; set; } }
+
+    // ---------- NLQ filas de SP (Dapper mapea por nombre EXACTO de columna) ----------
+    public class NlqTablaListaRow
+    {
+        public int i_IdNlqTabla { get; set; }
+        public string v_Base { get; set; }
+        public string v_Schema { get; set; }
+        public string v_Objeto { get; set; }
+        public string v_Dominio { get; set; }
+        public string v_Descripcion { get; set; }
+    }
+    public class NlqTablaDetRow
+    {
+        public int i_IdNlqTabla { get; set; }
+        public string v_Base { get; set; }
+        public string v_Schema { get; set; }
+        public string v_Objeto { get; set; }
+        public string v_TipoObjeto { get; set; }
+        public string v_Dominio { get; set; }
+        public string v_Descripcion { get; set; }
+    }
+    public class NlqColumnaDetRow
+    {
+        public int i_IdNlqTabla { get; set; }
+        public string v_Columna { get; set; }
+        public string v_TipoDato { get; set; }
+        public string v_Descripcion { get; set; }
+        public bool b_EsPk { get; set; }
+        public bool b_EsFk { get; set; }
+        public string v_FkObjeto { get; set; }
+    }
+    public class NlqReglaRow
+    {
+        public int i_IdRegla { get; set; }
+        public string v_Dominio { get; set; }
+        public string v_Objeto { get; set; }
+        public string v_Regla { get; set; }
+        public int i_Orden { get; set; }
+    }
+    /// <summary>Contenedor de los 3 resultsets de sp_Nlq_CatalogoDetalle.</summary>
+    public class NlqCatalogoDetalle
+    {
+        public List<NlqTablaDetRow> Tablas { get; set; } = new();
+        public List<NlqColumnaDetRow> Columnas { get; set; } = new();
+        public List<NlqReglaRow> Reglas { get; set; } = new();
+    }
+    public class NlqGuardadaRow
+    {
+        public int Id { get; set; }
+        public string v_Nombre { get; set; }
+        public string v_Descripcion { get; set; }
+        public string v_ChartTipo { get; set; }
+        public string v_Params { get; set; }
+        public string v_FingerprintEsquema { get; set; }
+    }
+    public class NlqGuardadaFullRow
+    {
+        public int Id { get; set; }
+        public string v_Nombre { get; set; }
+        public string v_Descripcion { get; set; }
+        public string v_Sql { get; set; }
+        public string v_ChartTipo { get; set; }
+        public string v_ChartConfig { get; set; }
+        public string v_Params { get; set; }
+        public string v_FingerprintEsquema { get; set; }
+        public int i_IdUsuario { get; set; }
+        public string v_Rol { get; set; }
+        public DateTime t_Fecha { get; set; }
+    }
+    public class NlqCacheSemRow
+    {
+        public int Id { get; set; }
+        public string v_ClaveNorm { get; set; }
+        public string v_Hash { get; set; }
+        public string v_Sql { get; set; }
+        public int i_Hits { get; set; }
+        public DateTime? t_Ultima { get; set; }
+        public DateTime t_Fecha { get; set; }
+    }
+    public class NlqCacheResRow
+    {
+        public int Id { get; set; }
+        public string v_HashSql { get; set; }
+        public string v_AsOf { get; set; }
+        public string v_Payload { get; set; }
+        public DateTime? t_Expira { get; set; }
+        public DateTime t_Fecha { get; set; }
+    }
 }

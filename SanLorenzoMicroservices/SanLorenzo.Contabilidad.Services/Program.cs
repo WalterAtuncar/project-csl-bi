@@ -1,8 +1,10 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Contabilidad.Infrastructure;
+using Contabilidad.Infrastructure.Nlq;
 using Contabilidad.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -81,6 +83,23 @@ builder.Services.AddScoped<DashboardRepository>();
 builder.Services.Configure<ReconciliacionOptions>(builder.Configuration.GetSection("Reconciliacion"));
 builder.Services.AddSingleton<ReconciliacionRunner>();
 builder.Services.AddHostedService<ReconciliacionHostedService>();
+
+// Modulo NLQ (consulta a BD en lenguaje natural). KILL SWITCH: Nlq:Enabled (nace false).
+// F4: solo se registran las piezas independientes de esquema (options + cliente Claude + guard +
+// validador). El Controller/Repository/pipeline se registran en tramos posteriores. Nada de esto
+// llama a Claude ni a la BD en el arranque: quedan dormidas tras el flag.
+builder.Services.Configure<NlqOptions>(builder.Configuration.GetSection("Nlq"));
+builder.Services.AddHttpClient<AnthropicClient>();
+builder.Services.AddSingleton<NlqValidator>();
+builder.Services.AddSingleton<INlqGuard>(sp =>
+    new NlqGuard(sp.GetRequiredService<IOptions<NlqOptions>>().Value));
+builder.Services.AddSingleton<NlqReaderDb>();          // conexion read-only (lazy: no falla si falta la cadena)
+builder.Services.AddScoped<NlqRepository>();
+builder.Services.AddScoped<NlqExecutor>();
+builder.Services.AddScoped<NlqCache>();
+builder.Services.AddScoped<NlqRetriever>();
+builder.Services.AddScoped<NlqGenerator>();
+builder.Services.AddScoped<NlqService>();
 
 // Cliente legacy para el login unificado (server-to-server; la contrasena solo transita).
 builder.Services.AddHttpClient<LegacyAuthClient>((sp, client) =>

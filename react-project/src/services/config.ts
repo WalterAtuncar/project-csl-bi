@@ -56,7 +56,7 @@ export const defaultConfig: AppConfig = {
   },
   ai: {
     anthropic: {
-      apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || 'AGQn0vNmKbmoyau1W0uYngBbykGHjDOPlFIxlKEfK3jchUkMo4GVhKrDSZQC/FaDf0rc/0TLWp9WLLQaNUSiUXCYhKpvoWU/e97cOmsE5l0cxhEPHFJnObK/CVmpfjL9VIrPTJxGkpdBmJ9M048R0g==',
+      apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY || '',
       defaultModel: 'claude-3-5-sonnet-20241022', // Claude 3.5 Sonnet más reciente
       maxTokens: 4000,
       temperature: 0.7,

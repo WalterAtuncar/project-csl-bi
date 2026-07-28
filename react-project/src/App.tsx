@@ -4,7 +4,7 @@ import Login from './pages/Login/Login';
 import NotFound from './pages/NotFound';
 import { GlobalLoader, ToastProvider } from './components/UI';
 import { ContaAuthProvider } from './context/ContaAuthContext';
-import { ContaLayout, Dashboard, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, Honorarios, Epidemiologia, Catalogos, Usuarios } from './pages/Contabilidad';
+import { ContaLayout, Dashboard, Egresos, CostosPersonal, CajaDiaria, FlujoConsolidado, Rentabilidad, Honorarios, Epidemiologia, Catalogos, Usuarios, Consultas } from './pages/Contabilidad';
 // [SOFT-DELETE 2026-07-13] Registro de Compras absorbido por Egresos (/conta/egresos), que ahora
 // unifica compras (receptor PROVEEDOR) + entidades. La ruta /conta/compras redirige a /conta/egresos
 // para no romper bookmarks. El componente Compras sigue en disco (bandeja fiscal sin feed). Restaurar
@@ -43,6 +43,9 @@ const App: React.FC = () => {
           <Route element={<ContaLayout />}>
             <Route index element={<Navigate to="/conta/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
+            {/* Consulta a BD en lenguaje natural (NL2SQL). Accesible a SA/CONTABILIDAD/GERENTE; el guardar/
+                borrar se gatea por canWrite dentro de la pagina. El API valida rol + feature-flag (404 si OFF). */}
+            <Route path="consultas" element={<Consultas />} />
             <Route path="caja" element={<CajaDiaria />} />
             <Route path="flujo-consolidado" element={<FlujoConsolidado />} />
             <Route path="rentabilidad" element={<Rentabilidad />} />

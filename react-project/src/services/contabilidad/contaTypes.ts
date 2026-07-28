@@ -1081,3 +1081,59 @@ export interface DashContableResponse {
   HonorariosConsultorio: DashHonorarioConsultorioRow[];
   SisolLiquidaciones: DashSisolLiquidacionRow[];
 }
+
+// ==== NLQ — Consulta a BD en lenguaje natural (endpoints /api/conta/nlq/*) ====
+// Espejo 1:1 de los DTOs del API (PLAN_NLQ_CONTA §3.3). El API serializa con PropertyNamingPolicy=null
+// => el JSON llega en PascalCase EXACTO de las propiedades C#, NO camelCase (regla de oro del modulo
+// conta; el §3.4 del plan que dice "camelCase" es un lapsus del planificador — manda el casing real).
+// Modulo bajo feature-flag (Nlq:Enabled): con flag OFF los endpoints responden 404 => "modulo no disponible".
+export type NlqFormato = 'money' | 'date' | 'int' | 'pct' | 'text';
+export type NlqChartTipo = 'bar' | 'line' | 'pie' | 'scatter' | 'kpi' | 'tabla';
+
+// Celda de una fila (object[][] alineado con Columnas): fechas como ISO string, decimales como number,
+// booleanos, o null. El front formatea cada celda por Columnas[i].Formato (nunca adivina el tipo).
+export type NlqCelda = string | number | boolean | null;
+
+export interface NlqColumna {
+  Nombre: string;
+  Tipo: string;        // tipo SQL informativo (para diagnostico)
+  Formato: NlqFormato; // como formatea el front la celda: money->money.ts, date->fecha local, pct->%, etc.
+}
+
+export interface NlqRespuesta {
+  Sql: string;                 // SQL generado (colapsable a la vista, para construir confianza)
+  Columnas: NlqColumna[];
+  Filas: NlqCelda[][];
+  ChartSugerido: NlqChartTipo;
+  Confianza: number;           // 0..1
+  Fuente: string;              // generado | cache_sem | cache_guardada
+  TokensIn: number;
+  TokensOut: number;
+  Error: string | null;        // si no-nulo: se muestra el error + SQL a la vista, SIN filas
+  Advertencia: string | null;  // drift de esquema / confianza baja / cap de filas alcanzado
+}
+
+export interface NlqGuardar {
+  Nombre: string;
+  Descripcion: string;
+  Sql: string;
+  ChartTipo: NlqChartTipo;
+  ChartConfig?: string | null; // JSON opcional (config del chart)
+  Params?: string | null;      // JSON opcional (parametros @p_* de la guardada)
+}
+
+export interface NlqGuardada {
+  Id: number;
+  Nombre: string;
+  Descripcion: string;
+  ChartTipo: NlqChartTipo;
+  Params: string | null;
+  DesactualizadaFlag: boolean; // el fingerprint de esquema difiere del guardado => aviso, no bloquea
+}
+
+export interface NlqDatos {
+  Columnas: NlqColumna[];
+  Filas: NlqCelda[][];
+  ChartTipo: NlqChartTipo;
+  ChartConfig: string | null;
+}

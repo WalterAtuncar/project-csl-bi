@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope, Activity, LayoutDashboard } from 'lucide-react';
+import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope, Activity, LayoutDashboard, Sparkles } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
 import { useScrollTopOnNavigate } from '../../hooks/useScrollTopOnNavigate';
-import { authService } from '../../services';
+import { authService } from '../../services/AuthService';
 import ContaSidebar from './components/ContaSidebar';
 import ContaHeader from './components/ContaHeader';
 import Footer from '../../components/Layout/Footer';
@@ -13,6 +13,9 @@ import Footer from '../../components/Layout/Footer';
 const navItems: { to: string; label: string; icon: React.ComponentType<{ className?: string }>; need?: 'write' | 'SA' }[] = [
   // Dashboard PRIMERO de la lista (pedido explícito del usuario). Visible a todo usuario conta.
   { to: '/conta/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  // Consulta en lenguaje natural: visible a todo usuario conta (SA/CONTABILIDAD/GERENTE); guardar/borrar
+  // se gatea por canWrite dentro de la pagina, no en el menu.
+  { to: '/conta/consultas', label: 'Consultas IA', icon: Sparkles },
   { to: '/conta/caja', label: 'Caja Diaria', icon: Wallet },
   { to: '/conta/flujo-consolidado', label: 'Flujo Consolidado', icon: TrendingUp },
   { to: '/conta/rentabilidad', label: 'Rentabilidad', icon: PieChart },

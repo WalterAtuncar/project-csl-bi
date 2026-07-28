@@ -5,7 +5,7 @@ import { User, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Button from '../../components/UI/Button';
 import { useTheme } from '../../context/ThemeContext';
 import ThemeToggle from '../../components/UI/ThemeToggle';
-import { authService } from '../../services';
+import { authService } from '../../services/AuthService';
 import contabilidadService from '../../services/contabilidad/ContabilidadService';
 
 const Login: React.FC = () => {

@@ -77,7 +77,12 @@ class ContabilidadService {
         // ValidationProblemDetails {errors:{Campo:[...]},title} (DataAnnotations).
         const data = error.response?.data as { message?: string; title?: string; errors?: Record<string, string[]> } | undefined;
         const validacion = data?.errors ? Object.values(data.errors).flat().join('; ') : undefined;
-        return Promise.reject(new Error(data?.message || validacion || data?.title || error.message || 'Error de conexion'));
+        // Se adjunta el status HTTP al Error (ADITIVO: no cambia .message ni instanceof Error, los callers
+        // existentes siguen leyendo solo .message). Lo consume la pantalla NLQ para distinguir 429 (throttle),
+        // 404 (modulo apagado) y 400 (pregunta invalida) y dar un mensaje especifico.
+        const err = new Error(data?.message || validacion || data?.title || error.message || 'Error de conexion') as Error & { status?: number };
+        err.status = error.response?.status;
+        return Promise.reject(err);
       }
     );
   }
@@ -475,6 +480,44 @@ class ContabilidadService {
     if (f.tiposCaja) params.tiposCaja = f.tiposCaja;
     const { data } = await this.http.get<DashContableResponse>('/dashboard/contable', { params, timeout: 60000 } as never);
     return data;
+  }
+
+  // ---- NLQ: consulta a BD en lenguaje natural (base /nlq; JWT conta; PLAN_NLQ_CONTA §3.1) ----
+  // Modulo bajo feature-flag en el API (Nlq:Enabled): con flag OFF TODOS estos endpoints responden 404
+  // (la pantalla muestra "modulo no disponible"). La API KEY del proveedor de IA vive SOLO en el API conta
+  // (appsettings.Local.json GITIGNORADO) -> el navegador NUNCA la ve ni llama al proveedor de IA (invariante #1).
+  // preguntar: dispara el pipeline NL2SQL server-side. Opus puede tardar (efort alto) -> timeout amplio
+  // + skipLoader (la pantalla pinta su propio estado "generando..."; el loader global de un POST diria
+  // "Guardando datos...", semanticamente erroneo para una consulta). Sin streaming (la key no toca el front).
+  async nlqPreguntar(pregunta: string): Promise<import('./contaTypes').NlqRespuesta> {
+    const { data } = await this.http.post<import('./contaTypes').NlqRespuesta>(
+      '/nlq/preguntar', { Pregunta: pregunta }, { timeout: 180000, skipLoader: true } as never);
+    return data;
+  }
+  // Guardar la consulta actual (SQL + tipo de chart) para re-ejecutarla sin gastar tokens. Roles SA/CONTABILIDAD
+  // (el API valida 403; la UI oculta el boton). Respuesta anonima { id } (PropertyNamingPolicy no aplica a
+  // objetos anonimos -> la prop se serializa tal cual 'id'); se tolera Id por robustez.
+  async nlqGuardar(dto: import('./contaTypes').NlqGuardar): Promise<number> {
+    const { data } = await this.http.post<{ id?: number; Id?: number }>('/nlq/guardadas', dto);
+    return (data.id ?? data.Id) as number;
+  }
+  // Lista de consultas guardadas visibles al usuario segun su rol. DesactualizadaFlag => el esquema cambio
+  // desde que se guardo (aviso, no bloquea la ejecucion).
+  async nlqListarGuardadas(): Promise<import('./contaTypes').NlqGuardada[]> {
+    const { data } = await this.http.get<import('./contaTypes').NlqGuardada[]>('/nlq/guardadas');
+    return data;
+  }
+  // Re-ejecuta una guardada (0 tokens). params opcional para las guardadas parametrizadas (@p_* via Dapper,
+  // JAMAS interpolacion). skipLoader + spinner local (mismo motivo que preguntar). El SQL guardado se
+  // RE-VALIDA server-side antes de ejecutar (defensa en profundidad).
+  async nlqEjecutarGuardada(id: number, params?: Record<string, unknown>): Promise<import('./contaTypes').NlqDatos> {
+    const { data } = await this.http.post<import('./contaTypes').NlqDatos>(
+      `/nlq/guardadas/${id}/ejecutar`, { Params: params ?? {} }, { skipLoader: true } as never);
+    return data;
+  }
+  // Borrado logico de una guardada (cada quien borra las suyas; SA cualquiera). Roles SA/CONTABILIDAD.
+  async nlqBorrarGuardada(id: number): Promise<void> {
+    await this.http.delete(`/nlq/guardadas/${id}`);
   }
 }
 

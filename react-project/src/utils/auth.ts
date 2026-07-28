@@ -1,7 +1,7 @@
 // Utilidades transversales para obtener datos de autenticación desde localStorage
 // Nota: lee directamente la clave `userData` y extrae `systemUserId`
 
-import { authService } from '../services';
+import { authService } from '../services/AuthService';
 
 export interface StoredUserData {
   systemUserId?: number;
