@@ -226,12 +226,14 @@ GO
 INSERT INTO conta.nlq_tabla (v_Base, v_Schema, v_Objeto, v_TipoObjeto, v_Dominio, b_Activa, v_Descripcion)
 SELECT x.v_Base, x.v_Schema, x.v_Objeto, x.v_TipoObjeto, x.v_Dominio, 1, x.v_Descripcion
 FROM (VALUES
+    -- Descripciones con anclas de vocabulario (USAR PARA) = fix aplicado en PROD post-F2.
+    -- Sincronizadas al repo en RONDA PLATA (2026-07-28) para que un deploy fresco nazca igual.
     ('20505310072','conta','v_nlq_ventas','V','ventas',
-     'Ventas facturadas (devengado) con los 4 filtros sagrados ya aplicados. 1 fila por venta. TotalNeto sin IGV; unidad de negocio en Unidad.'),
+     'Ventas facturadas (devengado) con los 4 filtros sagrados ya aplicados. 1 fila por venta. TotalNeto sin IGV; unidad de negocio en Unidad. USAR PARA: facturado, vendido, ventas, facturacion, cuanto se vendio o facturo.'),
     ('20505310072','conta','v_nlq_caja','V','caja',
-     'Cobranzas (liquidez / caja). 1 fila por cobro. Importe = BRUTO cobrado (con IGV). NO aplica los 4 filtros de ventas. Medio de pago en FormaPago.'),
+     'Cobranzas (liquidez / caja). 1 fila por cobro. Importe = BRUTO cobrado (con IGV). NO aplica los 4 filtros de ventas. Medio de pago en FormaPago. USAR PARA: cobrado, caja, efectivo, cobranza, forma de pago, contado o credito, cuanto se cobro o ingreso a caja.'),
     ('20505310072','conta','v_nlq_rentabilidad','V','rentabilidad',
-     'Rentabilidad mensual por unidad: Ingresos NETO devengado (SISOL solo % clinica), Gastos (egresos+personal+caja mayor legacy), Resultado, MargenPorc.')
+     'Rentabilidad mensual por unidad: Ingresos NETO devengado (SISOL solo porcentaje clinica), Gastos (egresos+personal+caja mayor legacy), Resultado, MargenPorc. USAR PARA: rentabilidad, margen, ganancia, resultado, ingresos vs gastos, que unidad es mas rentable. NO usar para facturado o ventas (usa v_nlq_ventas) ni para cobrado o caja (usa v_nlq_caja).')
 ) x(v_Base, v_Schema, v_Objeto, v_TipoObjeto, v_Dominio, v_Descripcion)
 WHERE NOT EXISTS (
     SELECT 1 FROM conta.nlq_tabla t

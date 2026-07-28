@@ -182,3 +182,25 @@ GRANT SELECT ON dbo.receipHeader                      TO conta_nlq_reader;
 GO
 -- ROLLBACK SCALE: los grants caen con el DROP USER del rollback FASE B.
 -- =====================================================================
+
+
+-- #####################################################################
+-- EXTENSION RONDA "PLATA" (NLQ v2, vistas cross-DB). Fecha: 2026-07-28.
+--
+-- >>> APLICADO 2026-07-28 por db-experto (sa via db-console), con OK del PO. <<<
+--   GATE VERDE por impersonacion EXECUTE AS LOGIN (cross-DB): el reader lee
+--   conta.v_nlq_ingreso_consultorio (que alcanza SigesoftDesarrollo_2 por dentro)
+--   y sigue sin poder v_Password.
+--
+-- La vista v_nlq_ingreso_consultorio (ddl/23) vive en conta (BD 20505310072) y
+-- lee POR DENTRO dbo.venta/ventadetalle/tipocaja_clientetipo (BD principal, ya
+-- concedidas en F3) + SigesoftDesarrollo_2.dbo.service/protocol/systemparameter
+-- (ya concedidas en FASE B-SLICE). Solo falta conceder la VISTA en si.
+-- #####################################################################
+
+-- P1) GRANT SELECT en la vista nueva (BD principal 20505310072).
+USE [20505310072];
+GRANT SELECT ON conta.v_nlq_ingreso_consultorio TO conta_nlq_reader;
+GO
+-- ROLLBACK PLATA: el grant cae con el DROP USER (rollback F3) del user de 20505310072.
+-- =====================================================================
