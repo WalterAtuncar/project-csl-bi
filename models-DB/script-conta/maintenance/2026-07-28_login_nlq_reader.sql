@@ -202,5 +202,23 @@ GO
 USE [20505310072];
 GRANT SELECT ON conta.v_nlq_ingreso_consultorio TO conta_nlq_reader;
 GO
--- ROLLBACK PLATA: el grant cae con el DROP USER (rollback F3) del user de 20505310072.
+
+-- P2) GRANT SELECT en la vista de honorarios (ddl/24) + sus bases NUEVAS de la BD
+--     principal (dbo.cliente, dbo.systemuser). El resto de bases ya estaban: main
+--     venta/ventadetalle/cobranzadetalle (F3) + Sigesoft service/protocol/person/
+--     calendar/servicecomponent/systemuser/systemparameter (FASE B).
+--     (La vista resuelve por ownership chaining aunque no se concedan las bases;
+--      se conceden explicitas por robustez, como en F3.)
+--     >>> DENY OBLIGATORIO: la dbo.systemuser de la BD PRINCIPAL tambien tiene
+--         v_Password. El DENY que la seccion 6 (F3) intento aplicar NO quedo en
+--         prod (F3 no concedia esa tabla -> el DENY era moot y no persistio en el
+--         estado verificado). Al conceder ahora la tabla, este DENY es IMPRESCINDIBLE.
+--     Aplicado 2026-07-28.
+USE [20505310072];
+GRANT SELECT ON conta.v_nlq_honorarios TO conta_nlq_reader;
+GRANT SELECT ON dbo.cliente             TO conta_nlq_reader;
+GRANT SELECT ON dbo.systemuser          TO conta_nlq_reader;
+DENY  SELECT ON dbo.systemuser (v_Password) TO conta_nlq_reader;
+GO
+-- ROLLBACK PLATA: los grants caen con el DROP USER (rollback F3) del user de 20505310072.
 -- =====================================================================
