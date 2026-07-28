@@ -348,9 +348,15 @@ namespace Contabilidad.Infrastructure.Nlq
 
         private static bool CoincideAllowlist(string objNorm, HashSet<string> expandido)
         {
-            if (expandido.Contains(objNorm)) return true;
             var parts = objNorm.Split('.');
-            if (parts.Length >= 2 && expandido.Contains(parts[parts.Length - 2] + "." + parts[parts.Length - 1])) return true;
+            // Referencia de 3+ partes (cross-DB base.schema.objeto): exige coincidencia COMPLETA.
+            // Asi [OtraBD].[dbo].[service] NO se cuela por compartir 'dbo.service' con un objeto permitido.
+            if (parts.Length >= 3)
+                return expandido.Contains(objNorm);
+
+            // Referencia de 1-2 partes: coincidencia directa o por los ultimos dos segmentos (schema.objeto).
+            if (expandido.Contains(objNorm)) return true;
+            if (parts.Length == 2 && expandido.Contains(parts[0] + "." + parts[1])) return true;
             return false;
         }
 

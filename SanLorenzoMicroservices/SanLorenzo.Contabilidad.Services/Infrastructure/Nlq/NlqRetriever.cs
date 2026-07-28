@@ -14,8 +14,10 @@ namespace Contabilidad.Infrastructure.Nlq
     }
 
     /// <summary>
-    /// Tier 1: selecciona los objetos del catalogo relevantes para la pregunta usando Haiku.
-    /// Si Haiku falla o no devuelve objetos utiles, cae a un match por palabras clave (no bloquea).
+    /// Tier 1: selecciona los objetos del catalogo relevantes para la pregunta usando Haiku sobre el
+    /// ESQUELETO relacional (nombre + PK + FK de cada objeto activo). Asi Haiku ve el grafo de FK y puede
+    /// incluir TODAS las tablas de un JOIN necesario (clinico) sin recibir todas las columnas (barato).
+    /// Si Haiku falla o no elige nada util, cae a un match por palabras clave (no bloquea).
     /// NUNCA devuelve objetos fuera del catalogo activo.
     /// </summary>
     public class NlqRetriever
@@ -32,22 +34,14 @@ namespace Contabilidad.Infrastructure.Nlq
         }
 
         public async Task<NlqRetrievalResultado> RecuperarAsync(
-            string pregunta, List<NlqTablaListaRow> catalogo, CancellationToken ct = default)
+            string pregunta, List<NlqEsqueletoRow> esqueleto, CancellationToken ct = default)
         {
-            // Set de nombres validos (case-insensitive) por v_Objeto y por schema.objeto.
-            var validos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var t in catalogo)
-            {
-                validos.Add(t.v_Objeto);
-                validos.Add($"{t.v_Schema}.{t.v_Objeto}");
-            }
-
             try
             {
                 var r = await _claude.CrearMensajeAsync(
                     modelo: _opt.ModeloRetrieval,
                     system: NlqPrompt.SystemRetrieval(),
-                    userPrompt: NlqPrompt.UsuarioRetrieval(catalogo, pregunta),
+                    userPrompt: NlqPrompt.UsuarioRetrieval(esqueleto, pregunta),
                     jsonSchema: NlqPrompt.SchemaRetrieval,
                     maxTokens: 1024,
                     thinkingAdaptive: false,   // Haiku 4.5 no soporta thinking adaptive
@@ -67,15 +61,15 @@ namespace Contabilidad.Infrastructure.Nlq
                         string nombre = o.GetString();
                         if (string.IsNullOrWhiteSpace(nombre)) continue;
                         // Solo objetos que existen en el catalogo (anti-alucinacion). Normaliza a v_Objeto.
-                        var match = catalogo.FirstOrDefault(t =>
+                        var match = esqueleto.FirstOrDefault(t =>
                             string.Equals(t.v_Objeto, nombre, StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals($"{t.v_Schema}.{t.v_Objeto}", nombre, StringComparison.OrdinalIgnoreCase));
+                            string.Equals($"{t.v_Schema}.{t.v_Objeto}", nombre, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals($"{t.v_Base}.{t.v_Schema}.{t.v_Objeto}", nombre, StringComparison.OrdinalIgnoreCase));
                         if (match != null && !res.Objetos.Contains(match.v_Objeto)) res.Objetos.Add(match.v_Objeto);
                     }
                 }
 
                 if (res.Objetos.Count > 0) return res;
-                // Haiku no eligio nada util -> fallback.
                 _log.LogInformation("NLQ retriever: Haiku no devolvio objetos; usando fallback keyword.");
             }
             catch (Exception ex)
@@ -83,11 +77,11 @@ namespace Contabilidad.Infrastructure.Nlq
                 _log.LogWarning(ex, "NLQ retriever: fallo Haiku; usando fallback keyword.");
             }
 
-            return Fallback(pregunta, catalogo);
+            return Fallback(pregunta, esqueleto);
         }
 
         /// <summary>Match por palabras clave contra objeto+descripcion+dominio. Si nada matchea, devuelve TODO el catalogo.</summary>
-        public static NlqRetrievalResultado Fallback(string pregunta, List<NlqTablaListaRow> catalogo)
+        public static NlqRetrievalResultado Fallback(string pregunta, List<NlqEsqueletoRow> esqueleto)
         {
             var res = new NlqRetrievalResultado { Fallback = true, Intencion = null };
             var palabras = (pregunta ?? "")
@@ -97,14 +91,14 @@ namespace Contabilidad.Infrastructure.Nlq
                 .Distinct()
                 .ToList();
 
-            foreach (var t in catalogo)
+            foreach (var t in esqueleto)
             {
                 string blob = ($"{t.v_Objeto} {t.v_Descripcion} {t.v_Dominio}").ToLowerInvariant();
                 if (palabras.Any(w => blob.Contains(w)))
                     res.Objetos.Add(t.v_Objeto);
             }
             if (res.Objetos.Count == 0)
-                res.Objetos = catalogo.Select(t => t.v_Objeto).ToList();
+                res.Objetos = esqueleto.Select(t => t.v_Objeto).ToList();
             return res;
         }
     }

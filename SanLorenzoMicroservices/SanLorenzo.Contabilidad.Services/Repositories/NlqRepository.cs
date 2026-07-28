@@ -23,6 +23,14 @@ namespace Contabilidad.Repositories
                 commandType: CommandType.StoredProcedure).AsList();
         }
 
+        /// <summary>Esqueleto relacional (objeto + PKs + FKs) de los objetos activos, para el retriever.</summary>
+        public List<NlqEsqueletoRow> CatalogoEsqueleto()
+        {
+            using var cn = _db.Open();
+            return cn.Query<NlqEsqueletoRow>("conta.sp_Nlq_CatalogoEsqueleto",
+                commandType: CommandType.StoredProcedure).AsList();
+        }
+
         public NlqCatalogoDetalle CatalogoDetalle(string objetosCsv)
         {
             using var cn = _db.Open();

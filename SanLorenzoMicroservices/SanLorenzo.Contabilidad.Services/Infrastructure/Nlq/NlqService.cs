@@ -80,12 +80,23 @@ namespace Contabilidad.Infrastructure.Nlq
                 }
             }
 
-            // ---- TIER 1: retrieval ----
-            var retr = await _retriever.RecuperarAsync(pregunta, catalogo, ct);
+            // ---- TIER 1: retrieval (sobre el esqueleto relacional PK/FK) ----
+            var esqueleto = _repo.CatalogoEsqueleto();
+            var retr = await _retriever.RecuperarAsync(pregunta, esqueleto, ct);
             tokensIn += retr.TokensIn; tokensOut += retr.TokensOut;
             _guard.RegistrarConsumo(idUsuario, retr.TokensIn, retr.TokensOut);
 
-            string csv = string.Join(",", retr.Objetos.Distinct());
+            // Expansion determinista por FK (1 SALTO): el retriever suele elegir solo la tabla "central"
+            // (p.ej. diagnosticrepository) y el generador no puede unir tablas que no se le dieron. Se
+            // agregan las tablas ACTIVAS que sus FK referencian (para nombre legible y fecha real), sin recursion.
+            var objetosBase = retr.Objetos.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var objetos = ExpandirPorFk(objetosBase, esqueleto);
+            var agregados = objetos.Where(o => !objetosBase.Contains(o, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (agregados.Count > 0)
+                _log.LogInformation("NLQ: expansion FK (1 salto) agrego {Cuenta} objeto(s): {Objetos}",
+                    agregados.Count, string.Join(", ", agregados));
+
+            string csv = string.Join(",", objetos);
             var detalle = _repo.CatalogoDetalle(csv);
             string system = NlqPrompt.SystemGeneracion();
             string userBase = NlqPrompt.UsuarioGeneracion(detalle, pregunta, retr.Intencion);
@@ -257,10 +268,66 @@ namespace Contabilidad.Infrastructure.Nlq
             foreach (var t in catalogo)
             {
                 if (string.IsNullOrWhiteSpace(t.v_Objeto)) continue;
-                if (!string.IsNullOrWhiteSpace(t.v_Schema)) set.Add($"{t.v_Schema}.{t.v_Objeto}");
-                else set.Add(t.v_Objeto);
+                set.Add(t.v_Objeto);                                  // objeto
+                if (!string.IsNullOrWhiteSpace(t.v_Schema))
+                {
+                    set.Add($"{t.v_Schema}.{t.v_Objeto}");            // schema.objeto
+                    if (!string.IsNullOrWhiteSpace(t.v_Base))
+                    {
+                        // 3 partes cross-DB, con y sin corchetes (el validador normaliza quitando corchetes).
+                        set.Add($"[{t.v_Base}].[{t.v_Schema}].[{t.v_Objeto}]");
+                        set.Add($"{t.v_Base}.{t.v_Schema}.{t.v_Objeto}");
+                    }
+                }
             }
             return set;
+        }
+
+        /// <summary>
+        /// Expande el set de objetos seleccionados con las tablas que sus FK referencian (UN SALTO, no recursivo).
+        /// Solo agrega tablas que existan como objeto ACTIVO en el esqueleto. Las vistas (FKs null) no expanden.
+        /// Opera sobre el esqueleto ya en memoria (FKs = "col->schema.tabla.col, ...").
+        /// </summary>
+        public static List<string> ExpandirPorFk(IEnumerable<string> seleccionados, List<NlqEsqueletoRow> esqueleto)
+        {
+            var porNombre = new Dictionary<string, NlqEsqueletoRow>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in esqueleto ?? new List<NlqEsqueletoRow>())
+                if (!string.IsNullOrWhiteSpace(e.v_Objeto) && !porNombre.ContainsKey(e.v_Objeto))
+                    porNombre[e.v_Objeto] = e;
+
+            var orden = new List<string>();
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var baseList = new List<string>();
+            foreach (var s in seleccionados ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(s)) continue;
+                if (set.Add(s)) { orden.Add(s); baseList.Add(s); }
+            }
+
+            // 1 SALTO: solo se expande desde los objetos base (NO desde los recien agregados).
+            foreach (var s in baseList)
+            {
+                if (!porNombre.TryGetValue(s, out var fila) || string.IsNullOrWhiteSpace(fila.FKs)) continue;
+                foreach (var fk in fila.FKs.Split(','))
+                {
+                    string tabla = TablaReferenciada(fk);
+                    if (string.IsNullOrWhiteSpace(tabla)) continue;
+                    if (porNombre.TryGetValue(tabla, out var referida) && set.Add(referida.v_Objeto))
+                        orden.Add(referida.v_Objeto);
+                }
+            }
+            return orden;
+        }
+
+        /// <summary>Del texto de una FK ("col->schema.tabla.col") extrae la TABLA referenciada (penultimo segmento).</summary>
+        private static string TablaReferenciada(string fkEntry)
+        {
+            if (string.IsNullOrWhiteSpace(fkEntry)) return null;
+            int flecha = fkEntry.IndexOf("->", StringComparison.Ordinal);
+            string der = (flecha >= 0 ? fkEntry.Substring(flecha + 2) : fkEntry).Replace("[", "").Replace("]", "").Trim();
+            var parts = der.Split('.');
+            if (parts.Length >= 2) return parts[parts.Length - 2].Trim();   // schema.TABLA.col -> TABLA
+            return parts.Length == 1 ? parts[0].Trim() : null;
         }
 
         public static string CalcularFingerprint(IEnumerable<NlqTablaListaRow> catalogo)

@@ -78,3 +78,107 @@ GO
 --
 -- ROLLBACK: DROP USER conta_nlq_reader (en 20505310072) + DROP LOGIN conta_nlq_reader.
 -- =====================================================================
+
+
+-- #####################################################################
+-- EXTENSION FASE B-SLICE (NLQ v2, dominio clinico). Fecha: 2026-07-28.
+--
+-- >>> APLICADO 2026-07-28 por db-experto (sa via db-console --db
+--     SigesoftDesarrollo_2), con OK del PO. <<<
+--   GATE VERDE por impersonacion (EXECUTE AS USER='conta_nlq_reader'):
+--     T1 SELECT COUNT(*) dbo.service            -> PERMITIDO
+--     T2 person.v_Password / T3 systemuser.v_Password -> DENEGADO (col-DENY)
+--     T4 INSERT dbo.diseases                    -> DENEGADO (DENY INSERT)
+--     T5 COUNT dbo.hospitalizacion (no grant)   -> DENEGADO (sin permiso)
+--     T6 person sin v_Password                  -> PERMITIDO (col-DENY no bloquea el resto)
+--
+-- Extiende el MISMO login server-level conta_nlq_reader a la BD clinica
+-- SigesoftDesarrollo_2, con minimo privilegio: SELECT SOLO sobre las 10 tablas
+-- del slice + organization (para resolver empresa/cliente). Sin password real:
+-- el login ya existe (server-level); aqui solo se crea el USER + grants/denys.
+--
+-- Cada batch ABRE con USE [SigesoftDesarrollo_2] para ser self-contained
+-- (aplicable con db-console independientemente del reuso de conexion del pool).
+-- SigesoftDesarrollo_2 sigue siendo SOLO LECTURA: aqui NO se crea/altera ningun
+-- objeto de esa BD; solo se otorgan/deniegan permisos a un principal (permisos
+-- viven en la BD, no tocan el modify_date de las tablas).
+-- #####################################################################
+
+-- B1) USER en la BD clinica para el login server-level ya existente.
+USE [SigesoftDesarrollo_2];
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = 'conta_nlq_reader')
+    CREATE USER conta_nlq_reader FOR LOGIN conta_nlq_reader;
+GO
+
+-- B2) GRANT SELECT: SOLO las 10 tablas del slice + organization (resuelve empresa).
+USE [SigesoftDesarrollo_2];
+GRANT SELECT ON dbo.service               TO conta_nlq_reader;
+GRANT SELECT ON dbo.servicecomponent      TO conta_nlq_reader;
+GRANT SELECT ON dbo.protocol              TO conta_nlq_reader;
+GRANT SELECT ON dbo.diagnosticrepository  TO conta_nlq_reader;
+GRANT SELECT ON dbo.diseases              TO conta_nlq_reader;
+GRANT SELECT ON dbo.cie10                 TO conta_nlq_reader;
+GRANT SELECT ON dbo.person                TO conta_nlq_reader;
+GRANT SELECT ON dbo.systemuser            TO conta_nlq_reader;
+GRANT SELECT ON dbo.systemparameter       TO conta_nlq_reader;
+GRANT SELECT ON dbo.component             TO conta_nlq_reader;
+GRANT SELECT ON dbo.organization          TO conta_nlq_reader;
+GO
+
+-- B3) DENY de la columna SENSIBLE en las DOS tablas que la tienen (override del
+--     GRANT de tabla: deja leer todo MENOS v_Password).
+USE [SigesoftDesarrollo_2];
+DENY SELECT ON dbo.person     (v_Password) TO conta_nlq_reader;
+DENY SELECT ON dbo.systemuser (v_Password) TO conta_nlq_reader;
+GO
+
+-- B4) DENY de escritura y ejecucion a nivel BD (defensa en profundidad).
+USE [SigesoftDesarrollo_2];
+DENY INSERT, UPDATE, DELETE, EXECUTE TO conta_nlq_reader;
+GO
+
+-- =====================================================================
+-- ROLLBACK FASE B: USE [SigesoftDesarrollo_2]; DROP USER conta_nlq_reader;
+-- (el login server-level y el user de 20505310072 se conservan para v1).
+-- =====================================================================
+
+
+-- #####################################################################
+-- EXTENSION FASE B-SCALE (NLQ v2, dominio clinico). Fecha: 2026-07-28.
+--
+-- >>> APLICADO 2026-07-28 por db-experto (sa via db-console --db
+--     SigesoftDesarrollo_2), con OK del PO. <<<
+--   GATE VERDE por impersonacion (nuevas tablas leidas OK; v_Password/escritura
+--   siguen denegadas).
+--
+-- Amplia el GRANT SELECT del MISMO user conta_nlq_reader a las 19 tablas CORE
+-- nuevas del catalogo (ddl/22). 'organization' YA fue otorgada en FASE B-SLICE.
+-- NO se necesitan nuevos DENY: el DENY INSERT/UPDATE/DELETE/EXECUTE a nivel BD
+-- (B4) ya cubre estas tablas, y v_Password solo existe en person/systemuser (ya
+-- denegada, B3). Cada batch abre con USE para ser self-contained.
+-- #####################################################################
+
+-- B5) GRANT SELECT en las 19 tablas nuevas (scale).
+USE [SigesoftDesarrollo_2];
+GRANT SELECT ON dbo.calendar                          TO conta_nlq_reader;
+GRANT SELECT ON dbo.protocolcomponent                 TO conta_nlq_reader;
+GRANT SELECT ON dbo.recommendation                    TO conta_nlq_reader;
+GRANT SELECT ON dbo.restriction                       TO conta_nlq_reader;
+GRANT SELECT ON dbo.masterrecommendationrestricction  TO conta_nlq_reader;
+GRANT SELECT ON dbo.hospitalizacion                   TO conta_nlq_reader;
+GRANT SELECT ON dbo.hospitalizacionservice            TO conta_nlq_reader;
+GRANT SELECT ON dbo.hospitalizacionhabitacion         TO conta_nlq_reader;
+GRANT SELECT ON dbo.pacient                           TO conta_nlq_reader;
+GRANT SELECT ON dbo.professional                      TO conta_nlq_reader;
+GRANT SELECT ON dbo.medico                            TO conta_nlq_reader;
+GRANT SELECT ON dbo.organizationperson                TO conta_nlq_reader;
+GRANT SELECT ON dbo.groupoccupation                   TO conta_nlq_reader;
+GRANT SELECT ON dbo.location                          TO conta_nlq_reader;
+GRANT SELECT ON dbo.componentfield                    TO conta_nlq_reader;
+GRANT SELECT ON dbo.componentfields                   TO conta_nlq_reader;
+GRANT SELECT ON dbo.datahierarchy                     TO conta_nlq_reader;
+GRANT SELECT ON dbo.receta                            TO conta_nlq_reader;
+GRANT SELECT ON dbo.receipHeader                      TO conta_nlq_reader;
+GO
+-- ROLLBACK SCALE: los grants caen con el DROP USER del rollback FASE B.
+-- =====================================================================

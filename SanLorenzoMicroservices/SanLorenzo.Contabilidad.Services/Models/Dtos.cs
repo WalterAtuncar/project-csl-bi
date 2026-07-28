@@ -1580,6 +1580,17 @@ namespace Contabilidad.Models
         public string v_Dominio { get; set; }
         public string v_Descripcion { get; set; }
     }
+    /// <summary>Fila de sp_Nlq_CatalogoEsqueleto: objeto activo + PKs y FKs (grafo relacional) para el retriever.</summary>
+    public class NlqEsqueletoRow
+    {
+        public string v_Base { get; set; }
+        public string v_Schema { get; set; }
+        public string v_Objeto { get; set; }
+        public string v_Dominio { get; set; }
+        public string v_Descripcion { get; set; }
+        public string PKs { get; set; }   // cols PK unidas por ", "
+        public string FKs { get; set; }   // "col->ref" de FK unidas por ", "; NULL si no hay
+    }
     public class NlqTablaDetRow
     {
         public int i_IdNlqTabla { get; set; }
