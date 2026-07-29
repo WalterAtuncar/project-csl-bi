@@ -247,3 +247,22 @@ GRANT SELECT ON dbo.AntecedenteAsistencial    TO conta_nlq_reader;
 GO
 -- ROLLBACK: los grants caen con el DROP USER (rollback FASE B) en SigesoftDesarrollo_2.
 -- =====================================================================
+
+
+-- #####################################################################
+-- EXTENSION RONDA "EMR snapshot" (NLQ v2). Fecha: 2026-07-28.
+--
+-- >>> APLICADO 2026-07-28 por db-experto (sa via db-console), con OK del PO. <<<
+--
+-- La vista conta.v_nlq_examen_resultado (ddl/26) lee el SNAPSHOT conta.emr_resultado
+-- (tabla conta en la BD principal) -> el reader NO necesita las tablas legacy del EMR
+-- (servicecomponentfieldvalues, etc.), que NO se le conceden (siguen denegadas). Solo
+-- se concede la vista. GATE VERDE por EXECUTE AS LOGIN.
+-- #####################################################################
+
+-- E1) GRANT SELECT en la vista del snapshot EMR (BD principal 20505310072).
+USE [20505310072];
+GRANT SELECT ON conta.v_nlq_examen_resultado TO conta_nlq_reader;
+GO
+-- ROLLBACK: el grant cae con el DROP USER (rollback F3) del user de 20505310072.
+-- =====================================================================
