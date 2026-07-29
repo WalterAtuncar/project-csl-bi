@@ -266,3 +266,22 @@ GRANT SELECT ON conta.v_nlq_examen_resultado TO conta_nlq_reader;
 GO
 -- ROLLBACK: el grant cae con el DROP USER (rollback F3) del user de 20505310072.
 -- =====================================================================
+
+
+-- #####################################################################
+-- EXTENSION RONDA "clinico_pagos" (NLQ v2). Fecha: 2026-07-28.
+--
+-- >>> APLICADO 2026-07-28 por db-experto (sa via db-console), con OK del PO. <<<
+--
+-- GRANT SELECT en paymentmedic (ddl/27; unica tabla sembrada de la ronda; config
+-- de pago por medico). Las otras candidatas (HistorialPagoMedicos shell,
+-- servicespaid/servicespaiddetails muertas) NO se sembraron ni conceden. DENY
+-- escritura/v_Password ya estan a nivel BD (FASE B). Batch self-contained.
+-- #####################################################################
+
+-- G1) GRANT SELECT en paymentmedic (config de pago por medico).
+USE [SigesoftDesarrollo_2];
+GRANT SELECT ON dbo.paymentmedic TO conta_nlq_reader;
+GO
+-- ROLLBACK: el grant cae con el DROP USER (rollback FASE B) en SigesoftDesarrollo_2.
+-- =====================================================================
