@@ -222,3 +222,28 @@ DENY  SELECT ON dbo.systemuser (v_Password) TO conta_nlq_reader;
 GO
 -- ROLLBACK PLATA: los grants caen con el DROP USER (rollback F3) del user de 20505310072.
 -- =====================================================================
+
+
+-- #####################################################################
+-- EXTENSION 2a RONDA "clinico_antecedentes" (NLQ v2). Fecha: 2026-07-28.
+--
+-- >>> APLICADO 2026-07-28 por db-experto (sa via db-console --db
+--     SigesoftDesarrollo_2), con OK del PO. GATE VERDE por impersonacion. <<<
+--
+-- GRANT SELECT en las 8 tablas de antecedentes (ddl/25). DENY escritura/EXECUTE y
+-- v_Password ya estan a nivel BD (FASE B). Batch self-contained (USE al inicio).
+-- #####################################################################
+
+-- A1) GRANT SELECT en las 8 tablas del sub-dominio clinico_antecedentes.
+USE [SigesoftDesarrollo_2];
+GRANT SELECT ON dbo.familymedicalantecedents  TO conta_nlq_reader;
+GRANT SELECT ON dbo.noxioushabits             TO conta_nlq_reader;
+GRANT SELECT ON dbo.personmedicalhistory      TO conta_nlq_reader;
+GRANT SELECT ON dbo.additionalexam            TO conta_nlq_reader;
+GRANT SELECT ON dbo.inmunizaciones            TO conta_nlq_reader;
+GRANT SELECT ON dbo.history                    TO conta_nlq_reader;
+GRANT SELECT ON dbo.HistorialOdontologico     TO conta_nlq_reader;
+GRANT SELECT ON dbo.AntecedenteAsistencial    TO conta_nlq_reader;
+GO
+-- ROLLBACK: los grants caen con el DROP USER (rollback FASE B) en SigesoftDesarrollo_2.
+-- =====================================================================
