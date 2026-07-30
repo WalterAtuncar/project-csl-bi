@@ -1,7 +1,7 @@
 // Formateo de celdas del resultado NLQ por el Formato que declara CADA columna (el API dice el tipo en
 // Columnas[i].Formato -> el front NO adivina). Moneda: SIEMPRE utils/money.ts (fuente canonica del modulo).
 import { moneyPEN } from '../../../utils/money';
-import type { NlqCelda, NlqColumna, NlqFormato } from '../../../services/contabilidad/contaTypes';
+import type { NlqCelda, NlqChartTipo, NlqColumna, NlqFormato } from '../../../services/contabilidad/contaTypes';
 
 const esNumericoFormato = (f: NlqFormato): boolean => f === 'money' || f === 'int' || f === 'pct';
 export const esColumnaNumerica = (c: NlqColumna): boolean => esNumericoFormato(c.Formato);
@@ -54,3 +54,25 @@ export function toNumero(valor: NlqCelda): number {
 
 // Clase de alineacion de la celda: numericas a la derecha con tabular-nums.
 export const alineacion = (c: NlqColumna): string => (esColumnaNumerica(c) ? 'text-right tabular-nums' : 'text-left');
+
+// Orden fijo de presentacion de los tipos de grafico (el switcher y el helper lo respetan).
+const ORDEN_TIPOS: NlqChartTipo[] = ['bar', 'stackedBar', 'line', 'area', 'pie', 'donut', 'radar', 'scatter', 'kpi', 'tabla'];
+
+// Que tipos de grafico tienen sentido para la forma del resultado (columnas x filas). No decide el mejor,
+// solo filtra los que NO encajan (evita ofrecer un pie sin dimension, un scatter con 1 sola numerica, etc).
+// dims = columnas no-numericas (fecha/texto). 'tabla' SIEMPRE disponible; 'kpi' con al menos 1 fila.
+export function tiposCompatibles(columnas: NlqColumna[], nFilas: number): NlqChartTipo[] {
+  const numericas = columnas.filter(esColumnaNumerica).length;
+  const dims = columnas.length - numericas;
+  const n = nFilas;
+  const set = new Set<NlqChartTipo>();
+
+  if (numericas >= 1 && n >= 1) { set.add('bar'); set.add('line'); set.add('area'); }
+  if (numericas >= 2 && n >= 1) { set.add('stackedBar'); set.add('scatter'); }
+  if (numericas >= 1 && dims >= 1 && n >= 1) { set.add('pie'); set.add('donut'); }
+  if (numericas >= 1 && dims >= 1 && n >= 3) { set.add('radar'); }
+  if (n >= 1) { set.add('kpi'); }
+  set.add('tabla');
+
+  return ORDEN_TIPOS.filter((t) => set.has(t));
+}

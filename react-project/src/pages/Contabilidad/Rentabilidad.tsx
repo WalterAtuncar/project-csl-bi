@@ -140,6 +140,7 @@ const Rentabilidad: React.FC = () => {
   // Seccion 3: reparto de Filas por grupo (el orden ya viene del backend: Grupo, EsTotal, Ingresos DESC).
   const asistencial = useMemo(() => (consultorio?.Filas ?? []).filter((f) => f.Grupo === 'ASISTENCIAL'), [consultorio]);
   const sisol = useMemo(() => (consultorio?.Filas ?? []).filter((f) => f.Grupo === 'SISOL'), [consultorio]);
+  const seguros = useMemo(() => (consultorio?.Filas ?? []).filter((f) => f.Grupo === 'SEGUROS'), [consultorio]);
   const cuadre = consultorio?.Cuadre ?? null;
 
   return (
@@ -299,12 +300,12 @@ const Rentabilidad: React.FC = () => {
       <div className="mt-6">
         <div className="mb-3">
           <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Rentabilidad por Consultorio</h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Consultas médicas por consultorio (catálogo grupo 403): Asistencial vs SISOL. Resultado = Ingresos − Egresos.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Consultas médicas por consultorio (catálogo grupo 403): Asistencial, SISOL y Seguros. Resultado = Ingresos − Egresos.</p>
         </div>
         {loadingConsultorio && !consultorio && <p className="text-sm text-slate-400">Cargando...</p>}
         {consultorio && (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               <ConsultorioBloque
                 titulo="Asistencial"
                 rows={asistencial}
@@ -315,11 +316,16 @@ const Rentabilidad: React.FC = () => {
                 rows={sisol}
                 nota={`Montos a venta plena (neto sin IGV). La participación clínica (${cuadre ? cuadre.SisolPorcClinica : ''}%) se muestra en el cuadre y es la que usa el KPI general.`}
               />
+              <ConsultorioBloque
+                titulo="SEGUROS"
+                rows={seguros}
+                nota="Neto pleno (sin participación). Facturación a aseguradoras vía liquidación (F007) + copagos (B004). Egresos = centro CC-SEG."
+              />
             </div>
             {/* linea de cuadre con Rentabilidad General (RS3) */}
             {cuadre && (
               <div className="mt-3 text-xs px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
-                Ocupacional: <span className="font-semibold">S/ {money(cuadre.OcupacionalNeto)}</span> (ver sección Empresas) · Otras unidades (Farmacia, Seguros): <span className="font-semibold">S/ {money(cuadre.OtrasUnidadesNeto)}</span> · Participación clínica SISOL ({cuadre.SisolPorcClinica}% de {money(cuadre.SisolNetoPleno)}): <span className="font-semibold">S/ {money(cuadre.SisolParticipacionClinica)}</span> <span className="mx-0.5">→</span> Total general: <span className="font-semibold">S/ {money(cuadre.TotalGeneral)}</span>
+                Ocupacional: <span className="font-semibold">S/ {money(cuadre.OcupacionalNeto)}</span> (ver sección Empresas) · Seguros: <span className="font-semibold">S/ {money(cuadre.SegurosNeto)}</span> · Otras unidades (Farmacia): <span className="font-semibold">S/ {money(cuadre.OtrasUnidadesNeto)}</span> · Participación clínica SISOL ({cuadre.SisolPorcClinica}% de {money(cuadre.SisolNetoPleno)}): <span className="font-semibold">S/ {money(cuadre.SisolParticipacionClinica)}</span> <span className="mx-0.5">→</span> Total general: <span className="font-semibold">S/ {money(cuadre.TotalGeneral)}</span>
               </div>
             )}
             {/* colapsable: detalle de lo no clasificado (RS2, C3) */}

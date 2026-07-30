@@ -2,11 +2,11 @@
 // Todo el pipeline de IA vive server-side en el API conta (5090); AQUI el front SOLO habla con
 // ContabilidadService (conta_token): sin SDK de IA en el navegador, sin key en el front, sin el cliente
 // del API legacy. Roles (D9): la ven SA/CONTABILIDAD/GERENTE; guardar/borrar solo SA/CONTABILIDAD (canWrite).
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   Sparkles, Send, Loader2, ChevronDown, ChevronRight, Code2, Database,
-  AlertTriangle, Save, Gauge, Cpu,
+  AlertTriangle, Save, Gauge, Cpu, BarChart3,
 } from 'lucide-react';
 import contabilidadService from '../../../services/contabilidad/ContabilidadService';
 import { useContaAuth } from '../../../context/ContaAuthContext';
@@ -15,8 +15,10 @@ import type {
 } from '../../../services/contabilidad/contaTypes';
 import NlqResultTable from './NlqResultTable';
 import NlqChart from './NlqChart';
+import ChartTypeSwitcher from './ChartTypeSwitcher';
 import GuardarConsultaDialog from './GuardarConsultaDialog';
 import GuardadasPanel from './GuardadasPanel';
+import { tiposCompatibles } from './nlqFormat';
 
 // Estado normalizado del panel de resultado (unifica lo que devuelve preguntar y ejecutar-guardada).
 interface Resultado {
@@ -30,6 +32,7 @@ interface Resultado {
   tokens?: number;
   advertencia?: string | null;
   titulo?: string; // nombre de la guardada
+  guardadaId?: number; // id de la guardada (para persistir el tipo de grafico via PATCH)
 }
 
 const FUENTE_LABEL: Record<string, string> = {
@@ -40,6 +43,9 @@ const statusDe = (e: unknown): number | undefined => (e as { status?: number } |
 
 const fmtTokens = (n: number): string =>
   n <= 0 ? '0 tokens' : n >= 1000 ? `${(n / 1000).toLocaleString('es-PE', { maximumFractionDigits: 1 })}k tokens` : `${n} tokens`;
+
+// Chip de Confianza OCULTO por ahora (pedido del usuario). Poner en true para reactivarlo.
+const MOSTRAR_CONFIANZA = false;
 
 const confianzaCls = (c: number): string =>
   c >= 0.8 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
@@ -60,6 +66,7 @@ const Consultas: React.FC = () => {
   const [guardadas, setGuardadas] = useState<NlqGuardada[]>([]);
   const [loadingGuardadas, setLoadingGuardadas] = useState(true);
   const [ejecutandoId, setEjecutandoId] = useState<number | null>(null);
+  const [persistiendo, setPersistiendo] = useState(false);
 
   // Mapeo de errores HTTP a UX (el interceptor adjunta .status al Error): 404 = modulo apagado,
   // 429 = throttle/presupuesto (mensaje amable), resto = message del API (incl. 400 pregunta invalida).
@@ -128,6 +135,7 @@ const Consultas: React.FC = () => {
         chartTipo: d.ChartTipo ?? g.ChartTipo ?? 'tabla',
         origen: 'guardada',
         titulo: g.Nombre,
+        guardadaId: g.Id,
         advertencia: g.DesactualizadaFlag
           ? 'Esta consulta puede estar desactualizada: el esquema de datos cambió desde que se guardó.'
           : null,
@@ -149,6 +157,35 @@ const Consultas: React.FC = () => {
       manejarError(e);
     }
   }, [manejarError]);
+
+  // Tipos de grafico compatibles con la forma del resultado actual (solo si hay resultado).
+  const compatibles = useMemo(
+    () => (resultado ? tiposCompatibles(resultado.columnas, resultado.filas.length) : []),
+    [resultado],
+  );
+
+  // Intercambio de tipo de grafico en vivo. Siempre actualiza el estado local (el gerente/lectura solo ve
+  // otros graficos, sin persistir). Si es una GUARDADA y el usuario puede escribir, ADEMAS persiste con el
+  // PATCH y refleja el cambio en el panel lateral; ante fallo revierte el estado local. Para 'pregunta' NO
+  // se llama al API: el tipo elegido fluye como default al dialogo Guardar (chartSugerido={resultado.chartTipo}).
+  const cambiarTipo = useCallback(async (t: NlqChartTipo) => {
+    const guardadaId = resultado?.guardadaId;
+    const anterior = resultado?.chartTipo;
+    setResultado((prev) => (prev ? { ...prev, chartTipo: t } : prev));
+    if (resultado?.origen === 'guardada' && guardadaId && canWrite) {
+      setPersistiendo(true);
+      try {
+        await contabilidadService.nlqActualizarChart(guardadaId, t);
+        toast.success('Tipo de gráfico actualizado');
+        setGuardadas((prev) => prev.map((x) => (x.Id === guardadaId ? { ...x, ChartTipo: t } : x)));
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'No se pudo actualizar el tipo de gráfico');
+        setResultado((prev) => (prev && anterior ? { ...prev, chartTipo: anterior } : prev));
+      } finally {
+        setPersistiendo(false);
+      }
+    }
+  }, [resultado, canWrite]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Ctrl/Cmd + Enter = consultar (Enter solo salta linea).
@@ -245,7 +282,7 @@ const Consultas: React.FC = () => {
                     {resultado.titulo}
                   </span>
                 )}
-                {typeof resultado.confianza === 'number' && (
+                {MOSTRAR_CONFIANZA && typeof resultado.confianza === 'number' && (
                   <span className={`text-xs px-2 py-1 rounded-lg flex items-center gap-1 ${confianzaCls(resultado.confianza)}`}>
                     <Gauge className="h-3.5 w-3.5" /> Confianza {Math.round(resultado.confianza * 100)}%
                   </span>
@@ -280,10 +317,21 @@ const Consultas: React.FC = () => {
                 </div>
               )}
 
-              {/* Grafico automatico (recharts) segun ChartSugerido; 'tabla' o data que no encaja -> null */}
-              {resultado.chartTipo !== 'tabla' && resultado.filas.length > 0 && (
-                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
-                  <NlqChart columnas={resultado.columnas} filas={resultado.filas} tipo={resultado.chartTipo} />
+              {/* Visualizacion: switcher de tipo (solo los compatibles) + grafico recharts. El tipo 'tabla'
+                  no pinta grafico (la tabla siempre va debajo) -> hint. Persistir el tipo: solo guardadas + canWrite. */}
+              {resultado.filas.length > 0 && compatibles.length > 1 && (
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-sky-600" /> Visualización
+                    </h3>
+                    <ChartTypeSwitcher tipos={compatibles} value={resultado.chartTipo} onChange={cambiarTipo} guardando={persistiendo} />
+                  </div>
+                  {resultado.chartTipo === 'tabla' ? (
+                    <div className="py-10 text-center text-sm text-slate-400">Elige un tipo de gráfico</div>
+                  ) : (
+                    <NlqChart columnas={resultado.columnas} filas={resultado.filas} tipo={resultado.chartTipo} />
+                  )}
                 </div>
               )}
 

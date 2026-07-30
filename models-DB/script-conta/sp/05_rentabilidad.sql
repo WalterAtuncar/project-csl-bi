@@ -243,13 +243,86 @@ AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @serie TABLE (Mes TINYINT, Ingresos DECIMAL(18,2), Gastos DECIMAL(18,2));
-    DECLARE @m TINYINT = 1;
-    WHILE @m <= 12
-    BEGIN
-        INSERT INTO @serie (Mes, Ingresos, Gastos)
-        SELECT @m, Ingresos, Gastos FROM conta.fn_Rentabilidad_TotalesMesEx(@Anio,@m,@IncluirCredito);
-        SET @m += 1;
-    END
+
+    -- PERF (2026-07-29): antes un WHILE 1..12 llamaba fn_Rentabilidad_TotalesMesEx por mes
+    -- (= 12 escaneos COMPLETOS de dbo.venta y dbo.cajamayor_movimiento, porque venta no
+    -- tiene indice por t_InsertaFecha). Se reescribe a UN pase set-based por el ANIO
+    -- agrupando por mes, replicando FIELMENTE la logica de las iTVF (INTOCABLES, no se
+    -- alteran): Ingresos = fn_Rentabilidad_IngresosEx (universo canonico + ajuste SISOL %
+    -- vigente al dia 1 del mes) ; Gastos = fn_Rentabilidad_Gastos (egreso devengado +
+    -- costo_personal_mensual + cajamayor 'E'). Mismos filtros/joins/casts -> mismo
+    -- resultado al centavo (GE); 1 scan en vez de 12.
+    DECLARE @ini DATE = DATEFROMPARTS(@Anio,1,1), @finY DATE = DATEFROMPARTS(@Anio+1,1,1);
+
+    -- Ingresos por (mes, unidad): universo IDENTICO a fn_Rentabilidad_IngresosEx.
+    IF OBJECT_ID('tempdb..#um') IS NOT NULL DROP TABLE #um;
+    SELECT MONTH(v.t_InsertaFecha) AS Mes, tcct.i_IdTipoCaja AS IdTipoCaja,
+           tc.v_NombreTipoCaja AS Unidad, SUM(vd.d_Valor) AS NetoSum
+    INTO #um
+    FROM dbo.venta v
+    JOIN dbo.ventadetalle vd ON vd.v_IdVenta = v.v_IdVenta AND ISNULL(vd.i_Eliminado,0) = 0
+    LEFT JOIN dbo.tipocaja_clientetipo tcct ON tcct.i_ClienteEsAgente = v.i_ClienteEsAgente AND tcct.b_Activo = 1
+    LEFT JOIN dbo.tipocaja tc ON tc.i_IdTipoCaja = tcct.i_IdTipoCaja
+    LEFT JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId = 41 AND dh41.i_ItemId = v.i_IdCondicionPago
+    WHERE ISNULL(v.i_Eliminado,0) = 0
+      AND v.t_InsertaFecha >= @ini AND v.t_InsertaFecha < @finY
+      AND v.i_ClienteEsAgente IS NOT NULL
+      AND (v.i_InsertaIdUsuario <> 2036 OR v.i_ClienteEsAgente IN (3,4))
+      AND ISNULL(v.v_SerieDocumento,'') NOT IN ('ECO','ECA','ECF','ECT','ECG','ECR','TFM','THM')
+      AND (@IncluirCredito = 1 OR ISNULL(dh41.v_Value1,'') <> 'CREDITO')
+    GROUP BY MONTH(v.t_InsertaFecha), tcct.i_IdTipoCaja, tc.v_NombreTipoCaja;
+
+    IF OBJECT_ID('tempdb..#ingM') IS NOT NULL DROP TABLE #ingM;
+    SELECT u.Mes,
+           SUM(CASE WHEN u.Unidad = 'SISOL'
+                    THEN CAST(u.NetoSum * p.Porc / 100 AS DECIMAL(18,2))
+                    ELSE u.NetoSum END) AS Ingresos
+    INTO #ingM
+    FROM #um u
+    CROSS APPLY (
+        SELECT ISNULL((SELECT TOP 1 d_PorcClinica FROM conta.sisol_participacion
+                       WHERE t_VigenciaDesde <= DATEFROMPARTS(@Anio,u.Mes,1)
+                         AND (t_VigenciaHasta IS NULL OR t_VigenciaHasta >= DATEFROMPARTS(@Anio,u.Mes,1))
+                       ORDER BY t_VigenciaDesde DESC), 100) AS Porc
+    ) p
+    GROUP BY u.Mes;
+
+    -- Gastos por mes: UNION ALL de las 3 fuentes de fn_Rentabilidad_Gastos (MISMOS joins
+    -- -> misma cardinalidad; SUM total invariante a la atribucion por unidad).
+    IF OBJECT_ID('tempdb..#gasM') IS NOT NULL DROP TABLE #gasM;
+    SELECT g.Mes, SUM(g.Monto) AS Gastos
+    INTO #gasM
+    FROM (
+        SELECT MONTH(e.t_FechaDocumento) AS Mes, e.d_MontoNeto AS Monto
+        FROM conta.egreso e
+        WHERE e.v_Estado <> 'ANULADO'
+          AND e.t_FechaDocumento >= @ini AND e.t_FechaDocumento < @finY
+          AND NOT EXISTS (SELECT 1 FROM conta.sisol_liquidacion sl WHERE sl.i_IdEgresoHospital = e.i_IdEgreso)
+        UNION ALL
+        SELECT cpm.n_Mes, cpm.d_Monto
+        FROM conta.costo_personal_mensual cpm
+        WHERE cpm.n_Anio = @Anio
+        UNION ALL
+        SELECT MONTH(cm.t_FechaMovimiento), COALESCE(NULLIF(cm.d_Subtotal, 0), cm.d_Total)
+        FROM dbo.cajamayor_movimiento cm
+        LEFT JOIN conta.centro_costo cc ON cc.i_IdTipoCaja = cm.i_IdTipoCaja AND cc.b_Activo = 1
+        LEFT JOIN conta.egreso_caja_clasificacion ov ON LTRIM(RTRIM(cm.v_IdVenta)) = ov.v_IdVenta AND ov.v_Estado = 'ACTIVO'
+        WHERE cm.v_TipoMovimiento = 'E'
+          AND cm.t_FechaMovimiento >= @ini AND cm.t_FechaMovimiento < @finY
+    ) g
+    GROUP BY g.Mes;
+
+    -- Serie de 12 meses (0 en los meses sin data), identica a la que producia el WHILE.
+    ;WITH nums AS (
+        SELECT CAST(1 AS TINYINT) AS Mes
+        UNION ALL SELECT CAST(Mes + 1 AS TINYINT) FROM nums WHERE Mes < 12
+    )
+    INSERT INTO @serie (Mes, Ingresos, Gastos)
+    SELECT n.Mes, ISNULL(ig.Ingresos,0), ISNULL(ga.Gastos,0)
+    FROM nums n
+    LEFT JOIN #ingM ig ON ig.Mes = n.Mes
+    LEFT JOIN #gasM ga ON ga.Mes = n.Mes
+    OPTION (MAXRECURSION 0);
 
     DECLARE @mesesTrans TINYINT = CASE WHEN @Anio < YEAR(GETDATE()) THEN 12
                                        WHEN @Anio > YEAR(GETDATE()) THEN 0

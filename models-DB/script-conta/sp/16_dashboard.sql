@@ -387,15 +387,22 @@ BEGIN
     -- --- CxC por unidad, historico, corte < @Corte (= RS5) + apertura CxC para RS4 ---
     -- Un solo escaneo por fuente (WHERE < @Corte) calcula el total al corte Y la apertura
     -- (historico < @MesCtxDesde) via suma condicional -> evita 2 escaneos historicos extra.
+    -- PERF (2026-07-29): el filtro de credito via JOIN dbo.datahierarchy (grupo 41,
+    -- v_Value1='CREDITO') se reescribe al predicado SARGABLE v.i_IdCondicionPago = 2.
+    -- Equivalencia EXACTA: en dbo.datahierarchy grupo 41 el UNICO item con
+    -- v_Value1='CREDITO' es i_ItemId=2 (verificado), por lo que el INNER JOIN filtraba
+    -- exactamente v.i_IdCondicionPago=2. Ahora el optimizador puede usar el indice
+    -- NonClusteredIndex sobre venta.i_IdCondicionPago (seek de solo los credito) en vez
+    -- de escanear las 351k ventas + probar datahierarchy por fila. Resultado identico.
     ;WITH fact AS (
         SELECT ISNULL(tcct.i_IdTipoCaja, 0) AS Id,
                SUM(vd.d_PrecioVenta) AS CredFact,
                SUM(CASE WHEN v.t_InsertaFecha < @MesCtxDesde THEN vd.d_PrecioVenta ELSE 0 END) AS CredFactOpen
         FROM dbo.venta v
         JOIN dbo.ventadetalle vd ON vd.v_IdVenta = v.v_IdVenta AND ISNULL(vd.i_Eliminado, 0) = 0
-        JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId = 41 AND dh41.i_ItemId = v.i_IdCondicionPago AND dh41.v_Value1 = 'CREDITO'
         LEFT JOIN dbo.tipocaja_clientetipo tcct ON tcct.i_ClienteEsAgente = v.i_ClienteEsAgente AND tcct.b_Activo = 1
         WHERE ISNULL(v.i_Eliminado, 0) = 0 AND v.t_InsertaFecha < @Corte
+          AND v.i_IdCondicionPago = 2
           AND v.i_ClienteEsAgente IS NOT NULL
           AND (v.i_InsertaIdUsuario <> 2036 OR v.i_ClienteEsAgente IN (3, 4))
           AND ISNULL(v.v_SerieDocumento, '') NOT IN ('ECO','ECA','ECF','ECT','ECG','ECR','TFM','THM')
@@ -407,9 +414,9 @@ BEGIN
                SUM(CASE WHEN cd.t_InsertaFecha < @MesCtxDesde THEN cd.d_ImporteSoles ELSE 0 END) AS CredCobOpen
         FROM dbo.cobranzadetalle cd
         JOIN dbo.venta v ON v.v_IdVenta = cd.v_IdVenta AND ISNULL(v.i_Eliminado, 0) = 0
-        JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId = 41 AND dh41.i_ItemId = v.i_IdCondicionPago AND dh41.v_Value1 = 'CREDITO'
         LEFT JOIN dbo.tipocaja_clientetipo tcct ON tcct.i_ClienteEsAgente = v.i_ClienteEsAgente AND tcct.b_Activo = 1
         WHERE ISNULL(cd.i_Eliminado, 0) = 0 AND cd.t_InsertaFecha < @Corte
+          AND v.i_IdCondicionPago = 2
         GROUP BY ISNULL(tcct.i_IdTipoCaja, 0)
     )
     SELECT
@@ -499,28 +506,23 @@ BEGIN
     ORDER BY Monto DESC;
 
     -- ===================== RS4 : Evolucion CxC mensual 13m =====================
+    -- PERF (2026-07-29): factM/cobM se derivan de #vc/#cc (universo de ventas/cobranzas
+    -- de la ventana de 13m YA materializado arriba) en vez de re-escanear dbo.venta y
+    -- dbo.cobranzadetalle. Equivalencia EXACTA: #vc/#cc aplican los MISMOS filtros
+    -- (sagrados + @TiposCaja) y MISMO rango [@MesCtxDesde,@FinCtx); credito =
+    -- i_IdCondicionPago=2 == flag EsCredito/EsCobranzaCredito de las iTVF (verificado:
+    -- grupo 41 item 2 = 'CREDITO' unico). CredFact=SUM(PrecioBruto)=SUM(vd.d_PrecioVenta);
+    -- CredCob=SUM(Importe)=SUM(cd.d_ImporteSoles). Elimina 1 scan de venta + 1 de
+    -- cobranzadetalle (351k+ filas c/u, sin indice de fecha).
     ;WITH factM AS (
-        SELECT YEAR(v.t_InsertaFecha) AS Y, MONTH(v.t_InsertaFecha) AS M, SUM(vd.d_PrecioVenta) AS CredFact
-        FROM dbo.venta v
-        JOIN dbo.ventadetalle vd ON vd.v_IdVenta = v.v_IdVenta AND ISNULL(vd.i_Eliminado, 0) = 0
-        JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId = 41 AND dh41.i_ItemId = v.i_IdCondicionPago AND dh41.v_Value1 = 'CREDITO'
-        LEFT JOIN dbo.tipocaja_clientetipo tcct ON tcct.i_ClienteEsAgente = v.i_ClienteEsAgente AND tcct.b_Activo = 1
-        WHERE ISNULL(v.i_Eliminado, 0) = 0 AND v.t_InsertaFecha >= @MesCtxDesde AND v.t_InsertaFecha < @FinCtx
-          AND v.i_ClienteEsAgente IS NOT NULL
-          AND (v.i_InsertaIdUsuario <> 2036 OR v.i_ClienteEsAgente IN (3, 4))
-          AND ISNULL(v.v_SerieDocumento, '') NOT IN ('ECO','ECA','ECF','ECT','ECG','ECR','TFM','THM')
-          AND (@TiposCaja IS NULL OR ',' + @TiposCaja + ',' LIKE '%,' + CONVERT(VARCHAR(10), ISNULL(tcct.i_IdTipoCaja, 0)) + ',%')
-        GROUP BY YEAR(v.t_InsertaFecha), MONTH(v.t_InsertaFecha)
+        SELECT YEAR(Fecha) AS Y, MONTH(Fecha) AS M, SUM(PrecioBruto) AS CredFact
+        FROM #vc WHERE EsCredito = 1
+        GROUP BY YEAR(Fecha), MONTH(Fecha)
     ),
     cobM AS (
-        SELECT YEAR(cd.t_InsertaFecha) AS Y, MONTH(cd.t_InsertaFecha) AS M, SUM(cd.d_ImporteSoles) AS CredCob
-        FROM dbo.cobranzadetalle cd
-        JOIN dbo.venta v ON v.v_IdVenta = cd.v_IdVenta AND ISNULL(v.i_Eliminado, 0) = 0
-        JOIN dbo.datahierarchy dh41 ON dh41.i_GroupId = 41 AND dh41.i_ItemId = v.i_IdCondicionPago AND dh41.v_Value1 = 'CREDITO'
-        LEFT JOIN dbo.tipocaja_clientetipo tcct ON tcct.i_ClienteEsAgente = v.i_ClienteEsAgente AND tcct.b_Activo = 1
-        WHERE ISNULL(cd.i_Eliminado, 0) = 0 AND cd.t_InsertaFecha >= @MesCtxDesde AND cd.t_InsertaFecha < @FinCtx
-          AND (@TiposCaja IS NULL OR ',' + @TiposCaja + ',' LIKE '%,' + CONVERT(VARCHAR(10), ISNULL(tcct.i_IdTipoCaja, 0)) + ',%')
-        GROUP BY YEAR(cd.t_InsertaFecha), MONTH(cd.t_InsertaFecha)
+        SELECT YEAR(Fecha) AS Y, MONTH(Fecha) AS M, SUM(Importe) AS CredCob
+        FROM #cc WHERE EsCobranzaCredito = 1
+        GROUP BY YEAR(Fecha), MONTH(Fecha)
     ),
     combo AS (
         SELECT m.Anio, m.Mes, m.MesIni,

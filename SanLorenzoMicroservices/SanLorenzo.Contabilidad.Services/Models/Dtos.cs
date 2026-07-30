@@ -618,6 +618,7 @@ namespace Contabilidad.Models
         public decimal SisolPorcClinica { get; set; }
         public decimal SisolParticipacionClinica { get; set; }
         public decimal OcupacionalNeto { get; set; }
+        public decimal SegurosNeto { get; set; }
         public decimal OtrasUnidadesNeto { get; set; }
         public decimal TotalGeneral { get; set; }
     }
@@ -1529,6 +1530,12 @@ namespace Contabilidad.Models
         public string Params { get; set; }           // JSON opcional (contrato §3.5: @p_* nombrados)
     }
 
+    /// <summary>Body de PATCH /api/conta/nlq/guardadas/{id}/chart — cambia el tipo de grafico.</summary>
+    public class NlqActualizarChartDto
+    {
+        public string ChartTipo { get; set; }   // bar|stackedBar|line|area|pie|donut|radar|scatter|kpi|tabla
+    }
+
     /// <summary>Item de GET /api/conta/nlq/guardadas.</summary>
     public class NlqGuardadaDto
     {
@@ -1667,5 +1674,75 @@ namespace Contabilidad.Models
         public string v_Payload { get; set; }
         public DateTime? t_Expira { get; set; }
         public DateTime t_Fecha { get; set; }
+    }
+
+    // ==================== Especialistas (page /conta/especialistas, solo lectura) ====================
+    // Los nombres de propiedad = alias EXACTOS de los 4 SP conta.sp_Especialistas_* (contrato F1).
+    // Gotcha Dapper: mapeo por nombre; no usar [Column]. Referida/Efectiva = INT 0/1 (contrato del SP).
+
+    // conta.sp_Especialistas_Filtros RS1 - especialidades con actividad
+    public class EspecialistaFiltroEspecialidadDto
+    {
+        public int ConsultorioId { get; set; }
+        public string Especialidad { get; set; }
+    }
+
+    // conta.sp_Especialistas_Filtros RS2 - especialistas (1 fila por medico x consultorio)
+    public class EspecialistaFiltroMedicoDto
+    {
+        public int MedicoId { get; set; }
+        public string UserName { get; set; }
+        public string Medico { get; set; }
+        public string Colegiatura { get; set; }
+        public int ConsultorioId { get; set; }
+        public string Especialidad { get; set; }
+        public int NumAtenciones { get; set; }
+    }
+
+    // conta.sp_Especialistas_Resumen - bandeja principal paginada
+    public class EspecialistaResumenDto
+    {
+        public int MedicoId { get; set; }
+        public string UserName { get; set; }
+        public string Medico { get; set; }
+        public string Colegiatura { get; set; }
+        public string Especialidad { get; set; }            // NULL si el medico solo refirio (0 atenciones)
+        public int NumEspecialidades { get; set; }
+        public int NumAtenciones { get; set; }
+        public int NumReferencias { get; set; }
+        public int NumReferenciasEfectivas { get; set; }
+        public int TotalFilas { get; set; }                 // COUNT(*) OVER() -> el controller lo eleva a { total }
+    }
+
+    // conta.sp_Especialistas_Atenciones - modal "Ver Atenciones"
+    public class EspecialistaAtencionDto
+    {
+        public string ServiceId { get; set; }
+        public DateTime FechaAtencion { get; set; }         // d_ServiceDate (datetime2)
+        public string Consultorio { get; set; }             // NULL posible
+        public string EstadoAtencion { get; set; }
+        public string Paciente { get; set; }                // NULL posible
+        public string NroComprobante { get; set; }          // NULL si sin comprobante
+        public string TipoComprobante { get; set; }         // BOLETA/FACTURA/OTRO; NULL si sin venta
+        public decimal? MontoComprobante { get; set; }      // v.d_Total; NULL si sin venta
+        public string Diagnosticos { get; set; }            // nvarchar(max) concatenado ' | '; NULL posible
+        public int Referida { get; set; }                   // 0/1
+        public string ReferidoPor { get; set; }             // NULL si Referida=0
+        public int TotalFilas { get; set; }
+    }
+
+    // conta.sp_Especialistas_Referencias - modal "Ver Referencias"
+    public class EspecialistaReferenciaDto
+    {
+        public string ServiceId { get; set; }
+        public DateTime FechaAtencion { get; set; }         // d_ServiceDate del referido (datetime2)
+        public string ConsultorioDestino { get; set; }      // NULL posible
+        public string ComponentesReferidos { get; set; }    // component.v_Name concatenado ' | ' (excl. triaje + informe lab; NULL posible)
+        public string MedicoEjecutor { get; set; }          // NULL posible
+        public int Efectiva { get; set; }                   // 0/1
+        public string NroComprobante { get; set; }          // NULL posible
+        public string TipoComprobante { get; set; }         // NULL posible
+        public decimal? MontoComprobante { get; set; }      // NULL posible
+        public int TotalFilas { get; set; }
     }
 }

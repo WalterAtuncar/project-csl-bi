@@ -3,7 +3,8 @@ import { Play, Trash2, Bookmark, AlertTriangle, Loader2 } from 'lucide-react';
 import type { NlqGuardada } from '../../../services/contabilidad/contaTypes';
 
 const TIPO_LABEL: Record<string, string> = {
-  bar: 'Barras', line: 'Líneas', pie: 'Torta', scatter: 'Dispersión', kpi: 'KPI', tabla: 'Tabla',
+  bar: 'Barras', stackedBar: 'Barras apiladas', line: 'Líneas', area: 'Área',
+  pie: 'Torta', donut: 'Dona', radar: 'Radar', scatter: 'Dispersión', kpi: 'KPI', tabla: 'Tabla',
 };
 
 interface Props {

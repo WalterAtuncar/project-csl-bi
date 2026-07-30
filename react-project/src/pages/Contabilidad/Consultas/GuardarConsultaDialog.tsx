@@ -6,8 +6,12 @@ import type { NlqChartTipo } from '../../../services/contabilidad/contaTypes';
 
 const TIPOS: { v: NlqChartTipo; label: string }[] = [
   { v: 'bar', label: 'Barras' },
+  { v: 'stackedBar', label: 'Barras apiladas' },
   { v: 'line', label: 'Líneas' },
+  { v: 'area', label: 'Área' },
   { v: 'pie', label: 'Torta' },
+  { v: 'donut', label: 'Dona' },
+  { v: 'radar', label: 'Radar' },
   { v: 'scatter', label: 'Dispersión' },
   { v: 'kpi', label: 'Indicador (KPI)' },
   { v: 'tabla', label: 'Solo tabla' },

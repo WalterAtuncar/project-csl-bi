@@ -418,7 +418,7 @@ export interface ComparativaResponse {
 // Grupo ahora vale 'ASISTENCIAL' | 'SISOL' (OCUPACIONAL/OTRAS_UNIDADES salieron del RS1: lo ocupacional
 // se analiza por empresa cliente en su endpoint propio; el % SISOL y las otras unidades van en Cuadre).
 export interface RentabilidadConsultorioRow {
-  Grupo: 'ASISTENCIAL' | 'SISOL' | string;
+  Grupo: 'ASISTENCIAL' | 'SISOL' | 'SEGUROS' | string;
   Consultorio: string;
   Ingresos: number;
   // Egresos por consultorio = pagos de honorarios (partición por centro: ASIST←CC-ASIS, SISOL←CC-SISOL).
@@ -441,7 +441,8 @@ export interface RentabilidadConsultorioCuadre {
   SisolPorcClinica: number;
   SisolParticipacionClinica: number;
   OcupacionalNeto: number;
-  OtrasUnidadesNeto: number;
+  SegurosNeto: number;         // SEGUROS a neto pleno (tipocaja 5); Otras ya NO incluye el 5 (D4)
+  OtrasUnidadesNeto: number;   // ahora ≈ FARMACIA (NOT IN 1,2,3,5)
   TotalGeneral: number;
 }
 export interface RentabilidadConsultorioResponse {
@@ -1088,7 +1089,12 @@ export interface DashContableResponse {
 // conta; el §3.4 del plan que dice "camelCase" es un lapsus del planificador — manda el casing real).
 // Modulo bajo feature-flag (Nlq:Enabled): con flag OFF los endpoints responden 404 => "modulo no disponible".
 export type NlqFormato = 'money' | 'date' | 'int' | 'pct' | 'text';
-export type NlqChartTipo = 'bar' | 'line' | 'pie' | 'scatter' | 'kpi' | 'tabla';
+export type NlqChartTipo = 'bar' | 'stackedBar' | 'line' | 'area' | 'pie' | 'donut' | 'radar' | 'scatter' | 'kpi' | 'tabla';
+
+// PATCH /nlq/guardadas/{id}/chart: persiste el tipo de grafico elegido en vivo para una guardada.
+export interface NlqActualizarChart {
+  ChartTipo: NlqChartTipo;
+}
 
 // Celda de una fila (object[][] alineado con Columnas): fechas como ISO string, decimales como number,
 // booleanos, o null. El front formatea cada celda por Columnas[i].Formato (nunca adivina el tipo).
@@ -1136,4 +1142,83 @@ export interface NlqDatos {
   Filas: NlqCelda[][];
   ChartTipo: NlqChartTipo;
   ChartConfig: string | null;
+}
+
+// ==== Especialistas — atenciones y referencias por medico (endpoints /api/conta/especialistas/*) ====
+// Espejo 1:1 de los alias de los SPs conta.sp_Especialistas_* (PLAN_ESPECIALISTAS §6/§7). El API
+// serializa con PropertyNamingPolicy=null => JSON en PascalCase EXACTO de las columnas del SP; los
+// wrappers { total, filas } / { especialidades, especialistas } son objetos ANONIMOS del controller
+// (se serializan en minusculas TAL CUAL). Referida/Efectiva viajan como 0/1 (BIT del SP).
+
+// GET /especialistas/filtros -> RS1 (especialidades con actividad)
+export interface EspecialistaFiltroEspecialidad {
+  ConsultorioId: number;
+  Especialidad: string;
+}
+// GET /especialistas/filtros -> RS2 (especialistas: 1 fila por medico x consultorio; el front cascada)
+export interface EspecialistaFiltroMedico {
+  MedicoId: number;
+  UserName: string;
+  Medico: string;
+  Colegiatura: string;
+  ConsultorioId: number;
+  Especialidad: string;
+  NumAtenciones: number;
+}
+export interface EspecialistaFiltrosResponse {
+  especialidades: EspecialistaFiltroEspecialidad[];
+  especialistas: EspecialistaFiltroMedico[];
+}
+
+// GET /especialistas/resumen -> bandeja principal (paginada 25)
+export interface EspecialistaResumen {
+  MedicoId: number;
+  UserName: string;
+  Medico: string;
+  Colegiatura: string;
+  Especialidad: string | null;       // dominante en el rango; NULL si 0 atenciones (solo refirio)
+  NumEspecialidades: number;          // sufijo "(+N)" en el front si > 1 (N = NumEspecialidades - 1)
+  NumAtenciones: number;
+  NumReferencias: number;
+  NumReferenciasEfectivas: number;
+}
+export interface EspecialistaResumenResponse {
+  total: number;
+  filas: EspecialistaResumen[];
+}
+
+// GET /especialistas/{medicoId}/atenciones -> modal "Ver Atenciones" (paginada 50)
+export interface EspecialistaAtencion {
+  ServiceId: string;
+  FechaAtencion: string;             // d_ServiceDate (ISO)
+  Consultorio: string | null;
+  EstadoAtencion: string;
+  Paciente: string | null;
+  NroComprobante: string | null;
+  TipoComprobante: string | null;    // 'BOLETA' | 'FACTURA' | 'OTRO'
+  MontoComprobante: number | null;   // v.d_Total bruto (informativo, D4); NULL sin venta
+  Diagnosticos: string | null;       // CIE10 + nombre concatenados con ' | '
+  Referida: number;                  // 0/1
+  ReferidoPor: string | null;
+}
+export interface EspecialistaAtencionesResponse {
+  total: number;
+  filas: EspecialistaAtencion[];
+}
+
+// GET /especialistas/{medicoId}/referencias -> modal "Ver Referencias" (paginada 50)
+export interface EspecialistaReferencia {
+  ServiceId: string;
+  FechaAtencion: string;             // d_ServiceDate del referido (ISO)
+  ConsultorioDestino: string | null;
+  ComponentesReferidos: string | null;  // component.v_Name concat ' | ' (excl. triaje + informe lab)
+  MedicoEjecutor: string | null;
+  Efectiva: number;                  // 0/1 (service vivo + venta viva, D3)
+  NroComprobante: string | null;
+  TipoComprobante: string | null;
+  MontoComprobante: number | null;
+}
+export interface EspecialistaReferenciasResponse {
+  total: number;
+  filas: EspecialistaReferencia[];
 }

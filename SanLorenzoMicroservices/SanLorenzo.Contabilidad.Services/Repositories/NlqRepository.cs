@@ -99,6 +99,14 @@ namespace Contabilidad.Repositories
                 new { Id = id, IdUsuario = idUsuario, EsSA = esSA }, commandType: CommandType.StoredProcedure);
         }
 
+        public int ActualizarChart(int id, int idUsuario, bool esSA, string chartTipo)
+        {
+            using var cn = _db.Open();
+            return cn.QueryFirstOrDefault<int>("conta.sp_Nlq_ActualizarChart",
+                new { Id = id, IdUsuario = idUsuario, EsSA = esSA, ChartTipo = chartTipo },
+                commandType: CommandType.StoredProcedure);
+        }
+
         // ---- Cache semantico ----
         public NlqCacheSemRow CacheSemGet(string hash)
         {

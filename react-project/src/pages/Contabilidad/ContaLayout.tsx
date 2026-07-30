@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope, Activity, LayoutDashboard, Sparkles } from 'lucide-react';
+import { Receipt, Users, Wallet, TrendingUp, PieChart, Settings, ShieldCheck, Stethoscope, Activity, LayoutDashboard, Sparkles, ClipboardList } from 'lucide-react';
 import { useContaAuth } from '../../context/ContaAuthContext';
 import { useScrollTopOnNavigate } from '../../hooks/useScrollTopOnNavigate';
 import { authService } from '../../services/AuthService';
@@ -28,6 +28,9 @@ const navItems: { to: string; label: string; icon: React.ComponentType<{ classNa
   { to: '/conta/egresos', label: 'Egresos', icon: Receipt },
   // Visible a todos; las acciones de escritura (generar/anular pago) van gated por canWrite en la página.
   { to: '/conta/honorarios', label: 'Honorarios Médicos', icon: Stethoscope },
+  // Atenciones y referencias por especialista: 100% lectura -> visible a todo usuario conta (el API
+  // valida el trio LECTURA=SA/CONTABILIDAD/GERENTE). Sin 'need'.
+  { to: '/conta/especialistas', label: 'Especialistas', icon: ClipboardList },
   { to: '/conta/personal', label: 'Costos de Personal', icon: Users },
   // Módulo clínico (no financiero) -> visible a todo usuario conta autenticado (decisión B del plan; sin 'need').
   { to: '/conta/epidemiologia', label: 'Epidemiología', icon: Activity },

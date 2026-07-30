@@ -639,6 +639,50 @@ BEGIN
                 'N001-ZQ000113070'
             );
 
+    -- 1b) PERF (2026-07-29): semi-join de PODA. Con @ConsultorioId NULL el #S original
+    --     enriquecia TODOS los services del rango +-10d (3 OUTER APPLY + 2 COUNT
+    --     correlacionados por fila), aunque la mayoria NO empareja con ninguna venta del
+    --     periodo (LEFT JOIN #T -> nunca salen en el resultado). Se pre-tokeniza el
+    --     comprobante del service en un pase LIGERO (sin enriquecimiento) y se retienen
+    --     solo los v_ServiceId cuyo token empareja un #V.Comprobante (#MS). Luego #S se
+    --     filtra a #MS. Equivalencia EXACTA: un service fuera de #MS jamas casa el
+    --     equi-join final V.Comprobante=T.tok -> no contribuye al output; el split del
+    --     token es IDENTICO al de #T (mismo SUBSTRING/CHARINDEX sobre v_ComprobantePago).
+    IF OBJECT_ID('tempdb..#VC') IS NOT NULL DROP TABLE #VC;
+    SELECT DISTINCT V.Comprobante COLLATE DATABASE_DEFAULT AS Comprobante
+    INTO #VC
+    FROM #V V
+    WHERE V.Comprobante IS NOT NULL AND LTRIM(RTRIM(V.Comprobante)) <> '';
+    CREATE CLUSTERED INDEX IX_VC ON #VC (Comprobante);
+
+    -- fetch remoto UNA vez a #svcL (patron #svcbase de sp_Rentabilidad_PorConsultorio):
+    -- evita que el cross-join con la tally arrastre un plan remoto inestable. Superconjunto
+    -- seguro (sin calendar: #S re-aplica ese filtro); el split del token es IDENTICO al de
+    -- #T (raw v_ComprobantePago) -> #MS = exactamente los services que casaran en el equi-join.
+    IF OBJECT_ID('tempdb..#svcL') IS NOT NULL DROP TABLE #svcL;
+    SELECT s.v_ServiceId COLLATE DATABASE_DEFAULT AS v_ServiceId,
+           s.v_ComprobantePago COLLATE DATABASE_DEFAULT AS cp
+    INTO #svcL
+    FROM SigesoftDesarrollo_2.dbo.service s
+    INNER JOIN SigesoftDesarrollo_2.dbo.protocol pr ON s.v_ProtocolId = pr.v_ProtocolId
+    WHERE (pr.i_MasterServiceTypeId = 9 OR pr.i_MasterServiceTypeId = 42)
+        AND s.v_ComprobantePago IS NOT NULL
+        AND (@FechaInicioRetrasada <= s.d_ServiceDate AND s.d_ServiceDate <= @FechaFinAlargada)
+        AND (@ConsultorioVal IS NULL OR pr.i_Consultorio = @ConsultorioVal);
+
+    IF OBJECT_ID('tempdb..#MS') IS NOT NULL DROP TABLE #MS;
+    ;WITH Nums AS (
+        SELECT ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS n FROM sys.all_objects
+    )
+    SELECT DISTINCT b.v_ServiceId
+    INTO #MS
+    FROM #svcL b
+    JOIN Nums n ON n.n <= LEN(b.cp)
+               AND SUBSTRING('|' + b.cp, n.n, 1) = '|'
+    JOIN #VC vc ON vc.Comprobante = LTRIM(RTRIM(SUBSTRING(b.cp, n.n,
+                       CHARINDEX('|', b.cp + '|', n.n) - n.n))) COLLATE DATABASE_DEFAULT;
+    CREATE CLUSTERED INDEX IX_MS ON #MS (v_ServiceId);
+
     -- 2) ServiciosData -> #S (columnas IDENTICAS) + rid surrogate por FILA fisica: preserva EXACTO
     --    la cardinalidad del LEFT JOIN por CHARINDEX aunque un v_ServiceId tenga varias filas (calendar).
     SELECT
@@ -772,7 +816,8 @@ BEGIN
             AND (@FechaInicioRetrasada <= s.d_ServiceDate AND s.d_ServiceDate <= @FechaFinAlargada)
             AND cl.i_CalendarStatusId != 3
             AND cl.i_IsDeleted = 0
-            AND (@ConsultorioVal IS NULL OR pr.i_Consultorio = @ConsultorioVal);
+            AND (@ConsultorioVal IS NULL OR pr.i_Consultorio = @ConsultorioVal)
+            AND EXISTS (SELECT 1 FROM #MS m WHERE m.v_ServiceId = s.v_ServiceId COLLATE DATABASE_DEFAULT);
 
     -- 3) Split de #S.ComprobanteAt (lista de comprobantes delimitada por '|') -> #T (rid, tok).
     --    Tally table via ROW_NUMBER sobre sys.all_objects (SQL2012, sin STRING_SPLIT). LTRIM/RTRIM y
@@ -893,6 +938,9 @@ BEGIN
     IF OBJECT_ID('tempdb..#V') IS NOT NULL DROP TABLE #V;
     IF OBJECT_ID('tempdb..#S') IS NOT NULL DROP TABLE #S;
     IF OBJECT_ID('tempdb..#T') IS NOT NULL DROP TABLE #T;
+    IF OBJECT_ID('tempdb..#VC') IS NOT NULL DROP TABLE #VC;
+    IF OBJECT_ID('tempdb..#MS') IS NOT NULL DROP TABLE #MS;
+    IF OBJECT_ID('tempdb..#svcL') IS NOT NULL DROP TABLE #svcL;
 END
 GO
 

@@ -8,6 +8,8 @@ import type {
   EpiFichaFilters, EpiFichaResponse, EpiFichaExportResponse,
   EpiDashboardFilters, EpiDashboardResponse, EpiCanalFilters, EpiCanalRow,
   DashTipoCaja, DashFiltro, DashGerencialResponse, DashContableResponse,
+  EspecialistaFiltrosResponse, EspecialistaResumenResponse,
+  EspecialistaAtencionesResponse, EspecialistaReferenciasResponse,
 } from './contaTypes';
 
 // Base URL de la API dedicada de Contabilidad. Configurable por env; dev por defecto.
@@ -518,6 +520,70 @@ class ContabilidadService {
   // Borrado logico de una guardada (cada quien borra las suyas; SA cualquiera). Roles SA/CONTABILIDAD.
   async nlqBorrarGuardada(id: number): Promise<void> {
     await this.http.delete(`/nlq/guardadas/${id}`);
+  }
+  // Persiste el tipo de grafico elegido en vivo para una guardada (PATCH .../chart -> 204/404/403).
+  // Roles SA/CONTABILIDAD (el API valida; la UI no llama al PATCH para GERENTE ni para consultas sin guardar).
+  async nlqActualizarChart(id: number, chartTipo: import('./contaTypes').NlqChartTipo): Promise<void> {
+    await this.http.patch(`/nlq/guardadas/${id}/chart`, { ChartTipo: chartTipo });
+  }
+
+  // ---- Especialistas: atenciones y referencias por medico (base /especialistas; JWT conta ----
+  // LECTURA=SA/CONTABILIDAD/GERENTE). Feature 100% de lectura (PLAN_ESPECIALISTAS §7). Los 4 GET
+  // devuelven objetos con nombres de campo EXACTOS del contrato; el detalle con tamanio=0 = dataset
+  // completo para el export (cap 20k en el server -> 400 {message} legible que el front muestra).
+  // Universo de ventas (Asistencial/SISOL/Seguro): los 3 GET de datos + el de combos aceptan estos
+  // flags bool (nombres EXACTOS que espera el API). Se envian siempre que vengan definidos (el page
+  // los pasa siempre); el SP filtra el universo de la boleta cruzada. Default de negocio = los 3 ON.
+  private static universo(params: Record<string, unknown>, p: { incAsistencial?: boolean; incSisol?: boolean; incSeguro?: boolean }): void {
+    if (p.incAsistencial != null) params.incAsistencial = p.incAsistencial;
+    if (p.incSisol != null) params.incSisol = p.incSisol;
+    if (p.incSeguro != null) params.incSeguro = p.incSeguro;
+  }
+  // Combos del card de filtros (sin desde/hasta -> ultimos 12 meses en el SP, D7). Los flags de
+  // universo se pasan pero NO se recargan los combos al togglear (afectan la busqueda, no el combo).
+  async especialistasFiltros(p: {
+    desde?: string; hasta?: string; incAsistencial?: boolean; incSisol?: boolean; incSeguro?: boolean;
+  } = {}): Promise<EspecialistaFiltrosResponse> {
+    const params: Record<string, unknown> = {};
+    if (p.desde) params.desde = p.desde;
+    if (p.hasta) params.hasta = p.hasta;
+    ContabilidadService.universo(params, p);
+    const { data } = await this.http.get<EspecialistaFiltrosResponse>('/especialistas/filtros', { params });
+    return data;
+  }
+  // Bandeja principal (paginada 25). tamanio=0 => dataset completo del filtro para el export.
+  async especialistasResumen(p: {
+    desde: string; hasta: string; consultorioId?: number; medicoId?: number;
+    incAsistencial?: boolean; incSisol?: boolean; incSeguro?: boolean; pagina?: number; tamanio?: number;
+  }): Promise<EspecialistaResumenResponse> {
+    const params: Record<string, unknown> = { desde: p.desde, hasta: p.hasta, pagina: p.pagina ?? 1, tamanio: p.tamanio ?? 25 };
+    if (p.consultorioId != null) params.consultorioId = p.consultorioId;
+    if (p.medicoId != null) params.medicoId = p.medicoId;
+    ContabilidadService.universo(params, p);
+    const { data } = await this.http.get<EspecialistaResumenResponse>('/especialistas/resumen', { params });
+    return data;
+  }
+  // Detalle "Ver Atenciones" de UN medico (paginada 50; tamanio=0 = todo para export).
+  async especialistasAtenciones(medicoId: number, p: {
+    desde: string; hasta: string; consultorioId?: number;
+    incAsistencial?: boolean; incSisol?: boolean; incSeguro?: boolean; pagina?: number; tamanio?: number;
+  }): Promise<EspecialistaAtencionesResponse> {
+    const params: Record<string, unknown> = { desde: p.desde, hasta: p.hasta, pagina: p.pagina ?? 1, tamanio: p.tamanio ?? 50 };
+    if (p.consultorioId != null) params.consultorioId = p.consultorioId;
+    ContabilidadService.universo(params, p);
+    const { data } = await this.http.get<EspecialistaAtencionesResponse>(`/especialistas/${medicoId}/atenciones`, { params });
+    return data;
+  }
+  // Detalle "Ver Referencias" de UN medico (paginada 50; tamanio=0 = todo para export). Sin
+  // consultorioId: las referencias no se filtran por especialidad (D9, el consultorio es el destino).
+  async especialistasReferencias(medicoId: number, p: {
+    desde: string; hasta: string;
+    incAsistencial?: boolean; incSisol?: boolean; incSeguro?: boolean; pagina?: number; tamanio?: number;
+  }): Promise<EspecialistaReferenciasResponse> {
+    const params: Record<string, unknown> = { desde: p.desde, hasta: p.hasta, pagina: p.pagina ?? 1, tamanio: p.tamanio ?? 50 };
+    ContabilidadService.universo(params, p);
+    const { data } = await this.http.get<EspecialistaReferenciasResponse>(`/especialistas/${medicoId}/referencias`, { params });
+    return data;
   }
 }
 

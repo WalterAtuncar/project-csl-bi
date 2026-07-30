@@ -113,6 +113,18 @@ namespace Contabilidad.Controllers
             return afectadas > 0 ? NoContent() : NotFound();
         }
 
+        // PATCH /api/conta/nlq/guardadas/{id}/chart  — cambia el tipo de grafico de una guardada (dueño o SA)
+        [HttpPatch("guardadas/{id:int}/chart")]
+        [Authorize(Roles = ESCRITURA)]
+        public IActionResult ActualizarChart(int id, [FromBody] NlqActualizarChartDto dto)
+        {
+            if (Off) return NotFound();
+            if (dto == null || string.IsNullOrWhiteSpace(dto.ChartTipo))
+                return BadRequest(new { message = "ChartTipo es obligatorio." });
+            var afectadas = _repo.ActualizarChart(id, User.UserId(), EsSA, dto.ChartTipo.Trim());
+            return afectadas > 0 ? NoContent() : NotFound();
+        }
+
         // GET /api/conta/nlq/catalogo
         [HttpGet("catalogo")]
         [Authorize(Roles = ADMIN)]

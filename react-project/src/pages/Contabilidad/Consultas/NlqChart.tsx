@@ -1,10 +1,11 @@
-// Grafico automatico del resultado NLQ con RECHARTS (nada hecho a mano) segun ChartSugerido:
-// bar | line | pie | scatter | kpi | tabla. La deteccion de dimension vs medida sale del Formato de cada
-// columna (numericas = money/int/pct; dimensiones = date/text). 'tabla' o data que no encaja -> null
-// (la pagina siempre pinta la tabla por debajo).
+// Grafico automatico del resultado NLQ con RECHARTS (nada hecho a mano) segun el tipo elegido:
+// bar | stackedBar | line | area | pie | donut | radar | scatter | kpi | tabla. La deteccion de dimension
+// vs medida sale del Formato de cada columna (numericas = money/int/pct; dimensiones = date/text). 'tabla'
+// o data que no encaja -> null (la pagina siempre pinta la tabla por debajo).
 import React, { useMemo } from 'react';
 import {
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
 import type { NlqCelda, NlqChartTipo, NlqColumna } from '../../../services/contabilidad/contaTypes';
@@ -85,7 +86,7 @@ const NlqChart: React.FC<{ columnas: NlqColumna[]; filas: NlqCelda[][]; tipo: Nl
     );
   }
 
-  if (tipo === 'bar' && numericas.length && rows.length) {
+  if ((tipo === 'bar' || tipo === 'stackedBar') && numericas.length && rows.length) {
     const xKey = (dimensiones[0] ?? columnas[0]).Nombre;
     return (
       <Wrap>
@@ -96,7 +97,7 @@ const NlqChart: React.FC<{ columnas: NlqColumna[]; filas: NlqCelda[][]; tipo: Nl
           <Tooltip formatter={(v, n) => [fmtValor(v, n), n]} />
           {numericas.length > 1 && <Legend />}
           {numericas.map((c, i) => (
-            <Bar key={c.Nombre} dataKey={c.Nombre} fill={PALETTE[i % PALETTE.length]} radius={[3, 3, 0, 0]} />
+            <Bar key={c.Nombre} dataKey={c.Nombre} fill={PALETTE[i % PALETTE.length]} radius={[3, 3, 0, 0]} stackId={tipo === 'stackedBar' ? 'a' : undefined} />
           ))}
         </BarChart>
       </Wrap>
@@ -121,14 +122,32 @@ const NlqChart: React.FC<{ columnas: NlqColumna[]; filas: NlqCelda[][]; tipo: Nl
     );
   }
 
-  if (tipo === 'pie' && numericas.length && dimensiones.length && rows.length) {
+  if (tipo === 'area' && numericas.length && rows.length) {
+    const xKey = (dimensiones[0] ?? columnas[0]).Nombre;
+    return (
+      <Wrap>
+        <AreaChart data={rows} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.6} />
+          <XAxis dataKey={xKey} tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtEje} width={72} />
+          <Tooltip formatter={(v, n) => [fmtValor(v, n), n]} />
+          {numericas.length > 1 && <Legend />}
+          {numericas.map((c, i) => (
+            <Area key={c.Nombre} type="monotone" dataKey={c.Nombre} stroke={PALETTE[i % PALETTE.length]} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.25} strokeWidth={2} stackId={undefined} />
+          ))}
+        </AreaChart>
+      </Wrap>
+    );
+  }
+
+  if ((tipo === 'pie' || tipo === 'donut') && numericas.length && dimensiones.length && rows.length) {
     const nameKey = dimensiones[0].Nombre;
     const valKey = numericas[0].Nombre;
     const data = rows.slice(0, 12);
     return (
       <Wrap>
         <PieChart>
-          <Pie data={data} dataKey={valKey} nameKey={nameKey} cx="50%" cy="50%" outerRadius={110} labelLine={false} label={pieLabel(nameKey)}>
+          <Pie data={data} dataKey={valKey} nameKey={nameKey} cx="50%" cy="50%" innerRadius={tipo === 'donut' ? 70 : 0} outerRadius={110} labelLine={false} label={pieLabel(nameKey)}>
             {data.map((_, i) => (
               <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
             ))}
@@ -136,6 +155,23 @@ const NlqChart: React.FC<{ columnas: NlqColumna[]; filas: NlqCelda[][]; tipo: Nl
           <Tooltip formatter={(v, n) => [fmtValor(v, valKey), n]} />
           <Legend />
         </PieChart>
+      </Wrap>
+    );
+  }
+
+  if (tipo === 'radar' && numericas.length && dimensiones.length && rows.length) {
+    return (
+      <Wrap>
+        <RadarChart data={rows.slice(0, 12)} outerRadius={120}>
+          <PolarGrid />
+          <PolarAngleAxis dataKey={dimensiones[0].Nombre} tick={{ fontSize: 11 }} />
+          <PolarRadiusAxis tick={{ fontSize: 10 }} />
+          {numericas.map((c, i) => (
+            <Radar key={c.Nombre} name={c.Nombre} dataKey={c.Nombre} stroke={PALETTE[i % PALETTE.length]} fill={PALETTE[i % PALETTE.length]} fillOpacity={0.35} />
+          ))}
+          <Tooltip formatter={(v, n) => [fmtValor(v, n), n]} />
+          <Legend />
+        </RadarChart>
       </Wrap>
     );
   }

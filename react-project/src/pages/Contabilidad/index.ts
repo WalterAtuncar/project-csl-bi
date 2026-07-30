@@ -16,3 +16,4 @@ export { default as Compras } from './Compras';
 export { default as Catalogos } from './Catalogos';
 export { default as Usuarios } from './Usuarios';
 export { default as Consultas } from './Consultas/Consultas';
+export { default as Especialistas } from './Especialistas/Especialistas';
